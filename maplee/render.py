@@ -4,8 +4,17 @@ from browser import window
 from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, NPCS, PROPS, QUESTS, SPRITES
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
-WALK = (4, 5, 6, 7, 6, 5)
-IDLE = (0, 1, 2, 3)
+WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
+IDLE = SPRITES["hero"]["animations"]["idle"]
+IDLE_LENGTH = sum(IDLE["durations"])
+
+
+def idle_pose(tick):
+    phase = tick * 1000 // 60 % IDLE_LENGTH
+    for frame, duration in zip(IDLE["frames"], IDLE["durations"]):
+        if phase < duration:
+            return frame
+        phase -= duration
 
 def number(value):
     try:
@@ -188,7 +197,7 @@ class Renderer:
                 continue
             y = ground_at(x)
             tint = {"shop": "hue-rotate(42deg)", "trainer": "hue-rotate(196deg)", "forge": "hue-rotate(235deg)"}.get(npc["kind"], "none")
-            self.sprite("hero", (game.tick // 13 + int(x)) % 4, x, y, scale=1, tint=tint)
+            self.sprite("villager", (game.tick // 13 + int(x)) % 4, x, y, scale=1, tint=tint)
             self.label(npc["name"] + " · " + npc["role"], x, y - 54)
             if npc["kind"] in ("quest", "harbor"):
                 index = npc.get("quest", 1 if npc["kind"] == "harbor" else 0)
@@ -213,8 +222,8 @@ class Renderer:
         if tick < game.land_until:
             return 15, game.facing
         if game.walk:
-            return WALK[int(game.walk / 8) % len(WALK)], game.facing
-        return IDLE[(tick // 14) % len(IDLE)], game.facing
+            return WALK[int(game.walk / 18) % len(WALK)], game.facing
+        return idle_pose(tick), game.facing
 
     def monster(self, game, m):
         dead = m["dead"]
@@ -302,7 +311,7 @@ class Renderer:
         self.sprite("hero", frame, x, y, facing, 1, opacity)
         if tick < game.support_until:
             self.rect(x - 12, y - 2, 24, 2, "#b8f6b980")
-        self.label(f"Lv.{game.p['level']} {CLASSES[game.p['job']]['name']}", x, y - 60)
+        self.label(f"Lv.{game.p['level']} {CLASSES[game.p['job']]['name']}", x, y - 74)
         for effect in game.effects:
             self.effect(tick, effect)
         ctx.restore()

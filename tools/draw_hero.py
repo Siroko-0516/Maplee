@@ -1,113 +1,364 @@
-"""Original character frames, drawn with opaque colors on an 80px grid."""
+"""Paint the 16 adventurer cels at their native pixel resolution."""
 from pathlib import Path
-from PIL import Image, ImageDraw
+
+from PIL import Image, ImageColor
+
+from hero_face import head
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
-INK = "#141925"
-HAIR = "#222936"
-HAIR_LIGHT = "#526a75"
-HAIR_SHADE = "#344551"
-SKIN = "#ffeccd"
-SKIN_SHADE = "#ecbb8c"
-HIGHLIGHT = "#fff9ec"
-TEAL = "#347c78"
-TEAL_LIGHT = "#86c5a4"
-COPPER = "#dc985b"
+PALETTE = {
+    "k": "#27252d", "n": "#5d7d93", "b": "#8abed9", "d": "#b6dded",
+    "c": "#a9bcc0", "i": "#dbe4db", "w": "#fff9e9", "l": "#f2ecda",
+    "v": "#928a81", "q": "#785541", "a": "#b57a43", "y": "#e6aa5c",
+    "e": "#ffce83", "z": "#f9c870", "f": "#f7c493", "s": "#df9e75",
+    "p": "#ffe6c4",
+}
+COLORS = {key: ImageColor.getcolor(value, "RGBA") for key, value in PALETTE.items()}
 
-def fill(draw, points, color):
-    draw.polygon(points, fill=color, outline=INK, width=1)
 
-def hand(draw, x, y):
-    fill(draw,[(x-4,y-3),(x+2,y-4),(x+5,y-1),(x+3,y+3),(x-3,y+3)],SKIN_SHADE)
-    draw.line([(x-2,y-2),(x+2,y-2)],fill=SKIN,width=1)
+def stamp(image, x, y, rows):
+    for j, row in enumerate(rows.split()):
+        for i, color in enumerate(row):
+            if color != ".":
+                image.putpixel((x+i,y+j), COLORS[color])
 
-def blade(draw, x, y, pose):
-    directions = {"rise":(7,-20),"strike":(17,-3),"follow":(16,11),"idle":(12,-14),"hurt":(9,-13)}
-    dx, dy = directions.get(pose, directions["idle"])
-    fill(draw,[(x-2,y-3),(x+dx-2,y+dy),(x+dx+3,y+dy-3),(x+dx+1,y+dy+4),(x+2,y+2)],"#c7deed")
-    draw.line([(x+1,y-1),(x+dx+1,y+dy-1)],fill="#fff4d3",width=1)
-    draw.line([(x-4,y-3),(x+4,y+3)],fill="#bc8154",width=2)
+
+# The neck, thin shoulder straps and armholes show skin above the stripe.
+TANK = """
+......kkkkk.....
+....kkpfffskk...
+...knkpffffskk..
+..kbwkffsnwilk..
+..knwdkkwwwwwk..
+...kbddbddddbk..
+...kbdddddddbk..
+...kiwwwwwwwlk..
+...kiwwwwwwwlk..
+...kbdddddbbbk..
+...kbddddddbbk..
+...kiwwwwwwwlk..
+..kiwwwwwwwwlk..
+..kbdddddddbbk..
+..knbbbbbbbbbk..
+...kncccccccnk..
+"""
+
+TANK_TWIST = """
+......kkkkk.....
+....kkpfffskk...
+...knkpfffsksk..
+..kbwkffskwikk..
+..knwdkkwwwwlk..
+...kbdddddbbbk.
+...kbdddddbbnk..
+...kiwwwwwwlik..
+...kiwwwwwllik..
+...kbdddddbbbk..
+...kbdddddbbnk..
+...kiwwwwwlllk..
+..kiwwwwwlllik..
+..kbdddddbbbnk.
+..knbbbbbbbbnk..
+...kncccccccnk..
+"""
+
+SHORTS = """
+...kkkkkkkkkk...
+..kvillwllllik..
+.kiwwwwwwwwllk..
+.kiwwwwlwwwlik..
+.kiwwllkwwllik..
+.kivvlk.kiillk..
+..kkkk...kkkk...
+"""
+
+SLIPPER = {
+    "flat": """
+...kkk....
+..kaffk...
+.kyeaaykk.
+.kaayyyeyk
+.kqqqqqqqk
+..kkkkkkk.
+""",
+    "tip": """
+...kk....
+..kaffk..
+..kyeak..
+...kayayk.
+....kqyeykk
+.....kqqqqk
+......kkkk.
+""",
+    "lift": """
+..kkk....
+.kffak...
+.kysaak..
+..kqayyk.
+...kqqeyk
+....kkkk.
+""",
+}
+
+# Arm cels are hand blocked from the shoulder out to the knuckles. The
+# shoulder's light-facing edge is two skin clusters wide in the idle pose.
+ARMS = {
+    "rest": (0,0, """
+.kkk....
+kpfsk...
+kppfk...
+kppfk...
+.kpfsk..
+.kpfsk..
+.kpfsk..
+..kpffk.
+..kpfsk.
+..kpffk.
+..kpffsk
+..kpfssk
+..kffsk.
+...kkk..
+"""),
+    "back": (-6,1, """
+.......kkk
+......kpfsk
+......kpffk
+.....kpffk.
+.....kpffk.
+....kpfsk..
+...kpffk...
+..kpffk....
+.kpffsk....
+.kpfssk....
+.ksfsk.....
+..kkk......
+"""),
+    "swing": (0,1, """
+.kkk......
+kppfk.....
+kppfsk....
+.kpfsk....
+.kpffk....
+..kpffk...
+..kpffsk..
+...kpffsk.
+....kpffsk
+....kpfssk
+.....ksfsk
+......kkk.
+"""),
+    "tucked": (0,1, """
+.kkk.....
+kpffk....
+kppfk....
+.kpfsk...
+.kpfskkk.
+..kpffpfk
+..ksfpffk
+...ksffsk
+....kkkk.
+"""),
+    "out": (0,0, """
+.kkkk........
+kpffsk.......
+kppffsk..kkkk
+.kppffskkpffk
+..kpffffffssk
+...kffsssskk.
+....kkkkkk...
+"""),
+    "backlift": (-7,0, """
+.kkk....kkk.
+kpfsk..kpffk
+kpffskkppfsk
+.kppffffffk.
+..kffsssskk.
+...kkkkkk...
+"""),
+}
+FIST = """
+..kkk..
+.kpffkk
+kppfffk
+kpffssk
+.ksssk.
+..kkk..
+"""
+
+BLADES = {
+    "ready": (-4, -20, """
+....................kk
+..................kkyk
+.................kyeak
+................kyeayk
+...............kyeayk.
+..............kyeayk..
+.............kyeayk...
+............kyeayk....
+...........kyeayk.....
+..........kyeayk......
+.........kyeayk.......
+........kyeayk........
+.......kyeayk.........
+......kyeayk..........
+.....kyeayk...........
+...kkyeayk............
+..kzqayyk.............
+...kzyakk.............
+....kayayk............
+...kaqkkayk...........
+..kaqk..kk............
+.kqqk.................
+..kk..................
+"""),
+    "back": (-22, -18, """
+kk......................
+kykk....................
+.kaykk..................
+..kayykk................
+...kayeyk...............
+....kayeyk..............
+.....kayeyk.............
+......kayeyk............
+.......kayeyk...........
+........kayeyk..........
+.........kayeyk.........
+..........kayeyk........
+...........kayeyk.......
+............kayeyk......
+.............kayeyk..kk.
+..............kayykkzyk.
+...............kayaykk..
+................kkqqk...
+...............kzykkqk..
+..............kkak..kqk.
+................k....kk.
+"""),
+    "thrust": (-4, -8, """
+.......................kkk
+....................kkkyyk
+.................kkkyeeak.
+..............kkkyyeeakk..
+...........kkkyyeeakkk....
+.......kkkkyyeeakkk.......
+....kkkyyyyeeakk..........
+...kzzqaaakkkk............
+....kyqkkk................
+..kkqaqk..................
+.kaqqkqyk.................
+..kkk.kzk.................
+.......k..................
+"""),
+    "follow": (-4, -4, """
+.....kk.................
+....kzak................
+.k..kzqk................
+kaqkayak................
+.kqaqqaykk..............
+..kkkyyeykk.............
+...kzakayeyk............
+..kzak..kayeyk..........
+...kk....kayeyk.........
+..........kayeyk........
+...........kayeyk.......
+............kayeyk......
+.............kayeyk.....
+..............kayeyk....
+...............kayeyk...
+................kayyk...
+.................kayyk..
+..................kayykk
+...................kkayk
+.....................kkk
+"""),
+}
+
+# Face, tank top, rear foot, front foot, rear arm, front arm and (only in the
+# four attack cels) the grip. Feet are keyed to the baseline at row 74.
+POSES = [
+    ((17,3), "open",  (30,43), (31,74,"flat"), (40,74,"flat"), "rest","rest",None),
+    ((17,4), "open",  (30,44), (31,74,"flat"), (40,74,"flat"), "rest","rest",None),
+    ((17,4), "half",  (30,44), (31,74,"flat"), (40,74,"flat"), "rest","rest",None),
+    ((17,4), "blink", (30,44), (31,74,"flat"), (40,74,"flat"), "rest","rest",None),
+    ((18,4), "open",  (31,44), (25,74,"tip"),  (45,74,"flat"), "back","swing",None),
+    ((18,3), "open",  (31,43), (30,70,"lift"), (39,74,"flat"), "rest","tucked",None),
+    ((17,4), "open",  (30,44), (44,74,"flat"), (25,74,"tip"),  "swing","back",None),
+    ((17,2), "open",  (30,42), (37,74,"flat"), (32,70,"lift"), "tucked","rest",None),
+    ((14,2), "attack",(27,43), (25,74,"flat"), (39,74,"flat"), "backlift","tucked",(27,49,"back")),
+    ((20,4), "attack",(32,44), (26,74,"tip"),  (45,74,"flat"), "back","out",(55,52,"thrust")),
+    ((20,5), "attack",(32,45), (25,74,"tip"),  (44,74,"flat"), "back","swing",(54,59,"follow")),
+    ((18,4), "open",  (31,44), (28,74,"flat"), (41,74,"flat"), "rest","tucked",(50,55,"ready")),
+    ((18,1), "open",  (31,41), (26,66,"lift"), (41,70,"tip"),  "back","out",None),
+    ((17,2), "open",  (30,42), (28,68,"lift"), (40,73,"flat"), "backlift","tucked",None),
+    ((13,3), "hurt",  (27,43), (27,72,"flat"), (40,70,"tip"),  "backlift","out",None),
+    ((18,7), "open",  (30,47), (26,74,"flat"), (43,74,"flat"), "back","swing",None),
+]
+
+
+def leg(image, hip_x, hip_y, step, distant):
+    ankle_x, sole, profile = step
+    slipper = SLIPPER[profile]
+    ankle_y = sole - len(slipper.split()) + 2
+    # A bent knee still connects the hip to the ankle when a lifted foot is
+    # almost level with the hem. Work along both axes for those short spans.
+    if profile == "lift":
+        knee = (hip_x+2, max(hip_y+3,ankle_y+1))
+    else:
+        knee = ((hip_x+ankle_x)//2+1, (hip_y+ankle_y)//2)
+    joints = ((hip_x,hip_y), knee, (ankle_x,ankle_y))
+    covered = set()
+    for segment, ((x0,y0),(x1,y1)) in enumerate(zip(joints, joints[1:])):
+        steps = max(1,abs(x1-x0),abs(y1-y0))
+        for i in range(steps+1):
+            x = round(x0+(x1-x0)*i/steps)
+            y = round(y0+(y1-y0)*i/steps)
+            left = x-1 if segment and i > steps//2 else x-2
+            for xx in range(left,x+3):
+                covered.add((xx,y))
+                covered.add((xx,y+1))
+    for xx,yy in covered:
+        if any((xx+dx,yy+dy) not in covered for dx,dy in ((0,-1),(0,1),(-1,0),(1,0))):
+            color = "k"
+        elif (xx+2,yy) not in covered:
+            color = "s"
+        else:
+            color = "f" if distant else "p"
+        image.putpixel((xx,yy), COLORS[color])
+    stamp(image,ankle_x-4,sole-len(slipper.split())+1,slipper)
+
+
+def arm(image,x,y,pose):
+    dx,dy,art = ARMS[pose]
+    stamp(image,x+dx,y+dy,art)
+
 
 def frame(index):
-    pic = Image.new("RGBA",(80,80))
-    d = ImageDraw.Draw(pic)
-    gait = [-4,-2,3,2][index-4] if 4 <= index <= 7 else 0
-    swing = {8:"rise",9:"strike",10:"follow",11:"idle",12:"rise",14:"hurt"}.get(index, "idle")
-    jump = index in (12,13)
-    squat = 3 if index==15 else 0
-    shift = -4 if index==14 else (2 if index in (9,10) else 0)
-    bob = (1 if index in (1,3,5,7) else 0) + squat
-    top = 12 + bob
-    x = 17 + shift
-    # Looping steps and takeoff use a common foot origin at row 74.
-    for i, foot in enumerate((30+gait,42-gait)):
-        lift = (5 if i else 9) if jump else (2 if gait and i==int(gait<0) else 0)
-        fy = 74 - lift
-        fill(d,[(foot-4,64+min(squat,1)),(foot+4,65),(foot+4,fy-4),(foot+8,fy-4),
-                (foot+8,fy),(foot-4,fy),(foot-5,fy-3)],"#3b4b59")
-        d.line([(foot-2,fy-3),(foot+4,fy-3)],fill="#91a7a3")
-    # Waistcoat and copper scarf.
-    fill(d,[(x+12,49+bob),(x+29,48+bob),(x+33,54+bob),(x+32,66),(x+26,68),
-            (x+10,67),(x+8,60)],TEAL)
-    d.line([(x+11,57+bob),(x+15,55+bob),(x+18,58+bob),(x+21,54+bob)],fill=TEAL_LIGHT,width=2)
-    d.line([(x+12,64),(x+30,64)],fill="#a96e46",width=2)
-    fill(d,[(x+10,48+bob),(x+24,47+bob),(x+28,51+bob),(x+24,54+bob),(x+14,53+bob),
-            (x+8,59+bob),(x+8,54+bob)],COPPER)
-    d.line([(x+11,50+bob),(x+22,49+bob)],fill="#ffda91")
-    arm = {
-        "rise": (x+34,52+bob), "strike": (x+39,56+bob),
-        "follow": (x+37,61+bob), "idle": (x+33+gait//2,58+bob), "hurt": (x+31,56+bob)
-    }[swing]
-    d.line([(x+26,54+bob),(arm[0]-2,arm[1])],fill=INK,width=6)
-    d.line([(x+26,54+bob),(arm[0]-2,arm[1])],fill=TEAL_LIGHT,width=3)
-    blade(d,*arm,swing)
-    hand(d,*arm)
-    # Face on a 37-pixel silhouette with stepped opaque shading.
-    fill(d,[(x+8,top+16),(x+14,top+9),(x+33,top+13),(x+38,top+21),(x+39,top+25),
-             (x+44,top+27),(x+45,top+34),(x+40,top+39),(x+37,top+39),(x+32,top+45),
-             (x+18,top+46),(x+10,top+42),(x+6,top+35),(x+6,top+26)], SKIN)
-    fill(d,[(x+38,top+26),(x+43,top+27),(x+44,top+32),(x+40,top+36),(x+36,top+36),
-            (x+37,top+32)],SKIN_SHADE)
-    d.line([(x+9,top+38),(x+14,top+43),(x+22,top+44),(x+31,top+43),(x+35,top+40)],
-           fill=SKIN_SHADE,width=2)
-    d.line([(x+16,top+39),(x+19,top+40),(x+21,top+40)], fill="#eaa692")
-    # Both bright eyes include separate iris and highlight clusters.
-    left, right = x+13, x+28
-    if index == 14:
-        for eye in (left,right):
-            d.line([(eye,top+29),(eye+4,top+32),(eye,top+34)], fill=INK, width=2)
-        d.rectangle((x+24,top+37,x+26,top+39),fill="#9d624d")
-    else:
-        for eye in (left,right):
-            pts=[(eye-2,top+28),(eye+4,top+27),(eye+6,top+30),(eye+5,top+36),(eye,top+37),(eye-2,top+34)]
-            fill(d,pts,HIGHLIGHT)
-            d.rectangle((eye,top+29,eye+4,top+35),fill="#258782")
-            d.rectangle((eye+1,top+29,eye+3,top+34),fill="#142e39")
-            d.point((eye+3,top+30),fill=HIGHLIGHT)
-            d.line([(eye-1,top+27),(eye+4,top+27)],fill=INK,width=2)
-        d.line([(x+25,top+39),(x+27,top+39)],fill="#9a5f4f")
-    # Side-swept indigo hair with individual opaque highlight clusters.
-    fill(d,[(x+4,top+7),(x+12,top+2),(x+17,top+2),(x+22,top-1),(x+34,top+1),(x+41,top+6),
-             (x+44,top+12),(x+45,top+19),(x+41,top+27),(x+37,top+26),(x+35,top+18),
-             (x+31,top+13),(x+30,top+21),(x+26,top+20),(x+23,top+12),(x+20,top+19),
-             (x+15,top+23),(x+15,top+17),(x+11,top+23),(x+10,top+29),(x+6,top+32),
-             (x+4,top+26),(x+1,top+20),(x+1,top+13)], HAIR)
-    d.polygon([(x+5,top+11),(x+10,top+6),(x+20,top+3),(x+24,top+5),(x+16,top+7),
-               (x+10,top+13),(x+8,top+18),(x+5,top+19)],fill=HAIR_SHADE)
-    d.line([(x+6,top+12),(x+10,top+8),(x+15,top+5),(x+19,top+5)], fill=HAIR_LIGHT,width=2)
-    d.polygon([(x+25,top+3),(x+33,top+3),(x+39,top+8),(x+41,top+14),(x+39,top+13),
-               (x+33,top+8),(x+28,top+7)],fill=HAIR_SHADE)
-    d.line([(x+28,top+4),(x+33,top+5),(x+36,top+8)],fill=HAIR_LIGHT,width=1)
-    d.line([(x+20,top+10),(x+17,top+14),(x+14,top+16)],fill=HAIR_LIGHT,width=1)
-    d.rectangle((x+4,top+21,x+7,top+24),fill="#dba870")
-    d.point((x+5,top+21),fill="#ffde8a")
-    return pic
+    face, expression, tank, back_foot, front_foot, back_arm, front_arm, weapon = POSES[index]
+    x,y = tank
+    shorts_y = min(y+14,60)
+    image = Image.new("RGBA",(80,80))
+    leg(image,x+4,shorts_y+4,back_foot,True)
+    leg(image,x+11,shorts_y+4,front_foot,False)
+    stamp(image,x-2,y+2,"...kkkkkk .kkppppffk kpppffffsk .ksffsskk. ..kkkkk...")
+    arm(image,x-3,y+3,back_arm)
+    stamp(image,x+1,shorts_y,SHORTS)
+    stamp(image,x,y,TANK_TWIST if index in (8,9,10,12,14) else TANK)
+    arm(image,x+12,y+3,front_arm)
+    if weapon:
+        gx,gy,kind = weapon
+        dx,dy,art = BLADES[kind]
+        stamp(image,gx+dx,gy+dy,art)
+        stamp(image,gx-3,gy-3,FIST)
+    image.alpha_composite(head(expression),face)
+    return image
+
 
 def run():
-    sheet = Image.new("RGBA",(320,320))
-    for i in range(16):
-        sheet.alpha_composite(frame(i),(i%4*80,i//4*80))
-    sheet.save(ASSETS / "hero-crisp.png",optimize=True)
+    atlas = Image.new("RGBA", (320,320))
+    for index in range(16):
+        atlas.paste(frame(index), ((index%4)*80,(index//4)*80))
+    atlas.save(ASSETS / "hero-adventurer.png", optimize=True)
+
 
 if __name__ == "__main__":
     run()

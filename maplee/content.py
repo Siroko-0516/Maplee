@@ -600,18 +600,19 @@ ITEM_ICONS = {'twig': 0,
  'moonseal': 25,
  'shimmer': 27}
 
-SPRITES = {'hero': {'file': 'hero-crisp.png',
+SPRITES = {'hero': {'file': 'hero-adventurer.png',
           'columns': 4,
           'rows': 4,
           'frameWidth': 80,
           'frameHeight': 80,
           'anchor': [38, 75],
-          'animations': {'idle': {'frames': [0, 1, 2, 3], 'durations': [220, 180, 220, 180], 'loop': True},
+          'animations': {'idle': {'frames': [0, 1, 0, 1, 0, 1, 2, 3, 2], 'durations': [500, 500, 500, 500, 500, 500, 50, 66, 50], 'loop': True},
                          'walk': {'frames': [4, 5, 6, 7], 'durations': [95, 95, 95, 95], 'loop': True},
                          'attack': {'frames': [8, 9, 10, 11], 'durations': [70, 65, 80, 120], 'loop': False},
                          'jumpUp': {'frames': [12], 'durations': [100], 'loop': True},
                          'jumpDown': {'frames': [13], 'durations': [100], 'loop': True},
                          'hurt': {'frames': [14], 'durations': [160], 'loop': False}}},
+ 'villager': {'columns': 4, 'rows': 4, 'frameWidth': 80, 'frameHeight': 80, 'anchor': [38, 75]},
  'props': [[0, 0, 126, 122],
            [128, 0, 126, 118],
            [256, 0, 126, 117],
@@ -620,4 +621,4 @@ SPRITES = {'hero': {'file': 'hero-crisp.png',
            [256, 160, 108, 155]],
  'wildlife': {'columns': 6, 'rows': 11, 'frameWidth': 72, 'frameHeight': 72, 'anchor': [36, 66]}}
 
-IMAGES = {'interface': 'interface.png', 'hero': 'hero-crisp.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
+IMAGES = {'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'hero-crisp.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}

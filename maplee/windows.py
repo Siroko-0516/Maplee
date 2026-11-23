@@ -2,7 +2,7 @@
 from browser import document, window
 from .content import AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SPRITES, SUPPORTS
 from .engine import PORTALS, area_at, ground_at, item_icon, limit
-from .render import number
+from .render import idle_pose, number
 
 
 TITLES = {"character": "CHARACTER STAT", "inventory": "EQUIPMENT", "skills": "SKILL BOOK",
@@ -356,7 +356,11 @@ class GameInterface:
         self.skin(2,x,y,w,130)
         middle = x + w//2
         self.atlas("interface",0,64,120,100,middle-60,y+5,120,120)
-        self.pose("hero",(self.app.game.tick//13)%4,middle-52,y+5,104)
+        self.ctx.save()
+        self.ctx.translate(middle, y+5)
+        self.ctx.scale(-1, 1)
+        self.pose("hero", idle_pose(self.app.game.tick), -52, 0, 104)
+        self.ctx.restore()
         self.box(middle-60,y+106,120,18,"#304965")
         self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+115,WHITE,12,True,"center")
         for i,(slot, label) in enumerate(SLOTS.items()):
