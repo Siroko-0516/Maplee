@@ -8,140 +8,173 @@ const {createCanvas, Image} = require('@napi-rs/canvas');
 const root = path.resolve(__dirname, '..');
 
 async function main() {
+  execFileSync(process.execPath, [path.join(root, 'scripts/build.mjs')]);
+  const html = fs.readFileSync(path.join(root, 'dist/maple-local.html'), 'utf8');
+  assert(!html.includes('<script src='), 'offline build embeds all code');
   const canvas = createCanvas(960, 468);
-  const elements = {};
-  const storage = {};
-  function element(id) {
-    return elements[id] ??= {
-      style: {}, hidden: false, append() {}, replaceChildren() {},
-      getContext: () => canvas.getContext('2d')
+  function node(tag) {
+    return {
+      tag, children: [], style: {},
+      append(...children) { this.children.push(...children); },
+      replaceChildren() { this.children = []; }, setAttribute() {}
     };
   }
-  const context = vm.createContext({
+  const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, node(id)]));
+  const key = 'maple-local-world-v1';
+  const storage = {[key]: JSON.stringify({x: 310, level: 2, xp: 12, hp: 62, gold: 17, kills: 4, pots: 3, quest: 1})};
+  const sandbox = vm.createContext({
     document: {
-      querySelector: element, querySelectorAll: () => [],
-      createElement: () => element(Symbol())
+      querySelector: selector => selector === 'canvas' ? canvas : elements.get(selector.slice(1)),
+      querySelectorAll: () => [], createElement: node
     },
     localStorage: {getItem: key => storage[key] ?? null, setItem: (key, value) => storage[key] = value},
     window: {addEventListener() {}},
-    setTimeout() {}, clearTimeout() {}, requestAnimationFrame() {},
-    Image
+    setTimeout() {}, clearTimeout() {}, requestAnimationFrame() {}, Image
   });
-  const run = code => vm.runInContext(code, context);
-  run(execFileSync(process.execPath, [path.join(root, 'scripts/build.mjs'), '--asset-data'], {encoding: 'utf8'}));
-  for (const file of ['world.js', 'pixel-render.js']) run(fs.readFileSync(path.join(root, 'src', file), 'utf8'));
-  for (let i = 0; i < 150 && !run('pixelReady'); i++) {
-    await new Promise(resolve => setTimeout(resolve, 20));
-  }
-  assert(run('pixelReady'), 'embedded PNGs load');
+  const run = code => vm.runInContext(code, sandbox);
+  for (const [, script] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) run(script);
+  for (let i = 0; i < 150 && !run('pixelReady'); i++) await new Promise(resolve => setTimeout(resolve, 20));
+  assert(run('pixelReady'), 'embedded images load');
 
   run(`
     function check(value, message) { if (!value) throw new Error(message); }
     function advance(steps) { for (let i = 0; i < steps; i++) step(); }
-    function testMonster(x, y = ground, hp = 999) {
-      return {x, y, home: x, left: x - 10, right: x + 10, dir: 1, type: 1, hp, max: hp, dead: 0, phase: 0};
-    }
-
-    mobs = [];
-    travelTo(2200);
-    advance(1);
-    check(p.grounded && p.y === ground, 'ground landing');
-    jump();
-    check(p.vy < 0, 'jump');
+    check(p.level === 2 && p.hp === 62 && p.quests[0].count === 4 && p.job === 'beginner', 'legacy save migration');
+    monsters = [];
+    travelTo(390);
     keys.ArrowRight = true;
-    advance(15);
-    keys = {};
-    check(p.x > 2250 && camera > 1700, 'world movement and camera');
-
-    const stackedLadder = ladders.find(ladder => ladder.bottom < ground);
-    check(stackedLadder && platforms.length > 65, 'multi-level field layout');
-    p.x = stackedLadder.x;
-    p.y = stackedLadder.bottom;
-    p.vy = 0;
-    p.grounded = true;
+    let previousY = p.y;
+    for (let i = 0; i < 90; i++) {
+      step();
+      check(p.grounded && Math.abs(p.y - previousY) < 2, 'continuous walk along ground slopes');
+      previousY = p.y;
+    }
+    check(p.x > 700 && p.y === 338, 'slope reaches next terrace');
+    travelTo(2400);
+    advance(80);
+    check(areaAt(p.x) === AREAS[0] && camera === AREAS[0].end - canvas.width, 'walking does not switch maps');
+    keys.ArrowRight = false;
+    travelTo(portals[0].x);
+    interact();
+    check(areaAt(p.x) === AREAS[1] && camera === AREAS[1].start, 'portal switches map and resets the camera');
+    const east = portals.find(portal => portal.label === AREAS[2].name);
+    travelTo(east.x);
+    interact();
+    check(areaAt(p.x) === AREAS[2], 'second exit enters the harbor');
+    travelTo(ledges[0].ladderX);
     keys.ArrowUp = true;
-    advance(Math.ceil((stackedLadder.bottom - stackedLadder.top) / 3.2));
-    check(p.y === stackedLadder.top && p.grounded, 'climb from a lower ledge');
-    keys = {ArrowDown: true};
-    advance(Math.ceil((stackedLadder.bottom - stackedLadder.top) / 3.2));
-    check(p.y === stackedLadder.bottom && p.grounded, 'descend onto a lower ledge');
-    keys = {};
-    p.y = stackedLadder.top - 12;
-    p.vy = stackedLadder.bottom - stackedLadder.top + 15;
-    step();
-    check(p.y === stackedLadder.top, 'land on the first crossed ledge');
+    advance(70);
+    check(p.y === ledges[0].y && p.grounded, 'climb onto ledge');
+    keys.ArrowUp = false;
+    keys.ArrowDown = true;
+    jump();
+    advance(60);
+    check(p.surface === 'ground', 'drop through ledge');
+    keys.ArrowDown = false;
 
-    travelTo(2200);
+    travelTo(2690);
     p.dir = 1;
-    const target = testMonster(2234);
-    const rear = testMonster(2165);
-    const higher = testMonster(2234, ground - 58);
-    mobs = [target, rear, higher];
+    spawn(p.x + 37, 0, 0);
+    const target = monsters[0];
+    const hp = target.hp;
     attack();
     advance(4);
-    check(target.hp === target.max && !swing.hasHit, 'no damage in the windup');
+    check(target.hp === hp, 'no damage before strike frame');
     step();
-    check(frameAt(attackAnimation, (tick - swing.startTick) * STEP_MS) === 9, 'visible strike frame');
-    check(target.hp < target.max && target.hitUntil > tick, 'damage and hurt pose start on the strike');
-    check(rear.hp === rear.max && higher.hp === higher.max, 'sword skips rear and upper-tier targets');
-    const remaining = target.hp;
-    advance(15);
-    check(target.hp === remaining, 'each swing hits a target only once');
+    check(frameAt(attackAnimation, (tick - swing.start) * STEP_MS) === 9 && target.hp < hp, 'damage lands with strike');
+    const after = target.hp;
+    advance(16);
+    check(target.hp === after, 'one hit per swing');
 
-    travelTo(2200);
-    p.dir = 1;
-    const lethal = testMonster(2234, ground, 1);
-    mobs = [lethal];
-    const kills = p.kills;
+    travelTo(870);
+    interact();
+    check(panel?.kind === 'shop', 'interact opens shop panel');
+    p.gold = 200;
+    buy('bronze', panel.data.stock);
+    check(p.bag.bronze === 1 && p.gold === 122, 'buy uses shop stock and gold');
+    const originalAttack = stats().attack;
+    toggleEquipment('bronze');
+    check(stats().attack === originalAttack + 3 && p.equipment.weapon === 'bronze', 'equipment updates attack');
+    sell('bronze');
+    check(p.bag.bronze === 1 && p.gold === 122, 'equipped last copy cannot be sold');
+    sell('twig');
+    check(!p.bag.twig && p.gold === 134, 'sell grants gold');
+    closePanel();
+    p.hp = 30;
+    healWith('potion');
+    check(p.hp === 85 && p.pots === 2, 'HP potion');
+
+    changeJob('ranger');
+    check(p.job === 'beginner', 'level requirement blocks job change');
+    p.xp = 0;
+    gainXP(450);
+    check(p.level >= 5 && p.hp === stats().hp, 'XP levels up and restores health');
+    changeJob('ranger');
+    check(p.job === 'ranger' && p.equipment.weapon === 'bow', 'job change grants and equips starter weapon');
+    toggleEquipment('wand');
+    check(p.equipment.weapon === 'bow', 'equipment class restriction');
+    monsters = [];
+    travelTo(2720);
+    spawn(p.x + 130, 0, 0);
+    const mana = p.mp;
     attack(true);
-    advance(5);
-    check(lethal.dead && p.kills === kills + 1 && drops.length && fx.some(effect => effect.ring),
-      'skill lands on the strike and awards loot');
-    p.x = drops[0].x;
-    const gold = p.gold;
+    check(p.mp === mana - CLASSES.ranger.cost, 'skill consumes MP');
+    advance(18);
+    check(monsters[0].deathAt !== null && drops.some(drop => drop.item === 'jelly'), 'ranged skill travels and creates loot');
+
+    monsters = [];
+    travelTo(11732);
+    spawn(11780, 4, 1);
+    p.quests[1].state = 1;
+    reward(monsters[0]);
+    check(p.quests[1].count === 1 && drops.at(-1).rare === 'prism', 'elite drop and quest');
+    travelTo(11780);
     step();
-    check(p.gold > gold, 'loot pickup');
-    travelTo(2200);
-    const interrupted = testMonster(2205);
-    mobs = [interrupted];
-    attack();
-    advance(5);
-    check(!swing && interrupted.hp === interrupted.max, 'a contact hit interrupts the windup');
-
-    p.hp = 25;
-    const potions = p.pots;
-    potion();
-    check(p.hp === 75 && p.pots === potions - 1, 'potion');
+    check(p.bag.prism >= 1, 'elite equipment can be picked up');
+    const oldGold = p.gold;
     save();
-    check(JSON.parse(localStorage.getItem('maple-local-world-v1')).hp === 75, 'save');
-    talk(npcs[0]);
-    check(dialog, 'NPC interaction');
-    close();
-
-    travelTo(2250);
-    camera = 1770;
-    inv = 0;
-    p.hurtUntil = 0;
-    fx = [];
-    mobs = [];
-    platforms.filter(platform => platform.x > camera && platform.x < camera + 880)
-      .forEach((platform, index) => spawn(platform.x + 85, index, platform));
-    spawn(2350, 0);
-    draw();
+    p.gold = 0;
+    p.job = 'beginner';
+    loadGame();
+    check(p.job === 'ranger' && p.gold === oldGold && p.bag.prism >= 1 && !p.bag.twig, 'progression survives a save round trip without restoring sold items');
   `);
 
-  if (process.env.MAPLEE_RENDER_PATH) {
-    fs.writeFileSync(process.env.MAPLEE_RENDER_PATH, canvas.toBuffer('image/png'));
+  for (const [index, x] of [650, 4720, 10470].entries()) {
+    run('monsters = []; populate(); travelTo(' + x + '); effects = []; drops = []; draw();');
+    if (process.env.MAPLEE_RENDER_DIR) {
+      fs.writeFileSync(path.join(process.env.MAPLEE_RENDER_DIR, 'maplee-area-' + index + '.png'), canvas.toBuffer('image/png'));
+    }
   }
-  const idle = canvas.toBuffer('image/png');
-  run('keys.ArrowRight = true; advance(8); draw();');
-  assert(!idle.equals(canvas.toBuffer('image/png')), 'movement changes the rendered frame');
-
-  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  for (const id of ['region','hp','hpbar','xp','xpbar','lv','gold','kills','pots','dialog','worldmap','toast','pause','sound']) {
-    assert(html.includes('id="' + id + '"'), id + ' present');
-  }
-  console.log('PASS: pixel rendering, movement, stacked ledges and ladders, timed damage, loot, save and HUD');
+  run(`
+    // Sweep both edges and the middle of each map with a bright fill below the tile layer.
+    for (const area of AREAS) {
+      for (const left of [area.start, Math.floor((area.start + area.end - 960) / 2), area.end - 960]) {
+        camera = left;
+        rect(0, 0, 960, 468, '#ff00ff');
+        g.save();
+        g.translate(-left, 0);
+        drawGround(area);
+        g.restore();
+        const pixels = g.getImageData(0, 0, 960, 468).data;
+        for (let x = 0; x < 960; x++) {
+          const offset = (Math.ceil(groundAt(left + x)) + 10) * 960 * 4 + x * 4;
+          check(!(pixels[offset] === 255 && pixels[offset+1] === 0 && pixels[offset+2] === 255), 'ground seam at ' + (left + x));
+        }
+        g.drawImage(pixelImages.background, 0, 0, 1, 1, 0, 0, 960, 468);
+        const original = g.drawImage;
+        let sampled = false;
+        g.drawImage = function(image, sx, sy, sw, sh, ...rest) {
+          check(!sampled && sx >= 0 && sx + sw <= image.width, 'backdrop uses one in-bounds image window');
+          sampled = true;
+          return original.call(g, image, sx, sy, sw, sh, ...rest);
+        };
+        drawBackdrop(area);
+        g.drawImage = original;
+        check(sampled, 'backdrop was drawn');
+      }
+    }
+  `);
+  console.log('PASS: offline HTML, slopes, three separate maps, ground and backdrop continuity, ladder, combat, jobs, equipment, shop, quests, saves');
 }
 
 main().catch(error => {

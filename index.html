@@ -1,3 +1,101 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Maplee · 작은 숲의 모험</title><style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#102b36;font:14px system-ui,sans-serif;color:#fff8da}button{font:inherit;cursor:pointer;color:#fff6cd;border:1px solid #b3ac75;border-radius:3px;background:linear-gradient(#657c55,#334b39);padding:7px 12px;box-shadow:inset 0 1px #e1ed9e44}button:hover{filter:brightness(1.18)}button:focus-visible{outline:3px solid #fff6a0;outline-offset:3px}.game{position:relative;width:100vw;height:100dvh;overflow:hidden}canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;touch-action:none;background:#102b36}.top{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:start;pointer-events:none}.map,.quest{background:#18302be8;border:2px solid #b3b276;box-shadow:inset 0 0 0 1px #345743,0 3px 10px #081f2780;padding:10px 15px;max-width:47%;border-radius:3px;text-shadow:1px 1px #172a22}.map small{display:block;color:#bccfa2;font-size:12px;letter-spacing:2px;margin-bottom:5px}.quest{font-size:14px;line-height:1.7}.quest span{color:#f0d783}.toast{position:absolute;top:90px;left:50%;transform:translateX(-50%);background:#172f29dd;border:1px solid #b5ae7d;padding:9px 16px;max-width:80%;text-align:center;transition:opacity .3s;pointer-events:none}.hud{position:absolute;bottom:12px;left:12px;right:12px;display:flex;gap:9px;justify-content:space-between;align-items:end}.stats{width:300px;background:#132c29ef;border:2px solid #b0a66c;padding:10px 13px;border-radius:4px}.name{display:flex;justify-content:space-between;margin-bottom:8px;font-weight:bold}.statline{display:flex;justify-content:space-between;font-size:12px}.bar{height:8px;background:#142523;border:1px solid #76916a;margin:3px 0 6px}.fill{height:100%;background:#e97d71;transition:width .18s}.xp{background:#bbc967}.actions{background:#17312ce8;border:1px solid #969c6d;padding:7px;border-radius:4px;display:flex;gap:5px;flex-wrap:wrap;max-width:530px}.controls{font-size:12px;position:absolute;bottom:150px;left:15px;background:#17302ca8;padding:7px 10px;color:#e3e7bf}.dialog{position:absolute;z-index:5;bottom:155px;left:20%;right:20%;padding:18px 22px;background:#fff5dcf5;border:3px solid #94784f;border-radius:5px;color:#493e2a;box-shadow:0 6px 20px #12251c88;font-size:16px;line-height:1.7}.dialog b{color:#4c763f}.dialog p{margin:9px 0 14px}.dialog button{margin:3px}.mapoverlay{position:absolute;inset:16% 10% 24%;z-index:4;background:#fff8e6f5;border:3px solid #92794b;border-radius:7px;padding:25px;color:#4c5a3f}.mapoverlay button{float:right}.mapline{display:flex;gap:7px;margin-top:30px}.mapline div{flex:1;background:#bccc93;border:1px solid #839565;border-radius:4px;text-align:center;padding:25px 4px;font-size:14px}.mobile{display:none;position:absolute;bottom:145px;left:12px;right:12px;justify-content:space-between;pointer-events:none}.mobile button{pointer-events:auto;min-height:46px;min-width:43px;opacity:.9;padding:7px;margin:2px}.note{font-size:11px;color:#b9c8a2;margin-top:5px}.mobile-menu{display:none}@media(pointer:coarse){.mobile{display:flex}.controls{display:none}}@media(max-width:700px){.stats{width:210px;padding:7px}.actions{max-width:220px}.actions button{padding:6px;font-size:12px}.top{top:6px;left:6px;right:6px}.map,.quest{padding:7px 9px;font-size:12px}.map small{font-size:10px}.quest{max-width:55%}.toast{top:85px;font-size:12px}.dialog{left:4%;right:4%;bottom:190px;font-size:14px;padding:12px}.mapoverlay{inset:18% 3% 25%;padding:12px}.mapline{gap:3px}.mapline div{padding:15px 2px;font-size:11px}.hud{left:6px;right:6px;bottom:6px;gap:5px}.controls{display:none}.note{font-size:10px}.mobile{bottom:145px}}
-</style></head><body><main class="game"><canvas id="game" aria-label="방향키 이동, 스페이스 점프, Z 공격, X 스킬, 위 방향키 대화"></canvas><div class="top"><div class="map"><small>PIXEL WORLD · OFFLINE</small><b id="region">초록 마을</b></div><div class="quest">숲의 의뢰<br><span id="quest">리나와 대화하기</span></div></div><div class="toast" id="toast">도트 그래픽을 불러오고 있어요.</div><div class="controls">← → 이동　Space 점프　Z 공격　X 스킬　↑ 대화·사다리　M 지도　R 귀환　K 저장</div><div class="hud"><div class="stats"><div class="name"><span><span id="lv">Lv.1</span> 모험가</span><span id="gold">0 메소</span></div><div class="statline"><span>HP</span><span id="hp">100 / 100</span></div><div class="bar"><div class="fill" id="hpbar" style="width:100%"></div></div><div class="statline"><span>EXP</span><span id="xp">0 / 75</span></div><div class="bar"><div class="fill xp" id="xpbar"></div></div><div class="statline"><span id="kills">처치 0</span><span>자동 저장</span></div></div><div><div class="actions"><button id="potion">물약 <span id="pots">5</span></button><button id="pause">일시정지</button><button id="mapbutton">지도</button><button id="returnbutton">마을 귀환</button><button id="savebutton">저장</button><button id="sound">♪ 소리 켜기</button></div><div class="note">새로 제작한 픽셀 그래픽 · 로컬 전용 · 팬 게임 프로토타입</div></div></div><div class="mobile"><div><button data-key="ArrowLeft">◀</button><button data-key="ArrowRight">▶</button></div><div><button data-key="Space">점프</button><button data-key="KeyZ">공격</button><button data-key="KeyX">스킬</button><button data-key="ArrowUp">대화</button></div></div><div id="dialog" class="dialog" hidden></div><div id="worldmap" class="mapoverlay" hidden></div></main><script src="src/asset-data.js"></script><script src="src/world.js"></script><script src="src/pixel-render.js"></script><script>document.querySelector('#mapbutton').onclick=worldmap;document.querySelector('#returnbutton').onclick=()=>key('KeyR');document.querySelector('#savebutton').onclick=()=>key('KeyK');</script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maplee</title>
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #102b36; color: #fff8da; font: 15px system-ui, sans-serif; }
+button { font: inherit; cursor: pointer; color: #fff8dc; border: 1px solid #adad78; border-radius: 4px; background: linear-gradient(#526d53,#293e34); padding: 7px 12px; }
+button:hover:not(:disabled) { filter: brightness(1.23); }
+button:disabled { opacity: .5; cursor: default; }
+button[aria-pressed="true"] { background: #6f6f42; }
+button:focus-visible { outline: 2px solid #fff2a0; outline-offset: 3px; }
+.game { position: relative; width: 100vw; height: 100dvh; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; touch-action: none; }
+.top, .hud { position: absolute; left: 12px; right: 12px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; }
+.top { top: 12px; align-items: start; }
+.hud { bottom: 12px; align-items: end; }
+.map, .quest, .stats, .actions { background: #152c2bef; border: 1px solid #b9b680; box-shadow: 0 4px 14px #10252388; border-radius: 5px; }
+.map, .quest { padding: 9px 13px; max-width: 55%; }
+.map span, .quest small { display: block; color: #aacba5; font-size: 12px; margin-bottom: 3px; }
+.quest strong { color: #ffe1a3; font-size: 14px; }
+.toast { position: absolute; top: 77px; left: 50%; transform: translateX(-50%); max-width: 82%; background: #173634ec; border: 1px solid #b5bc8b; border-radius: 4px; padding: 7px 12px; text-align: center; transition: opacity .25s; pointer-events: none; }
+.stats { width: 260px; padding: 8px 11px; }
+.name { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 9px; font-weight: 700; }
+.name span:last-child { color: #ffde9d; font-size: 12px; }
+.statline { display: grid; grid-template-columns: 27px 1fr 70px; align-items: center; gap: 6px; font-size: 11px; line-height: 1.65; }
+.statline > :last-child { text-align: right; }
+.bar { height: 7px; background: #0d2127; border: 1px solid #648570; }
+.fill { height: 100%; width: 0; background: #ee8076; transition: width .18s; }
+.fill.mp { background: #86cde7; }
+.fill.xp { background: #c9d76d; }
+.actions { max-width: 570px; display: flex; flex-wrap: wrap; justify-content: end; gap: 4px; padding: 6px; pointer-events: auto; }
+.actions button { font-size: 12px; padding: 6px 8px; }
+.help { position: absolute; right: 12px; bottom: 69px; color: #ecf6df; text-shadow: 0 1px 4px #102b36, 0 1px 3px #102b36; font-size: 12px; pointer-events: none; }
+.panel { position: absolute; width: min(550px, 94%); max-height: 74dvh; overflow-y: auto; left: 50%; top: 48%; transform: translate(-50%,-50%); z-index: 3; padding: 14px 17px; background: #f8edd4; color: #28382b; border: 2px solid #ac8c5b; border-radius: 7px; box-shadow: 0 12px 50px #0b2e36b0; }
+.panel-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding-bottom: 7px; border-bottom: 1px solid #d0be96; }
+.panel h2 { font-size: 20px; margin: 0; }
+.panel h3 { font-size: 14px; margin-bottom: 0; color: #456540; }
+.panel p { margin: 9px 0; }
+.panel button { font-size: 13px; }
+.panel-row { display: flex; align-items: center; justify-content: space-between; min-height: 43px; gap: 10px; border-bottom: 1px solid #e2d4b8; padding: 6px 0; }
+.panel-row small { display: block; margin-top: 2px; color: #52644d; }
+.panel-row button { flex-shrink: 0; }
+.panel-tabs { display: flex; gap: 6px; margin: 8px 0; }
+.mobile { display: none; position: absolute; bottom: 110px; left: 10px; right: 10px; justify-content: space-between; pointer-events: none; }
+.mobile button { min-height: 42px; min-width: 40px; margin: 2px; pointer-events: auto; touch-action: none; padding: 5px; }
+@media (pointer: coarse) { .mobile { display: flex; } .help { display: none; } }
+@media (max-width: 730px) {
+  .top, .hud { left: 6px; right: 6px; gap: 5px; }
+  .map, .quest { padding: 6px 9px; font-size: 12px; }
+  .map span, .quest small { font-size: 10px; }
+  .quest strong { font-size: 11px; }
+  .stats { width: min(230px, 43%); padding: 5px; }
+  .statline { grid-template-columns: 24px 1fr 55px; gap: 3px; font-size: 10px; }
+  .name { font-size: 11px; gap: 2px; }
+  .name span:last-child { font-size: 10px; }
+  .actions { max-width: 260px; padding: 4px; }
+  .actions button { padding: 4px 5px; font-size: 11px; }
+  .help { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="game">
+  <canvas aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, 위 방향키 대화와 출구, I 장비와 가방"></canvas>
+  <div class="top">
+    <div class="map"><span>Maplee</span><strong id="region">솔방울 마을</strong></div>
+    <div class="quest"><small>의뢰</small><strong id="quest">마을의 리나와 대화</strong></div>
+  </div>
+  <div class="toast" id="toast" role="status">그래픽을 불러오는 중이에요.</div>
+  <div class="help">← → 이동　Space 점프　↓ + Space 내려가기　Z 공격　X 스킬　↑ 대화·출구　I 가방　M 지도</div>
+  <div class="hud">
+    <div class="stats">
+      <div class="name"><span><b id="lv"></b> <b id="job"></b></span><span id="gold"></span></div>
+      <div class="statline"><span>HP</span><div class="bar"><div class="fill" id="hpbar"></div></div><span id="hp"></span></div>
+      <div class="statline"><span>MP</span><div class="bar"><div class="fill mp" id="mpbar"></div></div><span id="mp"></span></div>
+      <div class="statline"><span>EXP</span><div class="bar"><div class="fill xp" id="xpbar"></div></div><span id="xp"></span></div>
+      <span id="kills" hidden></span>
+    </div>
+    <div class="actions">
+      <button type="button" id="potion">HP 물약 <span id="pots"></span></button><button type="button" id="tonic">MP 물약 <span id="tonics"></span></button>
+      <button type="button" id="inventory">장비·가방</button><button type="button" id="mapbutton">지도</button>
+      <button type="button" id="returnbutton">마을 귀환</button><button type="button" id="savebutton">저장</button>
+      <button type="button" id="pause">일시정지</button><button type="button" id="sound">소리 켜기</button>
+    </div>
+  </div>
+  <div class="mobile">
+    <div><button aria-label="왼쪽" data-key="ArrowLeft">◀</button><button aria-label="오른쪽" data-key="ArrowRight">▶</button><button aria-label="사다리 내려가기" data-key="ArrowDown">↓</button></div>
+    <div><button data-key="Space">점프</button><button data-key="KeyZ">공격</button><button data-key="KeyX">스킬</button><button data-key="ArrowUp">대화·출구</button></div>
+  </div>
+  <section class="panel" id="panel" aria-label="게임 메뉴" hidden></section>
+</main>
+<script src="src/asset-data.js"></script>
+<script src="src/content.js"></script>
+<script src="src/world.js"></script>
+<script src="src/game-ui.js"></script>
+<script src="src/pixel-render.js"></script>
+</body>
+</html>

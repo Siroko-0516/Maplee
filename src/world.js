@@ -1,270 +1,506 @@
 'use strict';
-const $=s=>document.querySelector(s),c=$('canvas'),g=c.getContext('2d');c.width=960;c.height=468;g.imageSmoothingEnabled=false;
-const W=12000,ground=410,regions=[['초록 마을',0,'#bee1e1','#86b77b'],['햇살 초원',1800,'#c8e5dd','#8fbb6b'],['버섯 언덕',4000,'#c6decd','#84aa72'],['깊은 숲',6500,'#a5c5c0','#52856d'],['달빛 유적',9200,'#b2b9d5','#7882a0']];
+
+const $ = selector => document.querySelector(selector);
+const canvas = $('canvas');
+const g = canvas.getContext('2d');
+canvas.width = 960;
+canvas.height = 468;
 const STEP_MS = 1000 / 60;
 const attackAnimation = PIXEL_DATA.meta.hero.animations.attack;
-const swingDuration = attackAnimation.durations.reduce((total, duration) => total + duration, 0);
-let swing = null;
-let p={x:320,y:ground,vy:0,dir:1,hp:100,level:1,xp:0,gold:0,kills:0,pots:5,quest:0,claimed:0},keys={},mobs=[],fx=[],drops=[],camera=0,tick=0,skillCD=0,inv=0,paused=false,dialog=false,map=false,sound=false,audio,lastRegion=-1,acc=0,last=0,autosave=0;
-// Each region has its own ledge layout. Spans are [offset, height above ground, width, ladder offset].
-const ledgeLayouts = [
-  [[42,116,180,54],[158,208,200,68],[381,82,176,56],[465,166,201,62],[617,250,186,43],[700,115,158,74]],
-  [[65,82,180,67],[160,170,170,54],[284,257,190,36],[337,89,228,70],[482,174,192,48],[655,117,172,57]],
-  [[24,113,163,60],[109,206,205,52],[285,132,232,57],[426,219,207,51],[534,76,171,80],[644,153,171,41]],
-  [[46,151,183,59],[165,74,192,72],[233,239,185,42],[359,155,196,48],[527,211,210,67],[644,110,164,54]],
-  [[34,83,230,74],[190,169,155,61],[304,249,200,41],[379,101,222,68],[549,183,202,55],[684,94,150,51]]
-];
+const swingDuration = attackAnimation.durations.reduce((sum, duration) => sum + duration, 0);
+const SAVE_KEY = 'maple-local-world-v1';
+const START_X = 310;
+const keys = {};
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-const platforms = [{x: 0, y: ground, w: W}];
-for (const [index, [, startX]] of regions.entries()) {
-  const endX = regions[index + 1]?.[1] ?? W;
-  for (let start = startX, section = 0; start < endX; start += 850, section++) {
-    for (const [offset, height, width, ladderOffset] of ledgeLayouts[index]) {
-      const x = start + offset;
-      if (x + width > endX - 12) continue;
-      const y = ground - height + (section % 2 ? 12 : 0);
-      platforms.push({x, y, w: width, ladderX: x + ladderOffset});
-    }
-  }
+function areaAt(x) {
+  return AREAS.find(area => x < area.end) ?? AREAS.at(-1);
 }
-const ladders = platforms.filter(platform => platform.ladderX !== undefined).map(platform => {
-  const x = platform.ladderX;
-  let bottom = ground;
-  for (const lower of platforms) {
-    if (lower.y > platform.y && lower.y < bottom && x > lower.x + 10 && x < lower.x + lower.w - 10) {
+
+function cameraTarget(x) {
+  const area = areaAt(x);
+  return clamp(x - canvas.width / 2, area.start, area.end - canvas.width);
+}
+
+const portals = AREAS.flatMap((area, index) => [
+  ...(index ? [{x: area.start + 65, target: AREAS[index - 1].end - 155, label: AREAS[index - 1].name}] : []),
+  ...(index < AREAS.length - 1 ? [{x: area.end - 65, target: AREAS[index + 1].start + 155, label: AREAS[index + 1].name}] : [])
+]);
+
+function nearbyPortal() {
+  return portals.find(portal => Math.abs(portal.x - p.x) <= 45 && Math.abs(groundAt(portal.x) - p.y) <= 30);
+}
+
+function groundAt(x) {
+  for (let i = 1; i < groundPoints.length; i++) {
+    const [right, nextY] = groundPoints[i];
+    if (x > right) continue;
+    const [left, previousY] = groundPoints[i - 1];
+    return previousY + (nextY - previousY) * (clamp(x, left, right) - left) / (right - left);
+  }
+  return groundPoints.at(-1)[1];
+}
+
+const ladders = ledges.map(ledge => {
+  const x = ledge.ladderX;
+  let bottom = groundAt(x);
+  for (const lower of ledges) {
+    if (lower.y > ledge.y && lower.y < bottom && x > lower.x + 8 && x < lower.x + lower.w - 8) {
       bottom = lower.y;
     }
   }
-  return {x, top: platform.y, bottom};
+  return {x, top: ledge.y, bottom};
 });
-let climbing = null;
-let walking = false;
-let walkDistance = 0;
 
-const npcs=[{x:560,name:'리나',role:'숲의 의뢰',hair:'#a75f40',dress:'#bf7d75'},{x:870,name:'토비',role:'물약 상점',hair:'#695b43',dress:'#6a91a0'},{x:1130,name:'루카',role:'세계 안내',hair:'#a59c63',dress:'#788e59'},{x:9550,name:'별지기',role:'유적의 의뢰',hair:'#c3bfd7',dress:'#8779a1'}];
-try{let s=JSON.parse(localStorage.getItem('maple-local-world-v1'));if(s&&Number.isFinite(s.x)&&Number.isFinite(s.level)){for(const k of Object.keys(p))if(Number.isFinite(s[k]))p[k]=s[k];p.x=Math.max(30,Math.min(W-30,p.x));p.y=ground;p.vy=0;p.hp=Math.max(1,Math.min(100,p.hp));p.level=Math.max(1,p.level)}}catch{}
-function save(){try{localStorage.setItem('maple-local-world-v1',JSON.stringify(p));return true}catch{return false}}
-function toast(t){$('#toast').textContent=t;$('#toast').style.opacity=1;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').style.opacity=0,4000)}
-function beep(f){if(!sound)return;try{audio=audio||new AudioContext();let o=audio.createOscillator(),v=audio.createGain();o.type='triangle';o.frequency.value=f;v.gain.setValueAtTime(.04,audio.currentTime);v.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.16);o.connect(v);v.connect(audio.destination);o.start();o.stop(audio.currentTime+.16)}catch{}}
-function region(x){for(let i=regions.length-1;i>=0;i--)if(x>=regions[i][1])return i;return 0}
-function ui(){let need=50+p.level*25;$('#lv').textContent='Lv. '+p.level;$('#hp').textContent=p.hp+' / 100';$('#hpbar').style.width=p.hp+'%';$('#xp').textContent=p.xp+' / '+need;$('#xpbar').style.width=Math.min(100,p.xp/need*100)+'%';$('#gold').textContent=p.gold+' 메소';$('#kills').textContent='처치 '+p.kills;$('#pots').textContent=p.pots;$('#quest').textContent=p.quest===0?'리나와 대화하기 · ↑':p.quest===1?'숲의 몬스터 '+Math.min(10,p.kills)+' / 10 · 리나에게 보고':p.quest===2?'유적에서 별지기 만나기 · 9,550m':p.quest===3?'추가 몬스터 '+Math.min(15,p.kills-p.claimed)+' / 15 · 별지기에게 보고':'모든 의뢰 완료! 자유롭게 탐험하세요';}
-function spawn(x, index, ledge) {
-  const area = region(x);
-  const type = area >= 4 ? 2 : area >= 2 || ledge ? 1 : 0;
-  const max = 4 + area * 3;
-  mobs.push({
-    x, y: ledge?.y ?? ground, home: x,
-    left: ledge ? ledge.x + 16 : x - 130,
-    right: ledge ? ledge.x + ledge.w - 16 : x + 130,
-    dir: index % 2 ? 1 : -1, type, hp: max, max, dead: 0, phase: index * 1.7
+const p = {
+  x: START_X, y: groundAt(START_X), vy: 0, dir: 1, grounded: true, surface: 'ground',
+  hp: 100, mp: 35, level: 1, xp: 0, gold: 0, kills: 0, pots: 5, tonics: 1,
+  job: 'beginner', bag: {twig: 1}, equipment: {weapon: 'twig', armor: null, charm: null},
+  quests: QUESTS.map(() => ({state: 0, count: 0}))
+};
+let camera = 0;
+let tick = 0;
+let panel = null;
+let paused = false;
+let swing = null;
+let climbing = null;
+let invulnerableUntil = 0;
+let hurtUntil = 0;
+let skillCooldown = 0;
+let walkDistance = 0;
+let walking = false;
+let lastArea = null;
+let sound = false;
+let audio;
+let drops = [];
+let effects = [];
+let monsters = [];
+
+function stats() {
+  const job = CLASSES[p.job];
+  const result = {
+    hp: 100 + (p.level - 1) * 10 + job.hp, mp: 35 + (p.level - 1) * 4 + job.mp,
+    attack: 4 + (p.level - 1) * 2 + job.attack, defense: Math.floor((p.level - 1) / 2)
+  };
+  for (const id of Object.values(p.equipment)) {
+    if (!id) continue;
+    const item = ITEMS[id];
+    for (const key of Object.keys(result)) result[key] += item[key] ?? 0;
+  }
+  return result;
+}
+
+function canEquip(id) {
+  const item = ITEMS[id];
+  return !!item?.slot && p.level >= item.level && (!item.job || item.job === p.job);
+}
+
+function loadGame() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return; }
+  if (!saved || !Number.isFinite(saved.level)) return;
+  for (const key of ['x', 'level', 'xp', 'gold', 'kills', 'pots', 'tonics', 'hp', 'mp']) {
+    if (Number.isFinite(saved[key])) p[key] = Math.max(0, Math.trunc(saved[key]));
+  }
+  p.x = clamp(p.x, 24, WORLD_WIDTH - 24);
+  p.y = groundAt(p.x);
+  p.level = Math.max(1, p.level);
+  if (Object.hasOwn(CLASSES, saved.job)) p.job = saved.job;
+  if (saved.bag && typeof saved.bag === 'object') {
+    p.bag = {};
+    p.equipment.weapon = null;
+  }
+  for (const id of Object.keys(ITEMS)) {
+    if (id === 'potion' || id === 'tonic') continue;
+    const amount = saved.bag?.[id];
+    if (Number.isSafeInteger(amount) && amount > 0) p.bag[id] = amount;
+  }
+  for (const slot of Object.keys(SLOTS)) {
+    const id = saved.equipment?.[slot];
+    if (id === null || (ITEMS[id]?.slot === slot && p.bag[id] > 0 && canEquip(id))) p.equipment[slot] = id;
+  }
+  if (Array.isArray(saved.quests)) {
+    for (const [i, quest] of QUESTS.entries()) {
+      const entry = saved.quests[i];
+      if (entry && [0, 1, 2].includes(entry.state) && Number.isFinite(entry.count)) {
+        p.quests[i] = {state: entry.state, count: clamp(Math.trunc(entry.count), 0, quest.target)};
+      }
+    }
+  } else if (saved.quest > 0) {
+    p.quests[0] = {state: saved.quest >= 2 ? 2 : 1, count: Math.min(QUESTS[0].target, p.kills)};
+    if (saved.quest >= 4) p.quests[1] = {state: 2, count: 1};
+  }
+  const limits = stats();
+  p.hp = clamp(p.hp, 1, limits.hp);
+  p.mp = clamp(p.mp, 0, limits.mp);
+}
+
+function save() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(p)); return true; } catch { return false; }
+}
+
+function toast(message) {
+  const element = $('#toast');
+  element.textContent = message;
+  element.style.opacity = 1;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { element.style.opacity = 0; }, 3500);
+}
+
+function beep(frequency) {
+  if (!sound) return;
+  try {
+    audio ??= new AudioContext();
+    const oscillator = audio.createOscillator();
+    const volume = audio.createGain();
+    oscillator.type = 'triangle';
+    oscillator.frequency.value = frequency;
+    volume.gain.setValueAtTime(0.035, audio.currentTime);
+    volume.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.16);
+    oscillator.connect(volume).connect(audio.destination);
+    oscillator.start();
+    oscillator.stop(audio.currentTime + 0.16);
+  } catch {}
+}
+
+const xpNeeded = () => 45 + (p.level - 1) * 28;
+
+function updateHUD() {
+  const limits = stats();
+  const job = CLASSES[p.job];
+  $('#lv').textContent = 'Lv. ' + p.level;
+  $('#job').textContent = job.name;
+  $('#hp').textContent = p.hp + ' / ' + limits.hp;
+  $('#hpbar').style.width = p.hp / limits.hp * 100 + '%';
+  $('#mp').textContent = p.mp + ' / ' + limits.mp;
+  $('#mpbar').style.width = p.mp / limits.mp * 100 + '%';
+  $('#xp').textContent = p.xp + ' / ' + xpNeeded();
+  $('#xpbar').style.width = Math.min(100, p.xp / xpNeeded() * 100) + '%';
+  $('#gold').textContent = p.gold + ' 메소';
+  $('#pots').textContent = p.pots;
+  $('#tonics').textContent = p.tonics;
+  $('#kills').textContent = '처치 ' + p.kills;
+  const questIndex = p.quests.findIndex(quest => quest.state === 1);
+  const active = QUESTS[questIndex];
+  $('#quest').textContent = active
+    ? (p.quests[questIndex].count >= active.target ? active.who + '에게 보고' :
+      active.name + ' · ' + p.quests[questIndex].count + ' / ' + active.target)
+    : p.quests[0].state === 0 ? '마을의 리나와 대화' : p.job === 'beginner'
+      ? 'Lv. 5에 다온에게 전직' : p.quests[1].state === 0 ? '항구의 등대지기와 대화' : '모험 계속하기';
+}
+
+function gainXP(amount) {
+  p.xp += amount;
+  const previous = p.level;
+  while (p.xp >= xpNeeded()) {
+    p.xp -= xpNeeded();
+    p.level++;
+  }
+  if (p.level !== previous) {
+    const limits = stats();
+    p.hp = limits.hp;
+    p.mp = limits.mp;
+    textEffect('LEVEL UP!', p.x, p.y - 76, '#ffe69e');
+    toast(previous < 5 && p.level >= 5 ? 'Lv. 5 달성! 다온에게 전직할 수 있어요.' : '레벨 ' + p.level + ' 달성');
+    beep(840);
+  }
+}
+
+function addItem(id) {
+  if (id === 'potion') p.pots++;
+  else if (id === 'tonic') p.tonics++;
+  else p.bag[id] = (p.bag[id] ?? 0) + 1;
+}
+
+function spawn(x, kind, index, ledge = null) {
+  const species = SPECIES[kind];
+  monsters.push({
+    x, home: x, y: ledge?.y ?? groundAt(x), kind, ledge, species,
+    left: ledge ? ledge.x + 16 : Math.max(areaAt(x).start + 24, x - 86),
+    right: ledge ? ledge.x + ledge.w - 16 : Math.min(areaAt(x).end - 24, x + 86),
+    dir: index % 2 ? 1 : -1, hp: species.hp, deathAt: null, hitUntil: 0,
+    nextStrike: 0, strikeAt: 0, phase: index * 31
   });
 }
-for (let i = 0, x = 1950; x < W - 200; x += 220, i++) spawn(x, i);
-for (const [i, ledge] of platforms.slice(1).entries()) {
-  if (i % 3 !== 0) spawn(Math.round(ledge.x + ledge.w * 0.6), i, ledge);
+
+function populate() {
+  const kindFor = x => x < 3780 ? 0 : x < 6100 ? 1 : x < 9100 ? 2 : 3;
+  for (let index = 0, x = 2580; x < 11520; x += 213, index++) {
+    if (x >= 9290 && x <= 10810) continue;
+    spawn(x, kindFor(x), index);
+  }
+  for (const [index, ledge] of ledges.entries()) {
+    if (ledge.x >= 2450 && index % 3 !== 0 && (ledge.x < 9100 || ledge.x > 10900)) {
+      spawn(ledge.x + Math.round(ledge.w * 0.6), kindFor(ledge.x), index, ledge);
+    }
+  }
+  spawn(11780, 4, 1);
 }
-function textfx(text,x,y,col='#ffdc66'){fx.push({text,x,y,col,life:60})}
-function reward(m){m.dead=400;const r=region(m.home);p.kills++;p.xp+=18+r*10;drops.push({x:m.x,y:m.y-15,gold:8+r*7,life:900});while(p.xp>=50+p.level*25){p.xp-=50+p.level*25;p.level++;p.hp=100;textfx('LEVEL UP!',p.x,p.y-100,'#fff5b0');beep(880);toast('레벨 '+p.level+'! 공격력이 오르고 체력이 회복되었어요.')}ui()}
+
+function textEffect(text, x, y, color = '#ffe381') {
+  effects.push({shape: 'text', text, x, y, color, duration: 44, start: tick});
+}
+
+function reward(monster) {
+  monster.deathAt = tick;
+  monster.strikeAt = 0;
+  p.kills++;
+  gainXP(monster.species.xp);
+  for (const [index, quest] of QUESTS.entries()) {
+    const entry = p.quests[index];
+    if (entry.state === 1 && quest.matches.includes(monster.kind)) {
+      entry.count = Math.min(quest.target, entry.count + 1);
+      if (entry.count === quest.target) toast(quest.who + '에게 의뢰를 보고하세요.');
+    }
+  }
+  drops.push({
+    x: monster.x, y: monster.y, gold: monster.species.gold, item: monster.species.loot,
+    rare: monster.species.elite || Math.random() < 0.16 ? monster.species.rare : null, until: tick + 1000
+  });
+  updateHUD();
+}
+
+function pickupDrops() {
+  drops = drops.filter(drop => {
+    if (tick >= drop.until) return false;
+    if (Math.abs(drop.x - p.x) > 34 || Math.abs(drop.y - p.y) > 30) return true;
+    p.gold += drop.gold;
+    addItem(drop.item);
+    if (drop.rare) {
+      addItem(drop.rare);
+      toast(ITEMS[drop.rare].name + ' 획득 · I 가방');
+    }
+    textEffect('+' + drop.gold + ' 메소', p.x, p.y - 54);
+    updateHUD();
+    return false;
+  });
+}
+
 function attack(skill = false) {
-  if (!pixelReady || paused || dialog || map || swing || climbing || p.hurtUntil > tick) return;
-  if (skill && skillCD > 0) return;
-  if (skill) skillCD = 210;
-  swing = {startTick: tick, direction: p.dir, skill, hasHit: false};
+  if (!pixelReady || paused || panel || swing || climbing || hurtUntil > tick) return;
+  const job = CLASSES[p.job];
+  if (skill) {
+    if (skillCooldown) return;
+    if (p.mp < job.cost) {
+      if (tick - (attack.lastManaNotice ?? -60) >= 60) {
+        attack.lastManaNotice = tick;
+        toast('마력이 부족해요.');
+      }
+      return;
+    }
+    p.mp -= job.cost;
+    skillCooldown = job.cooldown;
+    updateHUD();
+  }
+  swing = {start: tick, direction: p.dir, skill, hit: false};
   beep(skill ? 420 : 370);
+}
+
+function damage(monster, amount, direction) {
+  monster.hp -= amount;
+  monster.hitUntil = tick + 10;
+  monster.hitDirection = direction;
+  monster.strikeAt = 0;
+  monster.x = clamp(monster.x + direction * 8, monster.left, monster.right);
+  if (!monster.ledge) monster.y = groundAt(monster.x);
+  textEffect(String(amount), monster.x, monster.y - 46);
+  if (monster.hp <= 0) reward(monster);
 }
 
 function advanceAttack() {
   if (!swing) return;
-  const elapsed = (tick - swing.startTick) * STEP_MS;
-  if (elapsed >= swingDuration) {
-    swing = null;
-    return;
-  }
-  if (swing.hasHit || elapsed < attackAnimation.durations[0]) return;
-  swing.hasHit = true;
-
+  const elapsed = (tick - swing.start) * STEP_MS;
+  if (elapsed >= swingDuration) { swing = null; return; }
+  if (swing.hit || elapsed < attackAnimation.durations[0]) return;
+  swing.hit = true;
   const {skill, direction} = swing;
+  const job = CLASSES[p.job];
+  const power = stats().attack;
   beep(skill ? 760 : 510);
-  for (const monster of mobs) {
-    if (monster.dead) continue;
-    const horizontal = monster.x - p.x;
-    const vertical = Math.abs(monster.y - p.y);
-    const inRange = skill
-      ? Math.abs(horizontal) <= 175 && vertical <= 66
-      : horizontal * direction >= -8 && horizontal * direction <= 54 && vertical <= 29;
-    if (!inRange) continue;
-
-    const impactDirection = skill ? Math.sign(horizontal) || direction : direction;
-    const damage = skill ? 9 + p.level * 2 : 2 + p.level + Math.floor(Math.random() * 3);
-    monster.hp -= damage;
-    monster.x = Math.max(monster.left, Math.min(monster.right, monster.x + impactDirection * 9));
-    monster.hitUntil = tick + 10;
-    monster.hitDirection = impactDirection;
-    textfx(String(damage), monster.x, monster.y - 46);
-    if (monster.hp <= 0) {
-      monster.deathAt = tick;
-      reward(monster);
-    }
-  }
-  if (skill) fx.push({ring: true, x: p.x, y: p.y - 23, col: '#bdf8ff', life: 30});
-}
-
-function jump() {
-  if ((!p.grounded && !climbing) || paused || dialog || map) return;
-  climbing = null;
-  p.vy = -11.2;
-  p.grounded = false;
-  beep(300);
-}
-
-function travelTo(x) {
-  swing = null;
-  climbing = null;
-  p.x = x;
-  p.y = ground;
-  p.vy = 0;
-  p.grounded = true;
-  walking = false;
-  walkDistance = 0;
-}
-function close(){dialog=false;$('#dialog').hidden=true}function talk(n){dialog=true;$('#dialog').hidden=false;let text='',buttons=[];function btn(t,fn){buttons.push([t,fn])}
-if(n.name==='리나'){if(p.quest===0){text='반가워요, 모험가님! 마을 밖 몬스터 10마리를 잡아주실래요? 보상은 150 메소와 물약 5개예요.';btn('의뢰 수락',()=>{p.quest=1;ui();save();close();toast('새 의뢰 · 마을 오른쪽 초원으로 출발하세요!')})}else if(p.quest===1&&p.kills>=10){text='덕분에 숲길이 안전해졌어요! 더 큰 모험을 원한다면 동쪽 달빛 유적에서 별지기를 만나보세요.';btn('보상 받기',()=>{p.gold+=150;p.pots+=5;p.quest=2;ui();save();close();toast('150 메소 + 물약 5개 획득!')})}else text='초원은 마을 오른쪽에 있어요. '+(p.quest===1?'몬스터 '+Math.min(p.kills,10)+' / 10마리 처치했네요.':'유적의 별지기가 당신을 기다려요.');}
-if(n.name==='토비'){text='숲의 약초로 만든 물약이에요. 30 메소에 HP를 50 회복하는 물약 하나! 현재 '+p.gold+' 메소를 가지고 있군요.';btn('물약 구매 · 30 메소',()=>{if(p.gold>=30){p.gold-=30;p.pots++;ui();save();talk(n)}else toast('메소가 부족해요. 몬스터를 사냥해 보세요.')})}
-if(n.name==='루카'){text='이곳은 초록 마을이에요. 동쪽으로 초원, 버섯 언덕, 깊은 숲, 달빛 유적이 이어져요. ↑ 키로 사다리를 오르고, X로 광역 스킬을 쓰세요. M은 지도, R은 마을 귀환이에요.';btn('유적까지 빠른 이동 · 80 메소',()=>{if(p.gold>=80){p.gold-=80;travelTo(9400);close();ui();save()}else toast('이동에는 80 메소가 필요해요.')})}
-if(n.name==='별지기'){if(p.quest<2)text='유적에 오신 걸 환영해요. 초록 마을 리나의 의뢰부터 해결해 보세요.';else if(p.quest===2){text='이 오래된 숲에 평화를 되찾아주세요. 몬스터를 15마리 더 잡으면 400 메소와 물약 10개를 드릴게요.';btn('의뢰 수락',()=>{p.quest=3;p.claimed=p.kills;ui();save();close()})}else if(p.quest===3&&p.kills-p.claimed>=15){text='빛이 다시 돌아왔군요. 당신은 이 숲의 훌륭한 모험가예요.';btn('보상 받기',()=>{p.quest=4;p.gold+=400;p.pots+=10;ui();save();close();toast('유적 의뢰 완료! 400 메소 + 물약 10개')})}else text=p.quest===4?'언제든 이 숲을 자유롭게 여행하세요.':'몬스터를 '+(p.kills-p.claimed)+' / 15마리 처치했어요. 기다리고 있을게요.';}
-$('#dialog').replaceChildren();let title=document.createElement('b');title.textContent=n.name+' · '+n.role;let para=document.createElement('p');para.textContent=text;$('#dialog').append(title,para);for(const [t,f]of buttons){let b=document.createElement('button');b.textContent=t;b.onclick=f;$('#dialog').append(b)}let b=document.createElement('button');b.textContent='닫기 · Esc';b.onclick=close;$('#dialog').append(b)}
-function interact(){if(dialog){close();return}const n=npcs.find(n=>Math.abs(n.x-p.x)<75&&p.y>365);if(n)talk(n)}
-function worldmap(){map=!map;$('#worldmap').hidden=!map;if(!map)return;$('#worldmap').innerHTML='<button id="mapclose">닫기 ×</button><b>WORLD MAP · 이어진 하나의 세계</b><p style="color:#7e8d74">현재 위치: '+regions[region(p.x)][0]+' / '+Math.floor(p.x)+'m</p><div class="mapline">'+regions.map((r,i)=>'<div style="'+(region(p.x)===i?'outline:3px solid #de9f65;':'')+'">'+['🏡','🌾','🍄','🌲','🌙'][i]+'<br>'+r[0]+'<br>'+r[1]+'m</div>').join('')+'</div><p>← 서쪽 마을 &nbsp; · &nbsp; 동쪽 유적 →</p><small>R 마을 귀환 · NPC 루카에게서 유적 빠른 이동 가능</small>';$('#mapclose').onclick=worldmap}
-function potion(){if(p.pots&&p.hp<100){p.pots--;p.hp=Math.min(100,p.hp+50);textfx('HP +50',p.x,p.y-80,'#baf3a7');beep(660);ui();save()}else toast(p.pots?'체력이 가득 차 있어요.':'물약이 없어요. 마을의 토비에게 구매하세요.')}
-function key(code){if(code==='Space')jump();if(code==='KeyZ')attack();if(code==='KeyX')attack(true);if(code==='ArrowUp')interact();if(code==='KeyM')worldmap();if(code==='Escape'){if(dialog)close();else if(map)worldmap()}if(code==='KeyK')toast(save()?'모험을 저장했어요.':'저장 공간을 사용할 수 없어요.');if(code==='KeyR'&&!dialog){travelTo(320);p.hp=100;ui();save();toast('초록 마을로 돌아왔어요.')}}
-window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault();keys[e.code]=true;if(!e.repeat)key(e.code)});window.addEventListener('keyup',e=>keys[e.code]=false);window.addEventListener('blur',()=>{keys={};save()});window.addEventListener('pagehide',save);
-document.querySelectorAll('[data-key]').forEach(b=>{b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys[b.dataset.key]=true;key(b.dataset.key)};b.onpointerup=b.onpointercancel=()=>keys[b.dataset.key]=false});$('#potion').onclick=potion;$('#pause').onclick=()=>{paused=!paused;$('#pause').textContent=paused?'▶ 계속하기':'Ⅱ 일시정지'};$('#sound').onclick=()=>{sound=!sound;$('#sound').textContent=sound?'♪ 소리 끄기':'♪ 소리 켜기';beep(600)};
-function rect(x, y, width, height, color) {
-  g.fillStyle = color;
-  g.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
-}
-
-function movePlayer(dx) {
-  const climbDirection = Number(Boolean(keys.ArrowDown)) - Number(Boolean(keys.ArrowUp));
-  if (dx) climbing = null;
-  if (!climbing && !dx && !swing && climbDirection && p.vy >= 0) {
-    climbing = ladders.find(ladder => (
-      Math.abs(p.x - ladder.x) <= 12 &&
-      (climbDirection < 0 ? p.y > ladder.top && p.y <= ladder.bottom :
-        p.y >= ladder.top && p.y < ladder.bottom)
-    )) ?? null;
-  }
-  if (climbing) {
-    p.x = climbing.x;
-    p.y = Math.max(climbing.top, Math.min(climbing.bottom, p.y + climbDirection * 3.2));
-    p.vy = 0;
-    p.grounded = p.y === climbing.top || p.y === climbing.bottom;
-    if (p.grounded) climbing = null;
+  if (skill && job.shape === 'arrow') {
+    effects.push({
+      shape: 'arrow', x: p.x + 15 * direction, y: p.y - 20, direction,
+      duration: Math.ceil(job.reach / 15), start: tick, power: Math.ceil(power * job.power)
+    });
     return;
   }
-
-  p.x = Math.max(24, Math.min(W - 24, p.x + dx * (swing && p.grounded ? 2.4 : 4.2)));
-  const oldY = p.y;
-  p.vy += 0.5;
-  p.y += p.vy;
-  p.grounded = false;
-  if (p.vy < 0) return;
-
-  // Select the first surface crossed when several ledges overlap horizontally.
-  let landing = Infinity;
-  for (const {x, y, w} of platforms) {
-    if (oldY <= y && p.y >= y && p.x >= x - 4 && p.x <= x + w + 4) {
-      landing = Math.min(landing, y);
-    }
+  for (const monster of monsters) {
+    if (monster.deathAt !== null || areaAt(monster.x) !== areaAt(p.x)) continue;
+    const dx = monster.x - p.x;
+    const dy = Math.abs(monster.y - p.y);
+    const forward = dx * direction >= -8;
+    const inRange = !skill ? forward && Math.abs(dx) <= 54 && dy <= 31 :
+      Math.abs(dx) <= job.reach && dy <= (job.shape === 'stars' ? 92 : 53) &&
+      (job.shape !== 'arc' || forward);
+    if (inRange) damage(monster, skill ? Math.ceil(power * job.power) : power + Math.floor(Math.random() * 3),
+      Math.sign(dx) || direction);
   }
-  if (landing !== Infinity) {
-    p.y = landing;
-    p.vy = 0;
-    p.grounded = true;
+  if (skill) effects.push({shape: job.shape, x: p.x, y: p.y - 21, direction, duration: 25, start: tick});
+}
+
+function advanceEffects() {
+  effects = effects.filter(effect => tick - effect.start < effect.duration && !effect.expired);
+  for (const effect of effects.slice()) {
+    if (effect.shape !== 'arrow') continue;
+    const nextX = effect.x + effect.direction * 15;
+    const hit = monsters.find(monster => monster.deathAt === null &&
+      Math.abs(nextX - monster.x) <= 18 && Math.abs(effect.y - (monster.y - 18)) <= 22);
+    if (hit) {
+      damage(hit, effect.power, effect.direction);
+      effect.expired = true;
+    } else {
+      effect.x = nextX;
+    }
   }
 }
 
 function moveMonsters() {
-  for (const monster of mobs) {
-    if (monster.dead) {
-      if (--monster.dead === 0) {
-        monster.hp = monster.max;
+  for (const monster of monsters) {
+    if (monster.deathAt !== null) {
+      if (tick - monster.deathAt >= (monster.species.elite ? 900 : 340)) {
+        monster.hp = monster.species.hp;
         monster.x = monster.home;
+        monster.y = monster.ledge?.y ?? groundAt(monster.x);
+        monster.deathAt = null;
+        monster.nextStrike = tick + 40;
       }
       continue;
     }
-    const speed = monster.type === 2 ? 0.8 : 0.5;
-    monster.x += monster.dir * speed;
-    if (monster.x <= monster.left || monster.x >= monster.right) {
-      monster.x = Math.max(monster.left, Math.min(monster.right, monster.x));
-      monster.dir *= -1;
+    if (!monster.strikeAt && monster.hitUntil <= tick) {
+      monster.x = clamp(monster.x + monster.dir * monster.species.speed, monster.left, monster.right);
+      if (monster.x === monster.left || monster.x === monster.right) monster.dir *= -1;
+      if (!monster.ledge) monster.y = groundAt(monster.x);
     }
-    if (inv || Math.abs(monster.x - p.x) >= 17 || Math.abs(monster.y - p.y) >= 23) continue;
+    const close = areaAt(monster.x) === areaAt(p.x) && Math.abs(monster.x - p.x) < (monster.species.elite ? 65 : 27) && Math.abs(monster.y - p.y) < 26;
+    if (monster.strikeAt && tick >= monster.strikeAt) {
+      monster.strikeAt = 0;
+      monster.nextStrike = tick + 62;
+      if (close && tick >= invulnerableUntil) {
+        const lost = Math.max(1, monster.species.attack - stats().defense);
+        p.hp = Math.max(0, p.hp - lost);
+        invulnerableUntil = tick + 55;
+        hurtUntil = tick + 10;
+        climbing = swing = null;
+        p.grounded = false;
+        p.vy = -3.4;
+        textEffect('-' + lost, p.x, p.y - 52, '#ffad9e');
+        beep(150);
+        if (!p.hp) {
+          travelTo(START_X);
+          p.hp = stats().hp;
+          p.mp = stats().mp;
+          toast('솔방울 마을에서 회복했어요.');
+        }
+        updateHUD();
+      }
+    } else if (!monster.strikeAt && close && tick >= monster.nextStrike && monster.hitUntil <= tick) {
+      monster.strikeAt = tick + (monster.species.elite ? 30 : 16);
+    }
+  }
+}
 
-    const damage = 5 + monster.type * 3;
-    p.hp -= damage;
-    inv = 70;
-    p.hurtUntil = tick + 10;
-    climbing = null;
-    swing = null;
-    p.vy = -4;
-    p.grounded = false;
-    textfx('-' + damage, p.x, p.y - 55, '#f2a6a0');
-    beep(140);
-    if (p.hp <= 0) {
-      p.hp = 100;
-      travelTo(320);
-      toast('마을에서 회복했어요. 다시 출발해 볼까요?');
+function travelTo(x) {
+  if (areaAt(p.x) !== areaAt(x)) effects = [];
+  p.x = clamp(x, 24, WORLD_WIDTH - 24);
+  p.y = groundAt(p.x);
+  p.vy = 0;
+  p.grounded = true;
+  p.surface = 'ground';
+  climbing = swing = null;
+  walkDistance = 0;
+  walking = false;
+  camera = cameraTarget(p.x);
+}
+
+function jump() {
+  if (paused || panel || (!p.grounded && !climbing)) return;
+  if (keys.ArrowDown && typeof p.surface === 'object' && p.surface !== null) {
+    p.y += 2;
+    p.vy = 1;
+  } else {
+    p.vy = -11.2;
+    beep(300);
+  }
+  p.grounded = false;
+  p.surface = climbing = null;
+}
+
+function movePlayer(dx) {
+  const vertical = Number(!!keys.ArrowDown) - Number(!!keys.ArrowUp);
+  if (dx) climbing = null;
+  if (!climbing && !dx && !swing && vertical && p.vy >= 0) {
+    climbing = ladders.find(ladder => Math.abs(p.x - ladder.x) <= 11 &&
+      (vertical < 0 ? p.y > ladder.top && p.y <= ladder.bottom + 2 :
+        p.y >= ladder.top - 1 && p.y < ladder.bottom - 1)) ?? null;
+  }
+  if (climbing) {
+    p.x = climbing.x;
+    p.y = clamp(p.y + vertical * 3.2, climbing.top, climbing.bottom);
+    p.vy = 0;
+    p.grounded = p.y === climbing.top || p.y === climbing.bottom;
+    p.surface = null;
+    if (p.grounded) climbing = null;
+    return;
+  }
+
+  const area = areaAt(p.x);
+  p.x = clamp(p.x + dx * (swing && p.grounded ? 2.4 : 4.2), area.start + 24, area.end - 24);
+  const floor = groundAt(p.x);
+  if (p.grounded && p.surface === 'ground') { p.y = floor; return; }
+  const oldY = p.y;
+  p.vy += 0.5;
+  p.y += p.vy;
+  p.grounded = false;
+  p.surface = null;
+  if (p.vy < 0) return;
+  let landing = p.y >= floor ? floor : Infinity;
+  let surface = 'ground';
+  for (const ledge of ledges) {
+    if (ledge.y < landing && oldY <= ledge.y && p.y >= ledge.y &&
+        p.x >= ledge.x - 3 && p.x <= ledge.x + ledge.w + 3) {
+      landing = ledge.y;
+      surface = ledge;
     }
-    ui();
+  }
+  if (Number.isFinite(landing)) {
+    p.y = landing;
+    p.vy = 0;
+    p.grounded = true;
+    p.surface = surface;
   }
 }
 
 function step() {
-  if (!pixelReady) return;
+  if (!pixelReady || paused || panel) return;
   tick++;
-  if (skillCD) skillCD--;
-  if (inv) inv--;
-  const dx = Number(Boolean(keys.ArrowRight)) - Number(Boolean(keys.ArrowLeft));
+  if (skillCooldown) skillCooldown--;
+  const dx = Number(!!keys.ArrowRight) - Number(!!keys.ArrowLeft);
   if (dx && !swing) p.dir = dx;
   if (keys.KeyX) attack(true);
   if (keys.KeyZ) attack();
-  const oldX = p.x;
-  const oldY = p.y;
+  const {x, y} = p;
   movePlayer(dx);
-  walking = p.grounded && Math.abs(p.x - oldX) > 0;
-  if (walking || climbing) {
-    walkDistance += Math.abs(p.x - oldX) + Math.abs(p.y - oldY);
-  } else {
-    walkDistance = 0;
-  }
+  walking = p.grounded && p.x !== x;
+  if (walking || climbing) walkDistance += Math.abs(p.x - x) + Math.abs(p.y - y);
+  else walkDistance = 0;
   advanceAttack();
+  advanceEffects();
   moveMonsters();
+  pickupDrops();
 
-  for (const drop of drops) {
-    drop.life--;
-    if (Math.abs(drop.x - p.x) < 33 && Math.abs(drop.y - p.y) < 38) {
-      p.gold += drop.gold;
-      drop.life = 0;
-      textfx('+' + drop.gold + ' 메소', p.x, p.y - 42, '#fff3a2');
-      ui();
-    }
+  const area = areaAt(p.x);
+  if (area !== lastArea) {
+    if (lastArea) toast(area.name);
+    lastArea = area;
+    $('#region').textContent = area.icon + ' ' + area.name;
   }
-  drops = drops.filter(drop => drop.life > 0);
-  fx = fx.filter(effect => --effect.life > 0);
-  for (const effect of fx) if (!effect.ring) effect.y -= 0.55;
-  camera = Math.max(0, Math.min(W - 960, p.x - 480));
-  const area = region(p.x);
-  if (area !== lastRegion) {
-    lastRegion = area;
-    $('#region').textContent = ['🏡 ', '🌾 ', '🍄 ', '🌲 ', '🌙 '][area] + regions[area][0];
-    if (tick > 2) toast(regions[area][0] + '에 도착했어요.');
-  }
-  if (++autosave > 600) {
-    autosave = 0;
-    save();
-  }
+  if (tick % 90 === 0 && p.mp < stats().mp) { p.mp++; updateHUD(); }
+  if (tick % 600 === 0) save();
+  const target = cameraTarget(p.x);
+  camera += (target - camera) * 0.18;
+  if (Math.abs(target - camera) < 0.1) camera = target;
 }
 
-function draw(){background();mobs.forEach(drawMob);for(const d of drops)if(d.x>camera-30&&d.x<camera+990){rect(d.x-camera-5,d.y-8+Math.sin(tick*.09)*2,10,9,'#b68c3e');rect(d.x-camera-3,d.y-7+Math.sin(tick*.09)*2,6,6,'#f3d06a')}drawPlayer();for(const f of fx){g.globalAlpha=Math.min(1,f.life/15);if(f.ring){g.strokeStyle=f.col;g.lineWidth=4;g.beginPath();g.ellipse(f.x-camera,f.y,30+(30-f.life)*7,50,0,0,Math.PI*2);g.stroke()}else{g.font='bold 20px sans-serif';g.textAlign='center';g.strokeStyle='#805c42';g.lineWidth=3;g.strokeText(f.text,f.x-camera,f.y);g.fillStyle=f.col;g.fillText(f.text,f.x-camera,f.y)}}g.globalAlpha=1;g.textAlign='left';rect(755,87,185,42,'#f7f4dfcc');g.fillStyle='#647555';g.font='10px sans-serif';g.fillText(Math.floor(p.x)+' m / 12,000 m · '+(skillCD?'스킬 '+(skillCD/60).toFixed(1)+'초':'X 스킬 준비'),765,102);rect(766,113,162,4,'#c5ceae');rect(766+p.x/W*158,110,5,10,'#d49c63');if(paused){rect(0,0,960,468,'#253d4666');g.fillStyle='#fff5dc';g.textAlign='center';g.font='26px sans-serif';g.fillText('잠깐 쉬어가는 중',480,234);g.textAlign='left'}}
-function loop(t){acc+=Math.min(80,t-last);last=t;while(acc>=STEP_MS){if(!paused&&!dialog&&!map)step();acc-=STEP_MS}draw();requestAnimationFrame(loop)}ui();camera=Math.max(0,Math.min(W-960,p.x-480));toast('↑ 리나와 대화해 첫 의뢰를 시작하세요 · M 지도');requestAnimationFrame(loop);
+function nearbyNPC() {
+  return NPCS.find(npc => Math.abs(npc.x - p.x) <= 63 && Math.abs(groundAt(npc.x) - p.y) <= 30);
+}

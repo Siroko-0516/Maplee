@@ -1,13 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const data={meta:JSON.parse(fs.readFileSync(path.join(root,'assets/sprites.json'),'utf8')),terrainLip:23};
-for(const [key,name]of Object.entries({hero:'hero',monsters:'monsters',background:'background',terrain:'terrain'}))data[key]='data:image/png;base64,'+fs.readFileSync(path.join(root,'assets',name+'.png')).toString('base64');
-const packed='const PIXEL_DATA='+JSON.stringify(data)+';';
-if(process.argv.includes('--asset-data')){fs.writeFileSync(1,packed);process.exit(0)}
-let html=fs.readFileSync(path.join(root,'index.html'),'utf8');
-for(const name of ['world','asset-data','pixel-render'])html=html.replace('<script src="src/'+name+'.js"></script>','<script>\n'+(name==='asset-data'?packed:fs.readFileSync(path.join(root,'src',name+'.js'),'utf8'))+'\n</script>');
-fs.mkdirSync(path.join(root,'dist'),{recursive:true});
-fs.writeFileSync(path.join(root,'dist/maple-local.html'),html);
-console.log('Built dist/maple-local.html — offline, no external assets or deployment');
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const assetScript = fs.readFileSync(path.join(root, 'src/asset-data.js'), 'utf8');
+const packed = assetScript.replace(/"assets\/[\w-]+\.(png|jpg)"/g, (literal, extension) => {
+  const image = fs.readFileSync(path.join(root, JSON.parse(literal)));
+  return JSON.stringify('data:image/' + (extension === 'jpg' ? 'jpeg' : extension) + ';base64,' + image.toString('base64'));
+});
+if (process.argv.includes('--asset-data')) {
+  fs.writeFileSync(1, packed);
+} else {
+  const template = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const html = template.replace(/<script src="(src\/[\w-]+\.js)"><\/script>/g, (_, source) => {
+    const script = source === 'src/asset-data.js' ? packed : fs.readFileSync(path.join(root, source), 'utf8');
+    return '<script>\n' + script + '\n</script>';
+  });
+  fs.mkdirSync(path.join(root, 'dist'), {recursive: true});
+  fs.writeFileSync(path.join(root, 'dist/maple-local.html'), html);
+  console.log('Built dist/maple-local.html');
+}
