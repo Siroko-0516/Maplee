@@ -50,6 +50,40 @@ class WeaponAttacks(unittest.TestCase):
                 game.step({"KeyZ"})
             self.assertEqual(game.swing["start"], 97)
 
+    def test_blade_contacts_a_body_entering_the_sweep_only_once(self):
+        game = Game()
+        game.monsters.clear()
+        game.facing = 1
+        target = game.spawn(game.p["x"] + 100, 0, 0)
+        target["spec"] = dict(target["spec"], body_size=(32, 38))
+        game.start_attack()
+        game.tick = game.swing["impact"]
+        hits = []
+        game.hit = lambda *args: hits.append(args)
+        game.update_attack()
+        self.assertFalse(hits)
+        target["x"] = game.p["x"] + game.swing["reach"] + 12
+        for _ in range(4):
+            game.tick += 1
+            game.update_attack()
+        self.assertEqual(len(hits), 1)
+
+    def test_projectile_selects_first_body_on_travel_path(self):
+        for facing in (-1, 1):
+            game = Game()
+            game.monsters.clear()
+            x, y = game.p["x"], game.p["y"]
+            far = game.spawn(x + 14*facing, 0, 0)
+            near = game.spawn(x + 5*facing, 0, 1)
+            for m in (far, near):
+                m["spec"] = dict(m["spec"], body_size=(4, 32))
+            game.tick = 1
+            game.effects = [("arrow", 0, x, y-20, 10, (facing, 4))]
+            hits = []
+            game.hit = lambda target, *args: hits.append(target)
+            game.effect_step()
+            self.assertEqual(hits, [near])
+
     def test_projectiles_keep_individual_damage(self):
         game = Game()
         game.monsters.clear()
@@ -59,6 +93,6 @@ class WeaponAttacks(unittest.TestCase):
             ("bolt", 0, 310, monster["y"]-20, 5, (1, 58)),
         ]
         impacts = []
-        game.hit = lambda target, power, facing: impacts.append((target["kind"], power, facing))
+        game.hit = lambda target, power, facing, impact: impacts.append((target["kind"], power, facing, impact))
         game.effect_step()
-        self.assertEqual(impacts, [(10, 41, 1), (10, 58, 1)])
+        self.assertEqual(impacts, [(10, 41, 1, "arrow_hit"), (10, 58, 1, "bolt_hit")])

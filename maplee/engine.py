@@ -1,6 +1,6 @@
 """Maplee's fixed-step simulation. This module also runs in regular Python."""
 from bisect import bisect_right
-from math import ceil
+from math import ceil, sin
 from random import random
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
@@ -22,6 +22,19 @@ def limit(value, low, high):
 
 def direction(value, fallback=1):
     return 1 if value > 0 else -1 if value < 0 else fallback
+
+
+def monster_bounds(monster, tick):
+    spec = monster["spec"]
+    width, height = spec.get("body_size", (36, 36))
+    scale = 1.5 if spec.get("elite") else 1
+    bottom = monster["y"] - (sin((tick + monster["phase"]) / 10) * 3 if spec.get("float") else 0)
+    half = width * scale / 2
+    return monster["x"] - half, bottom - height * scale, monster["x"] + half, bottom
+
+
+def overlaps(box, target):
+    return box[0] <= target[2] and target[0] <= box[2] and box[1] <= target[3] and target[1] <= box[3]
 
 
 def area_at(x):
@@ -81,6 +94,7 @@ class Game:
         self.land_until = 0
         self.jump_tick = -100
         self.swing = None
+        self.support_started = 0
         self.inv_until = self.hurt_until = self.support_until = 0
         self.skill_cd = self.support_cd = 0
         self.drops, self.effects, self.monsters = [], [], []
@@ -227,7 +241,7 @@ class Game:
             stats = self.stats()
             p["hp"], p["mp"] = stats["hp"], stats["mp"]
             self.text("LEVEL UP!", p["x"], p["y"] - 76, "#ffe8a0")
-            self.notice = f"Lv. {p['level']} 달성! " + ("다온에게 전직할 수 있어요." if old < 5 <= p["level"] else "C 능력치 · S 스킬")
+            self.notice = f"Lv. {p['level']} 달성! " + ("헬레나에게 전직할 수 있어요." if old < 5 <= p["level"] else "C 능력치 · S 스킬")
             self.sound = 840
 
     def can_equip(self, id):
@@ -406,6 +420,7 @@ class Game:
             self.notice = "마력이 부족해요."
             return False
         self.p["mp"] -= support["cost"]
+        self.support_started = self.tick
         self.support_until = self.tick + 420 + 90 * (rank - 1)
         self.support_cd = 720
         self.text(support["name"], self.p["x"], self.p["y"] - 65, "#b7ffd3")
@@ -438,7 +453,7 @@ class Game:
         if skill:
             power = ceil(power * (job["power"] + .25 * (self.p["skillRanks"]["primary"] - 1)))
         melee = not skill and attack in ("slash", "punch")
-        self.swing = {"melee": melee, "queued": False,
+        self.swing = {"melee": melee, "struck": set(), "queued": False,
                       "impact": MELEE_IMPACT if melee else SWING_WINDUP,
                       "duration": len(MELEE_POSES) if melee else SWING_END,
                       "start": self.tick, "dir": self.facing, "skill": skill, "weapon": weapon,
@@ -453,25 +468,32 @@ class Game:
         if not self.swing:
             return
         elapsed = self.tick - self.swing["start"]
-        if elapsed != self.swing["impact"]:
+        contact_age = elapsed - self.swing["impact"]
+        if not 0 <= contact_age <= (3 if self.swing["melee"] else 0):
             return
         skill, facing = self.swing["skill"], self.swing["dir"]
         p = self.p
         shape, power, radius = self.swing["shape"], self.swing["power"], self.swing["reach"]
-        self.sound = 740 if skill else 505
+        if contact_age == 0:
+            self.sound = 740 if skill else 505
         if shape in ("arrow", "bolt"):
             self.effects.append((shape, self.tick, p["x"] + facing * 18, p["y"] - 24,
                                  1 + radius // 15, (facing, power)))
             return
         if not self.swing["melee"]:
             self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
+        back = 4 if shape in ("slash", "arc", "punch") else radius
+        ends = (p["x"] - facing * back, p["x"] + facing * radius)
+        height = 92 if shape == "stars" else 64 if skill else 53
+        box = (min(ends), p["y"] - height, max(ends), p["y"] + 3)
         for monster in self.monsters:
             if monster["dead"] is not None or area_at(monster["x"]) != area_at(p["x"]):
                 continue
-            dx, dy = monster["x"] - p["x"], abs(monster["y"] - p["y"])
-            if abs(dx) <= radius and dy <= (92 if shape == "stars" else 51 if skill else 31):
-                if shape not in ("slash", "arc", "punch") or dx * facing >= -8:
-                    self.hit(monster, power + (int(random() * 3) if not skill else 0), direction(dx, facing))
+            key = id(monster)
+            if key not in self.swing["struck"] and overlaps(box, monster_bounds(monster, self.tick)):
+                self.swing["struck"].add(key)
+                self.hit(monster, power + (int(random() * 3) if not skill else 0),
+                         direction(monster["x"] - p["x"], facing), shape + "_hit" if skill else "impact")
 
     def spawn(self, x, kind, index, ledge=None):
         spec = SPECIES[kind]
@@ -510,7 +532,7 @@ class Game:
         self.spawn(11780, 4, 1)
         self.spawn(18120, 10, 1)
 
-    def hit(self, monster, power, facing):
+    def hit(self, monster, power, facing, impact="impact"):
         spec = monster["spec"]
         monster["hp"] -= power
         monster["hurt"] = self.tick + 10
@@ -521,8 +543,8 @@ class Game:
         if spec.get("aggro") and monster["state"] != "return":
             monster["state"] = "pursuit"
         self.move_monster(monster, monster["x"] + facing * 8, 8)
-        self.text(power, monster["x"], monster["y"] - 48)
-        self.effects.append(("impact", self.tick, monster["x"], monster["y"] - 22, 13, facing))
+        self.effects.append(("damage", self.tick, monster["x"], monster_bounds(monster, self.tick)[1] - 3, 42, (power, 0)))
+        self.effects.append((impact, self.tick, monster["x"], (monster_bounds(monster, self.tick)[1] + monster["y"]) / 2, 16, facing))
         if monster["hp"] <= 0:
             self.reward(monster)
 
@@ -630,7 +652,7 @@ class Game:
         self.inv_until, self.hurt_until = self.tick + 55, self.tick + 10
         self.swing = self.ladder = self.surface = None
         self.vy = -3.4
-        self.text("-" + str(lost), p["x"], p["y"] - 52, "#ffab95")
+        self.effects.append(("damage", self.tick, p["x"], p["y"] - 65, 42, (lost, 2)))
         self.dirty = True
         if p["hp"] <= 0:
             self.travel(START_X)
@@ -648,17 +670,24 @@ class Game:
             if shape in ("arrow", "bolt"):
                 facing, power = data
                 arrow_x = x + facing * 15 * age
-                monster = next((m for m in self.monsters if m["dead"] is None
-                                and area_at(m["x"]) == area_at(self.p["x"])
-                                and abs(m["x"] - arrow_x) <= 18 and abs(y - (m["y"] - 18)) <= 22), None)
+                previous = x + facing * 15 * max(0, age - 1)
+                path = (min(previous, arrow_x)-3, y-4, max(previous, arrow_x)+3, y+4)
+                targets = []
+                for m in self.monsters:
+                    if m["dead"] is None and area_at(m["x"]) == area_at(x):
+                        bounds = monster_bounds(m, self.tick)
+                        if overlaps(path, bounds):
+                            entry = bounds[0] if facing > 0 else -bounds[2]
+                            targets.append((entry, m))
+                monster = min(targets, key=lambda pair: pair[0])[1] if targets else None
                 if monster:
-                    impacts.append((monster, power, facing))
+                    impacts.append((monster, power, facing, shape + "_hit"))
                     continue
             live.append(effect)
         self.effects = live
-        for monster, power, facing in impacts:
+        for monster, power, facing, impact in impacts:
             if monster["dead"] is None:
-                self.hit(monster, power, facing)
+                self.hit(monster, power, facing, impact)
 
     def move_player(self, dx, dy):
         p = self.p

@@ -1,7 +1,8 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
 from math import sin, pi
 from browser import window
-from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_POSES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS
+from .combat_art import COMBAT_ART
+from .content import AREAS, CLASSES, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -10,10 +11,7 @@ IDLE = SPRITES["hero"]["animations"]["idle"]
 IDLE_LENGTH = sum(IDLE["durations"])
 # Native-pixel weight shift, anchored at the feet and mirrored with the swing.
 MELEE_LEAN = (0, -1, -2, -2, -2, -1, 0, 2, 4, 5, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0)
-# Atlas row, horizontal origin and displayed width of each 72-pixel cel.
-COMBAT_ART = {"slash": (0, 8, 72), "arc": (1, 8, 112), "impact": (2, 36, 72),
-              "arrow": (3, 44, 72), "bolt": (4, 38, 72), "ring": (5, 36, 178),
-              "stars": (6, 36, 215)}
+
 
 
 def idle_pose(tick):
@@ -102,7 +100,7 @@ class Renderer:
                       -round(anchor[0] * scale), -round(anchor[1] * scale), round(width * scale), round(height * scale))
         ctx.restore()
 
-    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None):
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None):
         """Draw identical anchored artwork in world and equipment coordinates."""
         ctx.save()
         ctx.globalAlpha = opacity
@@ -118,9 +116,18 @@ class Renderer:
                 body_sheet, column, row = "swing_weapons", int(far_hand), 8
             else:
                 frame, column, row = 11, 3, 2
-        ctx.drawImage(self.images[body_sheet], column * 80, row * 80, 80, 80,
-                      left, top, size, size)
-        for item in (equipment.get("armor"), equipment.get("head"), weapon):
+        if job in JOB_LOOKS:
+            # Each job cel extends eight native pixels around the equipment grid.
+            if body_sheet == "swing_weapons":
+                row = 7
+            pad = round(size * 8 / 80)
+            ctx.drawImage(self.images[JOB_LOOKS[job]], column*96, row*96, 96, 96,
+                          left-pad, top-pad, size+2*pad, size+2*pad)
+        else:
+            ctx.drawImage(self.images[body_sheet], column * 80, row * 80, 80, 80,
+                          left, top, size, size)
+        for item in (equipment.get("armor"), equipment.get("charm"), equipment.get("seal"),
+                     equipment.get("head"), equipment.get("ring"), weapon):
             if item in WORN_ROWS:
                 moving_blade = item == weapon and swing_tick is not None
                 sheet = "swing_weapons" if moving_blade else "worn"
@@ -228,22 +235,27 @@ class Renderer:
                 for i in range(6):
                     self.rect(x - 8 + 3 * i, y - ((game.tick + i * 11) % 37), 2, 5, "#cdfbff")
                 self.label("↑ " + AREAS[target]["name"], x, y - 50, "#baf6ff")
-        for npc in NPCS:
+        for row, npc in enumerate(NPCS):
             x = npc["x"]
             if not area["start"] <= x < area["end"] or not left - 50 < x < right + 50:
                 continue
             y = ground_at(x)
-            phase = idle_pose(game.tick + int(x))
-            pose = NPC_ROWS[npc["kind"]] * 4 + (0, 1, 3, 2)[phase]
-            self.sprite("villager", pose, x, y)
-            self.label(npc["name"] + " · " + npc["role"], x, y - 76)
+            height, durations = NPC_IDLE[row]
+            phase = (game.tick * 1000 // 60 + x) % sum(durations)
+            for cel, duration in enumerate(durations):
+                if phase < duration:
+                    break
+                phase -= duration
+            self.sprite("villager", row * SPRITES["villager"]["columns"] + cel, x, y)
+            label_y = y - height - 5
+            self.label(npc["name"] + " · " + npc["role"], x, label_y)
             if npc["kind"] in ("quest", "harbor"):
                 index = npc.get("quest", 1 if npc["kind"] == "harbor" else 0)
                 progress = game.p["quests"][index]
                 if not progress["state"] or progress["state"] == 1 and progress["count"] >= QUESTS[index]["target"]:
-                    self.label("◆", x, y - 91, "#ffd981", 13)
+                    self.label("◆", x, label_y - 15, "#ffd981", 13)
             if game.nearby()[1] == npc:
-                self.label("↑ 대화", x, y - 105, "#d7ffed")
+                self.label("↑ 대화", x, label_y - 29, "#d7ffed")
 
     def player_pose(self, game):
         tick = game.tick
@@ -276,22 +288,44 @@ class Renderer:
     def monster(self, game, m):
         dead = m["dead"]
         elapsed = game.tick - dead if dead is not None else 0
-        if elapsed >= 20:
-            return
         species = m["spec"]
-        old = game.tick + m["phase"]
-        gait = (0, 1, 0, 4)[(old // (6 if m["state"] == "pursuit" else 10)) % 4]
-        frame = 3 if dead is not None or game.tick < m["hurt"] else 2 if m["windup"] else 5 if game.tick - m["strike"] < 8 else gait
-        y = m["y"] - (sin(old / 10) * 3 if species.get("float") else 0) - .25 * elapsed
+        books = species["framebooks"]
+        phase_tick = game.tick + m["phase"]
+        after_strike = game.tick - m["strike"]
+        phase = None
+        if dead is not None:
+            action = "die1"
+            if elapsed >= books[action][1][-1]:
+                return
+            phase_tick = elapsed
+        elif game.tick < m["hurt"]:
+            action = "hit1"
+        elif m["windup"] or after_strike < 10:
+            # Body-attack monsters use their leap or movement cels. Casters
+            # play their longer source attack in step with the damage tick.
+            action = next((name for name in ("attack1", "skill1", "jump", "move") if name in books), "stand")
+            if m["windup"]:
+                duration = 24 if m["range"] == 90 else 34 if species.get("elite") else 17
+                phase = 0.55 * (1 - (m["windup"] - game.tick) / duration)
+            else:
+                phase = 0.55 + 0.45 * after_strike / 9
+        else:
+            action = "move"
+        y = m["y"] - (sin(phase_tick / 10) * 3 if species.get("float") else 0)
         scale = 1.5 if species.get("elite") else 1
         if m["windup"]:
             reach = m["range"]
             self.rect(m["x"] if m["dir"] > 0 else m["x"] - reach, m["y"] - 2, reach, 4, "#fbb070a5")
-        self.sprite("wildlife", species["sprite"] * 6 + frame, m["x"], y, m["dir"], scale,
-                    1 - elapsed / 20, species.get("tint", "none"))
+        sx, sy, sw, sh, dx, dy = monster_art(species, action, phase_tick, phase)
+        ctx = self.ctx
+        ctx.save()
+        ctx.translate(round(m["x"]), round(y))
+        ctx.scale(m["dir"]*scale, scale)
+        ctx.drawImage(self.images["wildlife"], sx, sy, sw, sh, dx, dy, sw, sh)
+        ctx.restore()
         if dead is not None:
             return
-        y = y - round(68 * scale) - 6
+        y -= round(species["body_size"][1] * scale) + 6
         if species.get("elite") or abs(m["x"] - game.p["x"]) < 105:
             self.label(f"Lv.{species['level']} {species['name']}", m["x"], y, "#fff2bd", 10)
         if m["hp"] < species["hp"] or species.get("elite"):
@@ -303,26 +337,40 @@ class Renderer:
         shape, start, x, y, duration, data = effect
         age = tick - start
         fraction = age / duration
-        if shape == "text":
+        if shape == "damage":
+            value, row = data
+            digits = str(value)
+            ctx = self.ctx
+            ctx.save()
+            ctx.globalAlpha = min(1, (1-fraction)*3)
+            top = round(y - 43 - 24*(1-(1-fraction)**2))
+            left = round(x - (len(digits)-1)*10 - 24)
+            for index, digit in enumerate(digits):
+                ctx.drawImage(self.images["damage"], int(digit)*48, (row + int(index > 0))*48,
+                              48, 48, left + index*20, top + (index % 2)*2, 48, 48)
+            ctx.restore()
+        elif shape == "text":
             self.label(data[0], x, y - fraction * 22, data[1], 16)
         elif shape == "pickup":
             eased = 1 - (1 - fraction) ** 2
             self.icon(data[0], x + (data[1] - x) * eased, y + (data[2] - y) * eased - sin(fraction * pi) * 12, 21)
         elif shape in COMBAT_ART:
-            row, origin, size = COMBAT_ART[shape]
-            phase = min(3, age * 4 // duration)
+            row, width, height, origin_x, origin_y, frames = COMBAT_ART[shape]
+            if shape in ("slash", "arc", "ring", "stars"):
+                y += 24
+            phase = min(frames - 1, age * frames // duration)
             if shape in ("arrow", "bolt"):
                 facing = data[0]
                 x += facing * age * 15
-                phase = age % 4
+                phase = (age // 3) % frames
             else:
                 facing = data
             ctx = self.ctx
             ctx.save()
             ctx.translate(round(x), round(y))
             ctx.scale(facing, 1)
-            ctx.drawImage(self.images["combat"], phase*72, row*72, 72, 72,
-                          -round(origin*size/72), -size//2, size, size)
+            ctx.drawImage(self.images["combat"], phase*width, row, width, height,
+                          -origin_x, -origin_y, width, height)
             ctx.restore()
         elif shape == "dust":
             for i in range(6):
@@ -377,12 +425,19 @@ class Renderer:
             duration = game.swing["duration"]
             swing_tick = (age * MELEE_IMPACT // impact if age < impact else
                           MELEE_IMPACT + (age-impact) * (len(MELEE_POSES)-MELEE_IMPACT) // (duration-impact))
-        self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity, swing_tick)
+        self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity, swing_tick, game.p["job"])
         if tick < game.support_until:
+            buff_age = tick - game.support_started
+            if buff_age < 48:
+                self.effect(tick, ("buff_" + game.p["job"], game.support_started, x, y, 48, facing))
             self.rect(x - 12, y - 2, 24, 2, "#b8f6b980")
         self.label(f"Lv.{game.p['level']} {CLASSES[game.p['job']]['name']}", x, y - 74)
         for effect in game.effects:
-            self.effect(tick, effect)
+            if effect[0] != "damage":
+                self.effect(tick, effect)
+        for effect in game.effects:
+            if effect[0] == "damage":
+                self.effect(tick, effect)
         ctx.restore()
         if paused:
             self.rect(0, 0, WIDTH, HEIGHT, "#11283888")
