@@ -1,0 +1,139 @@
+{
+  "hero": {
+    "file": "hero.png",
+    "columns": 4,
+    "rows": 4,
+    "frameWidth": 128,
+    "frameHeight": 96,
+    "anchor": [
+      64,
+      92
+    ],
+    "animations": {
+      "idle": {
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "durations": [
+          220,
+          180,
+          220,
+          180
+        ],
+        "loop": true
+      },
+      "walk": {
+        "frames": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "durations": [
+          95,
+          95,
+          95,
+          95
+        ],
+        "loop": true
+      },
+      "attack": {
+        "frames": [
+          8,
+          9,
+          10,
+          11
+        ],
+        "durations": [
+          70,
+          65,
+          80,
+          120
+        ],
+        "loop": false
+      },
+      "jumpUp": {
+        "frames": [
+          12
+        ],
+        "durations": [
+          100
+        ],
+        "loop": true
+      },
+      "jumpDown": {
+        "frames": [
+          13
+        ],
+        "durations": [
+          100
+        ],
+        "loop": true
+      },
+      "hurt": {
+        "frames": [
+          14
+        ],
+        "durations": [
+          160
+        ],
+        "loop": false
+      }
+    }
+  },
+  "monsters": {
+    "file": "monsters.png",
+    "columns": 4,
+    "rows": 3,
+    "frameWidth": 80,
+    "frameHeight": 80,
+    "anchor": [
+      40,
+      76
+    ],
+    "animations": {
+      "slime": {
+        "frames": [
+          0,
+          1,
+          2
+        ],
+        "hurtFrame": 3,
+        "durations": [
+          220,
+          150,
+          220
+        ]
+      },
+      "mushroom": {
+        "frames": [
+          4,
+          5,
+          6
+        ],
+        "hurtFrame": 7,
+        "durations": [
+          220,
+          150,
+          220
+        ]
+      },
+      "spirit": {
+        "frames": [
+          8,
+          9,
+          10
+        ],
+        "hurtFrame": 11,
+        "durations": [
+          220,
+          150,
+          220
+        ]
+      }
+    }
+  }
+}
