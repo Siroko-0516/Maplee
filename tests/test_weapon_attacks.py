@@ -29,6 +29,27 @@ class WeaponAttacks(unittest.TestCase):
                 game.effect_step()
                 self.assertEqual(target["hp"], hp)
 
+    def test_continuous_melee_contact_and_recovery_inputs(self):
+        for weapon in ("twig", None):
+            game = Game()
+            game.monsters.clear()
+            game.p["equipment"]["weapon"] = weapon
+            game.press_attack()
+            self.assertEqual((game.swing["impact"], game.swing["duration"]), (8, 24))
+            for _ in range(19):
+                game.step(set())
+            game.press_attack()
+            game.press_attack()
+            for _ in range(5):
+                game.step({"ArrowRight"})
+            self.assertEqual((game.swing["start"], game.swing["dir"]), (24, 1))
+            for _ in range(24):
+                game.step(set())
+            self.assertIsNone(game.swing)
+            for _ in range(49):
+                game.step({"KeyZ"})
+            self.assertEqual(game.swing["start"], 97)
+
     def test_projectiles_keep_individual_damage(self):
         game = Game()
         game.monsters.clear()

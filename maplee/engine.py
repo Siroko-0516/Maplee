@@ -4,13 +4,13 @@ from math import ceil
 from random import random
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
+    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
 SAVE_KEY = "maple-local-world-v1"
 START_X = 310
-# GMS v83 one-handed swing and bow beats at 60 simulation steps per second.
+# Ranged attacks and class skills keep their original 60 Hz timings.
 SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
 GROUND_XS = [x for x, _ in GROUND]
 AREA_ENDS = [area["end"] for area in AREAS]
@@ -413,6 +413,13 @@ class Game:
         self.dirty = True
         return True
 
+    def press_attack(self):
+        # Buffer one deliberate tap during recovery. Held-key polling never queues a tap.
+        if self.swing and self.swing["melee"] and self.tick - self.swing["start"] >= len(MELEE_POSES) - 5:
+            self.swing["queued"] = True
+        else:
+            self.start_attack()
+
     def start_attack(self, skill=False):
         if self.swing or self.ladder or self.tick < self.hurt_until:
             return False
@@ -430,7 +437,11 @@ class Game:
         power = self.stats()["attack"] + self.support_value("attack")
         if skill:
             power = ceil(power * (job["power"] + .25 * (self.p["skillRanks"]["primary"] - 1)))
-        self.swing = {"start": self.tick, "dir": self.facing, "skill": skill, "weapon": weapon,
+        melee = not skill and attack in ("slash", "punch")
+        self.swing = {"melee": melee, "queued": False,
+                      "impact": MELEE_IMPACT if melee else SWING_WINDUP,
+                      "duration": len(MELEE_POSES) if melee else SWING_END,
+                      "start": self.tick, "dir": self.facing, "skill": skill, "weapon": weapon,
                       "attack": attack, "shape": shape, "reach": reach, "power": round(power)}
         self.sound = 380
         return True
@@ -442,10 +453,7 @@ class Game:
         if not self.swing:
             return
         elapsed = self.tick - self.swing["start"]
-        if elapsed >= SWING_END:
-            self.swing = None
-            return
-        if elapsed != SWING_WINDUP:
+        if elapsed != self.swing["impact"]:
             return
         skill, facing = self.swing["skill"], self.swing["dir"]
         p = self.p
@@ -455,7 +463,7 @@ class Game:
             self.effects.append((shape, self.tick, p["x"] + facing * 18, p["y"] - 24,
                                  1 + radius // 15, (facing, power)))
             return
-        if shape != "punch":
+        if not self.swing["melee"]:
             self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
         for monster in self.monsters:
             if monster["dead"] is not None or area_at(monster["x"]) != area_at(p["x"]):
@@ -696,11 +704,15 @@ class Game:
         self.support_cd = max(0, self.support_cd - 1)
         dx = int("ArrowRight" in keys) - int("ArrowLeft" in keys)
         dy = int("ArrowDown" in keys) - int("ArrowUp" in keys)
+        queued = False
+        if self.swing and self.tick - self.swing["start"] >= self.swing["duration"]:
+            queued = self.swing["queued"]
+            self.swing = None
         if dx and not self.swing:
             self.facing = dx
         if "KeyX" in keys:
             self.start_attack(True)
-        if "KeyZ" in keys:
+        if queued or "KeyZ" in keys:
             self.start_attack()
         self.move_player(dx, dy)
         self.update_attack()

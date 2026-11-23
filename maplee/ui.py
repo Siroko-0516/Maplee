@@ -68,6 +68,8 @@ class App:
     def clear_input(self, _=None):
         self.keys.clear()
         self.pointers.clear()
+        if self.game.swing:
+            self.game.swing["queued"] = False
 
     def bind(self):
         window.bind("keydown", self.key_down)
@@ -119,7 +121,7 @@ class App:
         elif code == "Space":
             game.jump("ArrowDown" in self.keys or "ArrowDown" in self.pointers.values())
         elif code == "KeyZ":
-            game.start_attack()
+            game.press_attack()
         elif code == "KeyX":
             game.start_attack(True)
         elif code == "KeyV":

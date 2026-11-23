@@ -1,13 +1,15 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
 from math import sin, pi
 from browser import window
-from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ROWS
+from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, MELEE_POSES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ROWS
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
 WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
 IDLE = SPRITES["hero"]["animations"]["idle"]
 IDLE_LENGTH = sum(IDLE["durations"])
+# Native-pixel weight shift, anchored at the feet and mirrored with the swing.
+MELEE_LEAN = (0, -1, -2, -2, -2, -1, 0, 2, 4, 5, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0)
 # Atlas row, horizontal origin and displayed width of each 72-pixel cel.
 COMBAT_ART = {"slash": (0, 8, 72), "arc": (1, 8, 112), "impact": (2, 36, 72),
               "arrow": (3, 44, 72), "bolt": (4, 38, 72), "ring": (5, 36, 178),
@@ -100,7 +102,7 @@ class Renderer:
                       -round(anchor[0] * scale), -round(anchor[1] * scale), round(width * scale), round(height * scale))
         ctx.restore()
 
-    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1):
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None):
         """Draw identical anchored artwork in world and equipment coordinates."""
         ctx.save()
         ctx.globalAlpha = opacity
@@ -111,7 +113,10 @@ class Renderer:
                       left, top, size, size)
         for item in (equipment.get("armor"), equipment.get("head"), weapon):
             if item in WORN_ROWS:
-                ctx.drawImage(self.images["worn"], frame * 80, WORN_ROWS[item] * 80, 80, 80,
+                moving_blade = item == weapon and swing_tick is not None
+                sheet = "swing_weapons" if moving_blade else "worn"
+                column = swing_tick if moving_blade else frame
+                ctx.drawImage(self.images[sheet], column * 80, WORN_ROWS[item] * 80, 80, 80,
                               left, top, size, size)
         ctx.restore()
 
@@ -234,6 +239,8 @@ class Renderer:
             return 14, game.facing
         if game.swing:
             age = tick - game.swing["start"]
+            if game.swing["melee"]:
+                return MELEE_POSES[age], game.swing["dir"]
             if game.swing["attack"] in ("arrow", "bolt"):
                 # The projectile leaves on the release/cast cel.
                 phase = 0 if age < 7 else 1 if age < SWING_WINDUP else 2 if age < SWING_FOLLOW else 3
@@ -346,7 +353,12 @@ class Renderer:
         opacity = .48 if tick < game.inv_until and tick % 6 < 3 and tick >= game.hurt_until else 1
         equipment = game.p["equipment"]
         weapon = game.swing["weapon"] if game.swing else equipment.get("weapon")
-        self.avatar(ctx, equipment, weapon, frame, x, y, 80, facing, opacity)
+        swing_tick = None
+        lean = 0
+        if game.swing and game.swing["melee"] and tick >= game.hurt_until:
+            swing_tick = tick - game.swing["start"]
+            lean = MELEE_LEAN[swing_tick] * facing
+        self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity, swing_tick)
         if tick < game.support_until:
             self.rect(x - 12, y - 2, 24, 2, "#b8f6b980")
         self.label(f"Lv.{game.p['level']} {CLASSES[game.p['job']]['name']}", x, y - 74)

@@ -609,7 +609,7 @@ SPRITES = {'hero': {'file': 'hero-adventurer.png',
           'animations': {'idle': {'frames': [0, 1, 2, 1, 0, 1, 2, 1, 3, 1],
                                   'durations': [500, 500, 500, 500, 500, 500, 500, 390, 65, 45], 'loop': True},
                          'walk': {'frames': [4, 5, 6, 7], 'durations': [180, 180, 180, 180], 'loop': True},
-                         'attack': {'frames': [8, 9, 10, 11], 'durations': [300, 150, 150, 200], 'loop': False},
+                         'attack': {'frames': [8, 9, 10, 11], 'ticks': [4, 4, 6, 10], 'loop': False},
                          'bow': {'frames': [16, 17, 18, 19], 'loop': False},
                          'cast': {'frames': [20, 21, 22, 23], 'loop': False},
                          'climb': {'frames': [24, 25, 26, 27], 'loop': True},
@@ -629,6 +629,11 @@ NPC_ROWS = {role: row for row, role in enumerate(("quest", "shop", "trainer", "g
 WORN_ITEMS = ("twig", "bronze", "blade", "sunblade", "bow", "nightbow", "wand", "tidewand",
               "coat", "shell", "glasscoat", "crabguard", "cap")
 WORN_ROWS = {item: row for row, item in enumerate(WORN_ITEMS)}
+# One weapon cel per simulation tick. Body and damage use the same timeline.
+MELEE_ANIMATION = SPRITES["hero"]["animations"]["attack"]
+MELEE_POSES = tuple(pose for pose, ticks in zip(MELEE_ANIMATION["frames"], MELEE_ANIMATION["ticks"])
+                    for _ in range(ticks))
+MELEE_IMPACT = MELEE_POSES.index(10)
 WEAPON_ATTACKS = {"bow": "arrow", "nightbow": "arrow", "wand": "bolt", "tidewand": "bolt"}
 
-IMAGES = {'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
+IMAGES = {'swing_weapons': 'swing-weapons.png', 'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}

@@ -39,7 +39,7 @@ class WorldTests(unittest.TestCase):
         target = game.spawn(2727, 0, 0)
         initial_hp = target["hp"]
         self.assertTrue(game.start_attack())
-        self.step(game, SWING_WINDUP - 1)
+        self.step(game, game.swing["impact"] - 1)
         self.assertEqual(target["hp"], initial_hp)
         self.step(game, 1)
         self.assertLess(target["hp"], initial_hp)

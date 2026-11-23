@@ -1,7 +1,8 @@
 """Paint 80×80 equipment overlays in the adventurer's pose coordinate system.
 
 Rows are in WORN_ORDER. Columns follow the 28 base adventurer poses.
-The art stays on the native dot grid, with the same 74-pixel sole line.
+The attack atlas has four sword rows and one column per simulation tick.
+Both atlases stay on the native dot grid, with the same 74-pixel sole line.
 """
 from math import cos, radians, sin
 from pathlib import Path
@@ -25,6 +26,16 @@ PALMS = (
     (26,52), (45,54), (21,38), (47,56), (48,52), (48,54), (46,57), (48,54),
     (58,48), (58,48), (58,48), (47,56), (57,40), (55,46), (54,50), (47,56),
 )
+# Body cel, forward palm, and blade headings (clockwise in screen space).
+# The opposite fist in swingO1.2 moves behind the character's head. The
+# lower hand remains at the front throughout the sweep and on impact.
+SWORD_STROKE = (
+    (8,  (44, 56), (-52, -93, -125, -143)),
+    (9,  (45, 54), (-145, -127, -94, -51)),
+    (10, (47, 54), (-10, 12, 30, 41, 49, 55)),
+    (11, (47, 56), (59, 61, 58, 51, 39, 24, 7, -10, -24, -33)),
+)
+
 STRING_HAND = {16: (42,45), 17: (29,44)}
 TORSO = (
     ((39,46),(39,57)), ((39,46),(39,57)), ((39,46),(39,57)), ((39,46),(39,57)),
@@ -69,8 +80,7 @@ class Grip:
         self.line([(u-1,v-1),(u,v-2)], SILK)
 
 
-def blade(image, kind, grip, pose):
-    angle = {8:-139, 9:-11, 10:-113, 11:-52, 12:-32, 13:-48, 14:-25}.get(pose,-33)
+def blade(image, kind, grip, angle):
     w = Grip(image, grip, angle)
     if kind == "twig":
         w.plate([(-5,-1),(-4,-2),(4,-2),(5,-3),(17,-2),(21,0),(17,2),(5,2),
@@ -353,7 +363,8 @@ def overlay(kind,pose,base):
     elif pose < 24 and (kind!="twig" or 8 <= pose <= 11):
         grip = PALMS[pose]
         if kind in ("twig","bronze","blade","sunblade"):
-            blade(image,kind,grip,pose)
+            angle = {8:-139, 9:-11, 10:-113, 11:-52, 12:-32, 13:-48, 14:-25}.get(pose,-33)
+            blade(image,kind,grip,angle)
         elif kind in ("bow","nightbow"):
             bow(image,kind,grip,pose)
         else:
@@ -362,6 +373,54 @@ def overlay(kind,pose,base):
         if kind in ("bow","nightbow") and pose in (16,17):
             hold_in_hand(image,base,STRING_HAND[pose])
     return image
+
+
+# Blade-tip registration in the same along/across coordinates as blade().
+CUT_EDGE = {
+    "twig":     ((20, 0),  "#c38c5a", "#ffdfa0"),
+    "bronze":   ((22, -1), "#d19b71", "#fff0be"),
+    "blade":    ((22, -6), "#a29bd6", "#e3dafa"),
+    "sunblade": ((23, -4), "#d98eab", "#ffdfc2"),
+}
+
+
+def cutting_trail(image, kind, palm, heading, previous, tick):
+    if not 5 <= tick <= 12:
+        return
+    tip, shade, light = CUT_EDGE[kind]
+    tail = (0.48, 0.78, 0.94, 1.0, 0.95, 0.83, 0.72, 0.60)[tick-5]
+    span = (heading - previous) * tail
+    samples = max(2, round(span / 4))
+    outer, inner = [], []
+    for step in range(samples+1):
+        progress = step / samples
+        direction = heading - span*(1-progress)
+        path = Grip(image, palm, direction)
+        outer.append(path.pt(*tip))
+        thickness = (2.9 if 7 <= tick <= 9 else 2.0) * progress
+        inner.append(path.pt(tip[0]-thickness, tip[1]))
+    draw = ImageDraw.Draw(image)
+    draw.polygon(outer + list(reversed(inner)), fill=shade)
+    draw.line(outer[samples//3:], fill=light)
+
+
+def swing_weapons(hero):
+    atlas = Image.new("RGBA", (24 * 80, 4 * 80))
+    tick = 0
+    previous = SWORD_STROKE[0][2][0]
+    for pose, grip, headings in SWORD_STROKE:
+        x, y = pose % 4 * 80, pose // 4 * 80
+        body = hero.crop((x, y, x + 80, y + 80))
+        for heading in headings:
+            for row, kind in enumerate(WORN_ORDER[:4]):
+                cel = Image.new("RGBA", (80, 80))
+                cutting_trail(cel, kind, grip, heading, previous, tick)
+                blade(cel, kind, grip, heading)
+                hold_in_hand(cel, body, grip)
+                atlas.paste(cel, (tick * 80, row * 80))
+            previous = heading
+            tick += 1
+    atlas.save(ASSETS / "swing-weapons.png", optimize=True)
 
 
 def run():
@@ -376,6 +435,7 @@ def run():
         for row,kind in enumerate(WORN_ORDER):
             atlas.paste(overlay(kind,pose,base),(pose*80,row*80))
     atlas.save(OUT,optimize=True)
+    swing_weapons(hero)
 
 
 if __name__=="__main__":
