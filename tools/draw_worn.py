@@ -8,9 +8,8 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter
 
-from draw_hero import ARCHER, POSES, frame as adventurer
-
-OUT = Path(__file__).resolve().parents[1] / "assets" / "worn-equipment.png"
+ASSETS = Path(__file__).resolve().parents[1] / "assets"
+OUT = ASSETS / "worn-equipment.png"
 WORN_ORDER = ("twig", "bronze", "blade", "sunblade", "bow", "nightbow", "wand", "tidewand",
               "coat", "shell", "glasscoat", "crabguard", "cap")
 INK = "#262032"
@@ -18,22 +17,29 @@ SUN = "#ffdc8a"
 GOLD = "#d99a53"
 SILK = "#fff6da"
 AMBER = "#865737"
-SKIN = {ImageColor.getcolor(hex_color, "RGBA")
-        for hex_color in ("#f7c493", "#df9e75", "#ffe6c4")}
+# Register directly to the painted right-facing 80px cells. Each entry is the
+# palm center or a pair of (collar center, hip center) landmarks. The melee
+# follow-through wraps the weapon hand behind the head.
+PALMS = (
+    (48,60), (48,60), (50,60), (48,60), (50,57), (47,57), (50,57), (52,52),
+    (26,52), (45,54), (21,38), (47,56), (48,52), (48,54), (46,57), (48,54),
+    (58,48), (58,48), (58,48), (47,56), (57,40), (55,46), (54,50), (47,56),
+)
+STRING_HAND = {16: (42,45), 17: (29,44)}
+TORSO = (
+    ((39,46),(39,57)), ((39,46),(39,57)), ((39,46),(39,57)), ((39,46),(39,57)),
+    ((39,46),(39,57)), ((39,47),(39,58)), ((39,46),(39,57)), ((39,47),(39,58)),
+    ((36,49),(32,61)), ((36,45),(32,58)), ((41,50),(34,61)), ((39,47),(36,58)),
+    ((40,44),(37,55)), ((40,46),(37,57)), ((39,46),(37,57)), ((39,48),(37,59)),
+    ((34,46),(35,58)), ((34,46),(35,58)), ((34,46),(35,58)), ((39,47),(36,58)),
+    ((37,46),(37,57)), ((36,46),(33,58)), ((39,49),(35,60)), ((39,47),(36,58)),
+    ((39,48),(39,57)), ((39,48),(39,57)), ((39,48),(39,57)), ((39,48),(39,57)),
+)
 
-# Knuckle centers in the six arm stamps, relative to the front shoulder.
-KNUCKLE = {"rest": (5, 9), "back": (-3, 10), "swing": (7, 10),
-           "tucked": (5, 8), "out": (10, 4), "backlift": (1, 2)}
-DRAW_HANDS = {16 + phase: joints[1] for phase, joints in enumerate(ARCHER)}
 
-
-def grip_for(pose):
-    grip = POSES[pose][-1]
-    if grip:
-        return grip[:2]
-    tx, ty = POSES[pose][2]
-    ox, oy = KNUCKLE[POSES[pose][6]]
-    return tx + 13 + ox, ty + 3 + oy
+def skin(pixel):
+    red, green, blue, alpha = pixel
+    return alpha and red >= 204 and red >= green >= blue and red - blue >= 16
 
 
 def shape(draw, points, fill, outline=INK):
@@ -64,7 +70,7 @@ class Grip:
 
 
 def blade(image, kind, grip, pose):
-    angle = {8:-139, 9:-11, 10:37, 11:-52, 12:-32, 13:-48, 14:-70}.get(pose,-33)
+    angle = {8:-139, 9:-11, 10:-113, 11:-52, 12:-32, 13:-48, 14:-25}.get(pose,-33)
     w = Grip(image, grip, angle)
     if kind == "twig":
         w.plate([(-5,-1),(-4,-2),(4,-2),(5,-3),(17,-2),(21,0),(17,2),(5,2),
@@ -123,12 +129,12 @@ def bow(image, kind, grip, pose):
         if moon:
             shape(d,pts([(2,5),(5,6),(6,10),(3,9),(2,8)]),GOLD)
             d.point(pts([(4,7)])[0], fill=SUN)
-    string_x, string_y = DRAW_HANDS[pose] if pose in (16,17) else (x+tips, y)
+    string_x, string_y = STRING_HAND[pose] if pose in (16,17) else (x+tips, y)
     d.line([(x+tips,y-height+1),(string_x,string_y),(x+tips,y+height-1)],
            fill="#f9ecca")
     shape(d,[(x-3,y-4),(x+1,y-5),(x+3,y-2),(x+2,y+4),(x-1,y+5),(x-2,y+2)],GOLD)
     d.line([(x,y-3),(x+1,y-2),(x,y+2)],fill=SUN)
-    if pose not in DRAW_HANDS:
+    if pose not in (16,17,18):
         # At rest the upper limb points forward; it clears the chin while
         # the lower limb lies beside the near knee.
         tilted = Image.new("RGBA", image.size)
@@ -137,7 +143,7 @@ def bow(image, kind, grip, pose):
             tilted.paste(image.crop((0,row,80,row+1)), (shift,row))
         image.paste(tilted)
     if pose in (16,17):
-        tip_x = min(76, string_x+28)
+        tip_x = min(76, string_x+36)
         d.line([(string_x,string_y),(tip_x,y)],fill=INK,width=2)
         d.line([(string_x+1,string_y),(tip_x-2,y)],fill="#edcb87")
         shape(d,[(tip_x-3,y-2),(tip_x+1,y),(tip_x-3,y+2)],light)
@@ -145,7 +151,7 @@ def bow(image, kind, grip, pose):
 
 
 def wand(image, kind, grip, pose):
-    angle = {20:-62, 21:-83, 22:-19, 23:-46, 8:-127, 9:-31, 10:19}.get(pose,-38)
+    angle = {20:-62, 21:-54, 22:-16, 23:-35, 8:-127, 9:-31, 10:19}.get(pose,-38)
     w = Grip(image,grip,angle)
     tide = kind == "tidewand"
     tint = "#7dd9e7" if tide else "#c6a2ed"
@@ -255,44 +261,47 @@ CLOTH = {
 
 
 def armor(image, kind, pose, base):
-    x,y = POSES[pose][2]
+    (neck_x, top), (hip_x, bottom) = TORSO[pose]
     template, ramp = CLOTH[kind]
-    colors = dict(zip("bmdlwyg",ramp), k=INK)
-    # Upper-arm matte from the actual cel plus its one-dot dark edge. Mask
-    # after painting so sleeves remain behind the forward arm and knuckles.
-    skin = Image.new("L",image.size)
-    pix, mask = base.load(), skin.load()
-    for j in range(max(0,y), min(y+19,80)):
-        for i in range(max(0,x-4), min(x+23,80)):
-            if pix[i,j] in SKIN:
-                mask[i,j]=255
-    skin = skin.filter(ImageFilter.MaxFilter(3))
-    head_x, head_y = POSES[pose][0]
-    for j,line in enumerate(template.split()):
-        for i,ch in enumerate(line):
-            a,b=x+i,y+j
-            if ch=="." or skin.getpixel((a,b)):
+    rows = template.split()
+    colors = {key: ImageColor.getcolor(value, "RGBA")
+              for key, value in dict(zip("bmdlwyg",ramp), k=INK).items()}
+    pixels = base.load()
+    for y in range(top, bottom+1):
+        fraction = (y-top)/(bottom-top)
+        center = round(neck_x*(1-fraction) + hip_x*fraction)
+        row = min(len(rows)-1, round(fraction*(len(rows)-1)))
+        pattern = rows[row]
+        for x in range(center-8, center+9):
+            red, green, blue, alpha = pixels[x,y]
+            # The shirt has white highlights and cool blue shading. This
+            # matte leaves the actual skin and the black seams of foreground
+            # arms and chin visible, including during the diagonal swings.
+            if not alpha or not (blue >= green >= red and blue >= 160):
                 continue
-            # The chin is painted in front of the collar in front-facing cels.
-            if b < head_y+43 and head_x < a < head_x+42 and pix[a,b][3]:
-                continue
-            image.putpixel((a,b), ImageColor.getcolor(colors[ch],"RGBA"))
-    if pose >= 24:
-        # The back panel has a center seam and no front-facing jewel.
-        d = ImageDraw.Draw(image)
-        for j in range(5,12):
-            for off,color in ((7,ramp[1]),(8,ramp[2]),(9,ramp[0])):
-                at = (x+off,y+j)
-                if image.getpixel(at)[3]:
-                    d.point(at,fill=color)
+            col = x-center+len(pattern)//2
+            ch = pattern[col] if 0 <= col < len(pattern) else "."
+            if ch == ".":
+                ch = "m" if blue-red > 55 else "b"
+            if pose >= 24 and ch in "ygw":
+                ch = "d" if x == center else "l" if x < center else "b"
+            image.putpixel((x,y), colors[ch])
 
 
-def cap(image, pose):
-    x,y = POSES[pose][0]
-    # The base cel starts one pixel from the sheet edge at the top of a
-    # jump. Keep the leather crown in the tile while covering the hair part.
-    y=max(1,y-2)
-    d=ImageDraw.Draw(image)
+def cap(image, pose, base):
+    # Align to the hair mass in this cel, independent of extended arms,
+    # moving soles and head bob. The cropped silhouette has a 39px crown.
+    top = base.getchannel("A").getbbox()[1]
+    crown = []
+    for y in range(top+3, top+12):
+        for x in range(80):
+            red, green, blue, alpha = base.getpixel((x,y))
+            if alpha and red == green == blue and red <= 153:
+                crown.append(x)
+    center = (min(crown) + max(crown)) // 2
+    tile = Image.new("RGBA",(48,23))
+    x,y = 1,1
+    d = ImageDraw.Draw(tile)
     def pts(coords):
         return [(x+a,y+b) for a,b in coords]
     def patch(coords,color,outline=INK):
@@ -314,6 +323,8 @@ def cap(image, pose):
         d.line(pts([(20,14),(29,13),(37,14),(43,16)]),fill="#edb875")
         patch([(8,12),(11,10),(14,11),(14,14),(10,16),(8,15)],GOLD)
         d.point(pts([(11,12)])[0],fill=SUN)
+    tile = tile.resize((43,19), Image.Resampling.NEAREST)
+    image.paste(tile, (center-20,top-2))
 
 
 def hold_in_hand(image, base, grip):
@@ -322,13 +333,13 @@ def hold_in_hand(image, base, grip):
     hand=Image.new("L",image.size)
     for j in range(max(0,y-4),min(80,y+5)):
         for i in range(max(0,x-4),min(80,x+5)):
-            if base.getpixel((i,j)) in SKIN:
+            if skin(base.getpixel((i,j))):
                 hand.putpixel((i,j),255)
     # Preserve the existing dark outline only where it touches a knuckle.
     edge=hand.filter(ImageFilter.MaxFilter(3))
     for j in range(max(0,y-5),min(80,y+6)):
         for i in range(max(0,x-5),min(80,x+6)):
-            if edge.getpixel((i,j)) and base.getpixel((i,j))[:3] == (39,37,45):
+            if edge.getpixel((i,j)) and base.getpixel((i,j)) == (0,0,0,255):
                 hand.putpixel((i,j),255)
     image.putalpha(ImageChops.subtract(image.getchannel("A"),hand))
 
@@ -338,9 +349,9 @@ def overlay(kind,pose,base):
     if kind in CLOTH:
         armor(image,kind,pose,base)
     elif kind=="cap":
-        cap(image,pose)
-    elif pose < 24 and (kind!="twig" or pose >= 8):
-        grip=grip_for(pose)
+        cap(image,pose,base)
+    elif pose < 24 and (kind!="twig" or 8 <= pose <= 11):
+        grip = PALMS[pose]
         if kind in ("twig","bronze","blade","sunblade"):
             blade(image,kind,grip,pose)
         elif kind in ("bow","nightbow"):
@@ -349,16 +360,19 @@ def overlay(kind,pose,base):
             wand(image,kind,grip,pose)
         hold_in_hand(image,base,grip)
         if kind in ("bow","nightbow") and pose in (16,17):
-            hold_in_hand(image,base,DRAW_HANDS[pose])
+            hold_in_hand(image,base,STRING_HAND[pose])
     return image
 
 
 def run():
-    if len(POSES)!=28:
-        raise ValueError("Regenerate with the matching 28-pose adventurer")
-    atlas=Image.new("RGBA",(28*80,len(WORN_ORDER)*80))
+    with Image.open(ASSETS / "hero-adventurer.png") as source:
+        hero = source.convert("RGBA")
+    if hero.size != (320,560):
+        raise ValueError("Expected a 4×7 adventurer atlas with 80px cells")
+    atlas = Image.new("RGBA",(28*80,len(WORN_ORDER)*80))
     for pose in range(28):
-        base=adventurer(pose)
+        x,y = pose%4*80, pose//4*80
+        base = hero.crop((x,y,x+80,y+80))
         for row,kind in enumerate(WORN_ORDER):
             atlas.paste(overlay(kind,pose,base),(pose*80,row*80))
     atlas.save(OUT,optimize=True)
