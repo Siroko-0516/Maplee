@@ -1,7 +1,7 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
-from .content import AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SPRITES, SUPPORTS, monster_art, monster_art
+from .content import AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SUPPORTS, monster_art
 from .engine import PORTALS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
@@ -203,23 +203,9 @@ class GameInterface:
         if callback:
             self.hit(x-2,y-2,w+4,h+4,name,callback)
 
-    def skin(self, index, x, y, w, h):
-        edges = (6, 20, 6)
-        dx, dy = (6, w-12, 6), (6, h-12, 6)
-        for row, sy in enumerate((0, 6, 26)):
-            for col, sx in enumerate((0, 6, 26)):
-                self.atlas("interface", 32*index+sx, 32+sy, edges[col], edges[row],
-                           x+sum(dx[:col]), y+sum(dy[:row]), dx[col], dy[row])
-
     def icon(self, key, index, x, y, size):
         cols = 8 if key == "icons" else 9
         self.atlas(key, index % cols*32, index // cols*32, 32, 32, x, y, size, size)
-
-    def pose(self, key, frame, x, y, size):
-        spec = SPRITES[key]
-        sw, sh = spec["frameWidth"], spec["frameHeight"]
-        self.atlas(key, frame % spec["columns"] * sw, frame // spec["columns"] * sh,
-                   sw, sh, x, y, size, size)
 
     def shine(self, x, y, w, h, top, bottom, edge):
         self.box(x, y, w, h, edge)
@@ -235,15 +221,6 @@ class GameInterface:
         self.text(label, x+w/2, y+h/2, "#fbffef" if callback else "#eef2f0", 12, True, "center", w-5)
         if callback:
             self.hit(x, y, w, h, name, callback)
-
-    def meter(self, x, y, w, h, name, value, maximum, colors):
-        self.box(x, y, w, h, "#0d1827")
-        self.box(x+1, y+1, w-2, h-2, "#333b4a")
-        fill = round((w-2)*limit(value / max(1, maximum), 0, 1))
-        self.box(x+1, y+1, fill, h-2, colors[1])
-        self.box(x+1, y+1, fill, max(1, (h-2)//2), colors[0])
-        self.text(name, x+4, y+h/2, WHITE, 10, True)
-        self.text(f"{value} / {maximum}", x+w-4, y+h/2, WHITE, 10, True, "right")
 
     def dock(self):
         game, p = self.app.game, self.app.game.p
@@ -367,7 +344,7 @@ class GameInterface:
                 ("공격","KeyZ"),("스킬","KeyX"),("대화","ArrowUp"))
         for i, (label, key) in enumerate(keys):
             x = 6+i*38 if i<3 else self.w-6-(7-i)*38
-            self.skin(1, x, bottom-41, 36, 38)
+            self.bezel("chrome",x,bottom-41,36,38,(5,7,5,5))
             self.text(label,x+18,bottom-22,CREAM if key in self.app.pointers.values() else WHITE,13,True,"center")
             self.hit(x,bottom-41,36,38,key,None,"hold")
 
