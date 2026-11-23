@@ -4,6 +4,7 @@ const encoder = new TextEncoder();
 const COOKIE = "maplee_session";
 const SESSION_SECONDS = 14 * 86400;
 const MAX_SAVE_BYTES = 48_000;
+const avatarStyles = new Set(["classic","custom"]);
 const JOBS = new Set(["beginner", "guardian", "ranger", "mage", "thief", "pirate", "cleric"]);
 const reply = (body, status = 200, extra = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", ...extra } });
@@ -82,7 +83,9 @@ function profile(data) {
   if (!/^[\p{L}\p{N} _-]{2,14}$/u.test(name) || !JOBS.has(data.job) ||
       ![0, 1].includes(data.sex) || !Number.isInteger(data.skin) || data.skin < 0 || data.skin > 4 ||
       !Number.isInteger(data.hair) || data.hair < 0 || data.hair > 6) return null;
-  return { name, job: data.job, sex: data.sex, skin: data.skin, hair: data.hair };
+  if (data.style !== undefined && !avatarStyles.has(data.style)) return null;
+  return { name, job: data.job, sex: data.sex, skin: data.skin, hair: data.hair,
+    ...(data.style !== undefined ? { style: data.style } : {}) };
 }
 
 function progress(data) {
@@ -92,7 +95,9 @@ function progress(data) {
 }
 
 function brief(slot, document) {
-  return { slot, profile: { ...document.profile, job: document.progress?.job || document.profile.job },
+  const chosen = document.progress?.avatarStyle;
+  return { slot, profile: { ...document.profile, job: document.progress?.job || document.profile.job,
+    ...(avatarStyles.has(chosen) ? { style: chosen } : {}) },
     level: document.progress?.level || 1, updated: document.updated };
 }
 

@@ -734,3 +734,11 @@ STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"w
                    "thief":"dagger","pirate":"knuckle","cleric":"chimewand"}
 for _starter in STARTER_WEAPONS.values():
     ITEMS[_starter]["level"] = 1
+
+
+def avatar_style(profile, progress=None):
+    """Resolve explicit selections and preserve customized older profiles."""
+    style = (progress or {}).get("avatarStyle", profile.get("style"))
+    if style in ("classic","custom"):
+        return style
+    return "custom" if any(profile[field] for field in ("sex","skin","hair")) else "classic"

@@ -1,7 +1,7 @@
 """Maplee account, character selection, and acknowledged autosaves."""
 import json
 from browser import document, html, window
-from .content import AVATAR_JOBS, CLASSES
+from .content import AVATAR_JOBS, CLASSES, STARTER_WEAPONS, avatar_style
 from .engine import SAVE_KEY
 
 
@@ -42,6 +42,7 @@ class Lobby:
         document["lobby-import"].bind("click", lambda _: self.create(legacy=True))
         document["lobby-back"].bind("click", lambda _: self.show_slots())
         document["lobby-signout"].bind("click", lambda _: self.logout())
+        document["character-style"].bind("change", lambda _: self.update_style())
         for name in ("sex","skin","hair"):
             document["character-"+name].bind("change", lambda _: self.draw_jobs())
         document["auth-submit"].disabled = True
@@ -103,15 +104,15 @@ class Lobby:
             action, self.preview_pending = self.preview_pending, None
             action()
 
-    def portrait(self, canvas, profile):
-        def draw():
-            source = self.app.renderer.custom_avatar(profile, profile["job"], False)
-            ctx = canvas.getContext("2d")
-            ctx.imageSmoothingEnabled = False
-            extent = int(canvas.attrs["width"])
-            ctx.clearRect(0,0,extent,extent)
-            ctx.drawImage(source,5,4,70,72,0,0,extent,extent)
-        draw()
+    def portrait(self, canvas, profile, starter=False):
+        ctx = canvas.getContext("2d")
+        ctx.imageSmoothingEnabled = False
+        size = int(canvas.attrs["width"])
+        ctx.clearRect(0,0,size,size)
+        job = profile["job"]
+        weapon = STARTER_WEAPONS[job] if starter else None
+        self.app.renderer.avatar(ctx,{},weapon,0,size*38/80,size*75/80,size,1,
+                                 job=job,profile=profile,preview=True)
 
     def show_slots(self):
         self.preview_pending = None
@@ -142,13 +143,22 @@ class Lobby:
         self.slot = slot
         self.job = "beginner"
         document["character-name"].value = ""
+        document["character-style"].value = "classic"
+        for field in ("sex","skin","hair"):
+            document["character-"+field].value = "0"
         document["lobby-import"].hidden = not bool(local_read(SAVE_KEY))
         self.view("create")
         self.status(f"슬롯 {slot+1}")
+        self.update_style()
+
+    def update_style(self):
+        custom = document["character-style"].value == "custom"
+        for field in ("sex","skin","hair"):
+            document["appearance-"+field].hidden = not custom
         self.draw_jobs()
 
     def looks(self, job):
-        return dict(job=job, **{field:int(document["character-"+field].value)
+        return dict(job=job, style=document["character-style"].value, **{field:int(document["character-"+field].value)
                                 for field in ("sex","skin","hair")})
 
     def draw_jobs(self):
@@ -165,8 +175,8 @@ class Lobby:
                 card <= html.SMALL(CLASSES[job]["skill"])
                 card.bind("click",lambda _, job=job: self.choose_job(job))
                 holder <= card
-                self.portrait(canvas,choices)
-            self.portrait(document["lobby-preview"],self.looks(self.job))
+                self.portrait(canvas,choices,starter=True)
+            self.portrait(document["lobby-preview"],self.looks(self.job),starter=True)
         self.require_preview(draw)
 
     def choose_job(self, job):
@@ -210,6 +220,7 @@ class Lobby:
                           draft.get("revision") == self.revision-1 and
                           draft.get("inflight") == self.serialize(progress)):
                 progress = draft.get("progress",progress)
+            self.profile["style"] = avatar_style(self.profile,progress)
             self.acknowledged = self.serialize(data.get("progress"))
             self.message = "자동저장 대기 중"
             if imported:

@@ -88,7 +88,10 @@ class App:
         self.clear_input()
 
     def save(self, keepalive=False):
-        return self.active and self.lobby.save_progress(self.game.p,keepalive)
+        if not self.active:
+            return False
+        snapshot = {**self.game.p, "avatarStyle": self.profile["style"]}
+        return self.lobby.save_progress(snapshot,keepalive)
 
     def clear_input(self, _=None):
         self.keys.clear()
@@ -376,7 +379,15 @@ class App:
     def account(self):
         self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
         self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
+        classic = self.profile["style"] == "classic"
+        self.row("캐릭터 외형", "전 버전 외형" if classic else "직접 꾸민 외형",
+                 "꾸민 외형" if classic else "전 버전 외형", self.switch_avatar)
         self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
+
+    def switch_avatar(self):
+        self.profile["style"] = "custom" if self.profile["style"] == "classic" else "classic"
+        self.save()
+        self.render_panel()
 
     def manual_save(self):
         if self.save():

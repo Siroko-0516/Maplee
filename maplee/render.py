@@ -2,7 +2,7 @@
 from math import cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, AVATAR_JOBS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
+from .content import AREAS, AVATAR_JOBS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, avatar_style, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -111,7 +111,7 @@ class Renderer:
             self.avatar_cache = (key,image)
         return image
 
-    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None, rotation=0, thrust=False, profile=None):
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None, rotation=0, thrust=False, profile=None, preview=False):
         """Draw identical anchored artwork in world and equipment coordinates."""
         ctx.save()
         ctx.globalAlpha = opacity
@@ -131,9 +131,9 @@ class Renderer:
                 body_sheet, column, row = "expansion_swing", int(far_hand), 2*len(MELEE_WEAPONS)
             else:
                 frame, column, row = 11, 3, 2
-        if profile:
+        if profile and avatar_style(profile) == "custom":
             column = 28+int(far_hand) if body_sheet=="expansion_swing" else frame
-            image = self.custom_avatar(profile, job or profile["job"], True)
+            image = self.custom_avatar(profile, job or profile["job"], not preview)
             ctx.drawImage(image,column*80,0,80,80,left,top,size,size)
         elif job in JOB_LOOKS:
             # Each job cel extends eight native pixels around the equipment grid.

@@ -41,7 +41,7 @@ test("independent accounts, four slots, and versioned saves",async () => {
   for (let i=0; i<4; i++) assert.equal((await call("/api/slot/"+i,"POST",{profile},first)).status,201);
   assert.equal((await call("/api/slot/4","POST",{profile},first)).status,404);
   assert.equal((await call("/api/slot/1","POST",{profile},first)).status,409);
-  const state = { job:"cleric", level:9, gold:842 };
+  const state = { job:"cleric", level:9, gold:842, avatarStyle:"classic" };
   const race = await Promise.all([1,2].map(() => call("/api/slot/1","PUT",{revision:0,progress:state},first)));
   assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);
   const changed = await call("/api/slot/1","GET",undefined,first);
@@ -56,4 +56,6 @@ test("independent accounts, four slots, and versioned saves",async () => {
   const signedIn = cookie(await call("/api/login","POST",credentials));
   const restored = await call("/api/slot/1","GET",undefined,signedIn);
   assert.deepEqual((await restored.json()).profile,profile);
+  const listed = await call("/api/session","GET",undefined,signedIn);
+  assert.deepEqual((await listed.json()).slots[1].profile,{...profile,style:"classic"});
 });
