@@ -356,11 +356,9 @@ class GameInterface:
         self.skin(2,x,y,w,130)
         middle = x + w//2
         self.atlas("interface",0,64,120,100,middle-60,y+5,120,120)
-        self.ctx.save()
-        self.ctx.translate(middle, y+5)
-        self.ctx.scale(-1, 1)
-        self.pose("hero", idle_pose(self.app.game.tick), -52, 0, 104)
-        self.ctx.restore()
+        equipment = p["equipment"]
+        self.app.renderer.avatar(self.ctx, equipment, equipment.get("weapon"), idle_pose(self.app.game.tick),
+                                 middle, y+102, 104, -1)
         self.box(middle-60,y+106,120,18,"#304965")
         self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+115,WHITE,12,True,"center")
         for i,(slot, label) in enumerate(SLOTS.items()):

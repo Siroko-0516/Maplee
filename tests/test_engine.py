@@ -9,6 +9,7 @@ class WorldTests(unittest.TestCase):
         game = Game(saved)
         game.monsters.clear()
         game.travel(x)
+        game.facing = 1
         return game
 
     def step(self, game, count, *keys):
@@ -104,7 +105,7 @@ class WorldTests(unittest.TestCase):
         game = self.sandbox(2720, saved={"level": 7, "job": "ranger"})
         target = game.spawn(2842, 0, 0)
         self.assertTrue(game.start_attack(True))
-        self.step(game, 18)
+        self.step(game, SWING_WINDUP + 10)
         self.assertIsNotNone(target["dead"])
         self.step(game, 15)
         game.jump()

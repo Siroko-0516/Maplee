@@ -4,6 +4,10 @@ Maplee는 독립 픽셀 액션 RPG입니다. 솔방울 마을, 종꽃 숲길, �
 
 [웹에서 플레이](https://maplee-pixel-world.jisung-20090725.chatgpt.site)
 
+![게임 캐릭터의 대기, 걷기, 검·활·완드 공격](docs/adventurer.gif)
+
+기본 공격은 착용한 무기에 따라 검격, 화살, 마력탄으로 달라집니다. 필드와 장비창에서 같은 캐릭터·장비 도트를 사용합니다. 걷기와 대기, 공격의 기본 재생 간격은 [클래식 캐릭터의 공개 동작 메타데이터](https://maplestory.io/api/wz/GMS/83/Character/00002000.img/walk1/0/delay)를 참고했습니다.
+
 ## 실행
 
 Python 3.10 이상에서 아래 명령을 실행한 뒤 `dist/index.html`을 브라우저에서 엽니다. 빌드가 처음에는 고정 버전의 Brython을 내려받고 체크섬을 확인합니다. 생성된 폴더에는 브라우저에서 Python을 실행하는 런타임과 모든 이미지가 포함됩니다.
@@ -30,5 +34,5 @@ python build.py
 
 - `maplee/engine.py`는 물리, 전투, 몬스터 AI, 진행을 담당합니다.
 - `maplee/render.py`는 필드를, `maplee/windows.py`는 HUD와 게임 창을 별도 캔버스에 그립니다. `maplee/ui.py`에서 입력을 게임 동작에 연결합니다.
-- `tools/draw_hero.py`, `tools/draw_gear.py`, `tools/draw_interface.py`, `tools/draw_wildlife.py`로 딱딱한 픽셀 경계의 원본 스프라이트를 재생성할 수 있습니다. 재생성 스크립트는 Pillow를 사용합니다.
+- `tools/draw_hero.py`를 실행한 뒤 `tools/draw_worn.py`를 실행하면 캐릭터와 장착 장비 시트를 재생성합니다. `tools/draw_townsfolk.py`와 `tools/draw_combat.py`는 마을 NPC와 전투 효과를 그립니다. 도트 생성 스크립트는 Pillow를 사용합니다.
 - `python -m unittest discover -s tests`로 맵, 타격 타이밍, 보스 드롭, 제작, 세이브 호환성을 검사합니다.

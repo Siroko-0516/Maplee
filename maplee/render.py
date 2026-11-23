@@ -1,12 +1,17 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
 from math import sin, pi
 from browser import window
-from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, NPCS, PROPS, QUESTS, SPRITES
-from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_WINDUP, area_at, ground_at, item_icon, limit
+from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ROWS
+from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
+WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
 IDLE = SPRITES["hero"]["animations"]["idle"]
 IDLE_LENGTH = sum(IDLE["durations"])
+# Atlas row, horizontal origin and displayed width of each 72-pixel cel.
+COMBAT_ART = {"slash": (0, 8, 72), "arc": (1, 8, 112), "impact": (2, 36, 72),
+              "arrow": (3, 44, 72), "bolt": (4, 38, 72), "ring": (5, 36, 178),
+              "stars": (6, 36, 215)}
 
 
 def idle_pose(tick):
@@ -93,6 +98,21 @@ class Renderer:
             ctx.filter = tint
         ctx.drawImage(self.images[name], frame % columns * width, frame // columns * height, width, height,
                       -round(anchor[0] * scale), -round(anchor[1] * scale), round(width * scale), round(height * scale))
+        ctx.restore()
+
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1):
+        """Draw identical anchored artwork in world and equipment coordinates."""
+        ctx.save()
+        ctx.globalAlpha = opacity
+        ctx.translate(round(x), round(y))
+        ctx.scale(facing, 1)
+        left, top = -round(38 * size / 80), -round(75 * size / 80)
+        ctx.drawImage(self.images["hero"], frame % 4 * 80, frame // 4 * 80, 80, 80,
+                      left, top, size, size)
+        for item in (equipment.get("armor"), equipment.get("head"), weapon):
+            if item in WORN_ROWS:
+                ctx.drawImage(self.images["worn"], frame * 80, WORN_ROWS[item] * 80, 80, 80,
+                              left, top, size, size)
         ctx.restore()
 
     def icon(self, index, x, y, size):
@@ -196,16 +216,17 @@ class Renderer:
             if not area["start"] <= x < area["end"] or not left - 50 < x < right + 50:
                 continue
             y = ground_at(x)
-            tint = {"shop": "hue-rotate(42deg)", "trainer": "hue-rotate(196deg)", "forge": "hue-rotate(235deg)"}.get(npc["kind"], "none")
-            self.sprite("villager", (game.tick // 13 + int(x)) % 4, x, y, scale=1, tint=tint)
-            self.label(npc["name"] + " · " + npc["role"], x, y - 54)
+            phase = idle_pose(game.tick + int(x))
+            pose = NPC_ROWS[npc["kind"]] * 4 + (0, 1, 3, 2)[phase]
+            self.sprite("villager", pose, x, y)
+            self.label(npc["name"] + " · " + npc["role"], x, y - 76)
             if npc["kind"] in ("quest", "harbor"):
                 index = npc.get("quest", 1 if npc["kind"] == "harbor" else 0)
                 progress = game.p["quests"][index]
                 if not progress["state"] or progress["state"] == 1 and progress["count"] >= QUESTS[index]["target"]:
-                    self.label("◆", x, y - 69, "#ffd981", 13)
+                    self.label("◆", x, y - 91, "#ffd981", 13)
             if game.nearby()[1] == npc:
-                self.label("↑ 대화", x, y - 71, "#d7ffed")
+                self.label("↑ 대화", x, y - 105, "#d7ffed")
 
     def player_pose(self, game):
         tick = game.tick
@@ -213,16 +234,24 @@ class Renderer:
             return 14, game.facing
         if game.swing:
             age = tick - game.swing["start"]
-            frame = (8 if age < SWING_WINDUP else 9 if age < 9 else 10 if age < 15 else 11)
-            return frame, game.swing["dir"]
+            if game.swing["attack"] in ("arrow", "bolt"):
+                # The projectile leaves on the release/cast cel.
+                phase = 0 if age < 7 else 1 if age < SWING_WINDUP else 2 if age < SWING_FOLLOW else 3
+                first = 16 if game.swing["attack"] == "arrow" else 20
+            else:
+                phase = 0 if age < SWING_WINDUP else 1 if age < SWING_FOLLOW else 2 if age < 36 else 3
+                first = 8
+            return first + phase, game.swing["dir"]
         if game.ladder:
-            return WALK[(tick // 5) % len(WALK)], game.facing
+            # Halfway cels interpolate the two 250 ms rung contacts.
+            phase = int((game.ladder[2] - game.p["y"]) / 24) % 4
+            return 24 + phase, 1
         if game.surface is None:
             return (12 if game.vy < -1 else 13), game.facing
         if tick < game.land_until:
             return 15, game.facing
         if game.walk:
-            return WALK[int(game.walk / 18) % len(WALK)], game.facing
+            return WALK[(game.walk * 1000 // (60 * WALK_FRAME_MS)) % len(WALK)], game.facing
         return idle_pose(tick), game.facing
 
     def monster(self, game, m):
@@ -260,23 +289,30 @@ class Renderer:
         elif shape == "pickup":
             eased = 1 - (1 - fraction) ** 2
             self.icon(data[0], x + (data[1] - x) * eased, y + (data[2] - y) * eased - sin(fraction * pi) * 12, 21)
-        elif shape == "arrow":
-            self.rect(x + data * age * 15, y, 12, 2, "#b7ffc4")
-        elif shape in ("impact", "dust"):
+        elif shape in COMBAT_ART:
+            row, origin, size = COMBAT_ART[shape]
+            phase = min(3, age * 4 // duration)
+            if shape in ("arrow", "bolt"):
+                facing = data[0]
+                x += facing * age * 15
+                phase = age % 4
+            else:
+                facing = data
+            ctx = self.ctx
+            ctx.save()
+            ctx.translate(round(x), round(y))
+            ctx.scale(facing, 1)
+            ctx.drawImage(self.images["combat"], phase*72, row*72, 72, 72,
+                          -round(origin*size/72), -size//2, size, size)
+            ctx.restore()
+        elif shape == "dust":
             for i in range(6):
                 side = 1 if i % 2 else -1
                 spread = (i + 1) * (2 + age) * .38
-                self.rect(x + side * spread, y - (age % 14) / 2 - i * 2, 2 + i % 2, 2, "#fff7af" if shape == "impact" else "#d6bd9480")
-        elif shape in ("slash", "arc"):
-            for i in range(15):
-                offset = (i - 7) * 3
-                front = (52 if shape == "slash" else 84) - abs(i - 7) * 4 + age
-                self.rect(x + data * front, y + offset, max(1, 5 - fraction * 4), 3, "#fff4b4" if age < 4 else "#f2ad61a0")
-        elif shape in ("stars", "wave", "ring"):
-            radius = data if shape == "wave" else 105 if shape == "ring" else 155
+                self.rect(x + side * spread, y - (age % 14) / 2 - i * 2, 2 + i % 2, 2, "#d6bd9480")
+        elif shape == "wave":
             for i in range(-4, 5):
-                self.rect(x + i * radius / 4, y + (abs(i) - 4) * age * .45, 7, 4,
-                          "#ffa48e" if shape == "wave" else "#b5e9ff")
+                self.rect(x + i * data / 4, y + (abs(i) - 4) * age * .45, 7, 4, "#ffa48e")
 
     def draw(self, game, paused):
         self.ctx.setTransform(int(self.canvas.attrs["width"]) / WIDTH, 0, 0, int(self.canvas.attrs["height"]) / HEIGHT, 0, 0)
@@ -308,7 +344,9 @@ class Renderer:
                     self.icon(7 if id is None else item_icon(id), drop["x"] + index * 13 - 11, drop["y"] - 10 - height, 18)
         frame, facing = self.player_pose(game)
         opacity = .48 if tick < game.inv_until and tick % 6 < 3 and tick >= game.hurt_until else 1
-        self.sprite("hero", frame, x, y, facing, 1, opacity)
+        equipment = game.p["equipment"]
+        weapon = game.swing["weapon"] if game.swing else equipment.get("weapon")
+        self.avatar(ctx, equipment, weapon, frame, x, y, 80, facing, opacity)
         if tick < game.support_until:
             self.rect(x - 12, y - 2, 24, 2, "#b8f6b980")
         self.label(f"Lv.{game.p['level']} {CLASSES[game.p['job']]['name']}", x, y - 74)

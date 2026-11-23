@@ -602,17 +602,21 @@ ITEM_ICONS = {'twig': 0,
 
 SPRITES = {'hero': {'file': 'hero-adventurer.png',
           'columns': 4,
-          'rows': 4,
+          'rows': 7,
           'frameWidth': 80,
           'frameHeight': 80,
           'anchor': [38, 75],
-          'animations': {'idle': {'frames': [0, 1, 0, 1, 0, 1, 2, 3, 2], 'durations': [500, 500, 500, 500, 500, 500, 50, 66, 50], 'loop': True},
-                         'walk': {'frames': [4, 5, 6, 7], 'durations': [95, 95, 95, 95], 'loop': True},
-                         'attack': {'frames': [8, 9, 10, 11], 'durations': [70, 65, 80, 120], 'loop': False},
+          'animations': {'idle': {'frames': [0, 1, 2, 1, 0, 1, 2, 1, 3, 1],
+                                  'durations': [500, 500, 500, 500, 500, 500, 500, 390, 65, 45], 'loop': True},
+                         'walk': {'frames': [4, 5, 6, 7], 'durations': [180, 180, 180, 180], 'loop': True},
+                         'attack': {'frames': [8, 9, 10, 11], 'durations': [300, 150, 150, 200], 'loop': False},
+                         'bow': {'frames': [16, 17, 18, 19], 'loop': False},
+                         'cast': {'frames': [20, 21, 22, 23], 'loop': False},
+                         'climb': {'frames': [24, 25, 26, 27], 'loop': True},
                          'jumpUp': {'frames': [12], 'durations': [100], 'loop': True},
                          'jumpDown': {'frames': [13], 'durations': [100], 'loop': True},
                          'hurt': {'frames': [14], 'durations': [160], 'loop': False}}},
- 'villager': {'columns': 4, 'rows': 4, 'frameWidth': 80, 'frameHeight': 80, 'anchor': [38, 75]},
+ 'villager': {'columns': 4, 'rows': 6, 'frameWidth': 80, 'frameHeight': 80, 'anchor': [38, 75]},
  'props': [[0, 0, 126, 122],
            [128, 0, 126, 118],
            [256, 0, 126, 117],
@@ -621,4 +625,10 @@ SPRITES = {'hero': {'file': 'hero-adventurer.png',
            [256, 160, 108, 155]],
  'wildlife': {'columns': 6, 'rows': 11, 'frameWidth': 72, 'frameHeight': 72, 'anchor': [36, 66]}}
 
-IMAGES = {'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'hero-crisp.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
+NPC_ROWS = {role: row for row, role in enumerate(("quest", "shop", "trainer", "guide", "harbor", "forge"))}
+WORN_ITEMS = ("twig", "bronze", "blade", "sunblade", "bow", "nightbow", "wand", "tidewand",
+              "coat", "shell", "glasscoat", "crabguard", "cap")
+WORN_ROWS = {item: row for row, item in enumerate(WORN_ITEMS)}
+WEAPON_ATTACKS = {"bow": "arrow", "nightbow": "arrow", "wand": "bolt", "tidewand": "bolt"}
+
+IMAGES = {'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}

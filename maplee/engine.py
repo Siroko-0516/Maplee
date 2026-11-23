@@ -4,13 +4,14 @@ from math import ceil
 from random import random
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS, WORLD_WIDTH,
+    ITEMS, LEDGES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
 SAVE_KEY = "maple-local-world-v1"
 START_X = 310
-SWING_WINDUP, SWING_END = 5, 22
+# GMS v83 one-handed swing and bow beats at 60 simulation steps per second.
+SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
 GROUND_XS = [x for x, _ in GROUND]
 AREA_ENDS = [area["end"] for area in AREAS]
 
@@ -73,7 +74,7 @@ class Game:
         }
         self.tick = 0
         self.vy = 0
-        self.facing = 1
+        self.facing = -1
         self.surface = "ground"
         self.ladder = None
         self.walk = 0
@@ -422,7 +423,15 @@ class Game:
             self.p["mp"] -= job["cost"]
             self.skill_cd = job["cooldown"]
             self.dirty = True
-        self.swing = {"start": self.tick, "dir": self.facing, "skill": skill}
+        weapon = self.p["equipment"]["weapon"]
+        attack = WEAPON_ATTACKS.get(weapon, "slash" if weapon else "punch")
+        shape = job["shape"] if skill else attack
+        reach = job["reach"] if skill else {"arrow": 222, "bolt": 158}.get(attack, 54)
+        power = self.stats()["attack"] + self.support_value("attack")
+        if skill:
+            power = ceil(power * (job["power"] + .25 * (self.p["skillRanks"]["primary"] - 1)))
+        self.swing = {"start": self.tick, "dir": self.facing, "skill": skill, "weapon": weapon,
+                      "attack": attack, "shape": shape, "reach": reach, "power": round(power)}
         self.sound = 380
         return True
 
@@ -440,23 +449,20 @@ class Game:
             return
         skill, facing = self.swing["skill"], self.swing["dir"]
         p = self.p
-        job = self.primary()
-        shape = job["shape"] if skill else "slash"
-        power = self.stats()["attack"] + self.support_value("attack")
-        power = ceil(power * (job["power"] + .25 * (p["skillRanks"]["primary"] - 1))) if skill else round(power)
+        shape, power, radius = self.swing["shape"], self.swing["power"], self.swing["reach"]
         self.sound = 740 if skill else 505
-        if shape == "arrow":
-            self.effects.append(("arrow", self.tick, p["x"] + facing * 15, p["y"] - 22, ceil(job["reach"] / 15), facing))
-            self.arrow_damage = power
+        if shape in ("arrow", "bolt"):
+            self.effects.append((shape, self.tick, p["x"] + facing * 18, p["y"] - 24,
+                                 1 + radius // 15, (facing, power)))
             return
-        radius = job["reach"] if skill else 54
-        self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
+        if shape != "punch":
+            self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
         for monster in self.monsters:
             if monster["dead"] is not None or area_at(monster["x"]) != area_at(p["x"]):
                 continue
             dx, dy = monster["x"] - p["x"], abs(monster["y"] - p["y"])
             if abs(dx) <= radius and dy <= (92 if shape == "stars" else 51 if skill else 31):
-                if shape not in ("slash", "arc") or dx * facing >= -8:
+                if shape not in ("slash", "arc", "punch") or dx * facing >= -8:
                     self.hit(monster, power + (int(random() * 3) if not skill else 0), direction(dx, facing))
 
     def spawn(self, x, kind, index, ledge=None):
@@ -631,19 +637,20 @@ class Game:
             age = self.tick - start
             if age >= duration:
                 continue
-            if shape == "arrow":
-                arrow_x = x + data * 15 * age
+            if shape in ("arrow", "bolt"):
+                facing, power = data
+                arrow_x = x + facing * 15 * age
                 monster = next((m for m in self.monsters if m["dead"] is None
                                 and area_at(m["x"]) == area_at(self.p["x"])
                                 and abs(m["x"] - arrow_x) <= 18 and abs(y - (m["y"] - 18)) <= 22), None)
                 if monster:
-                    impacts.append((monster, data))
+                    impacts.append((monster, power, facing))
                     continue
             live.append(effect)
         self.effects = live
-        for monster, facing in impacts:
+        for monster, power, facing in impacts:
             if monster["dead"] is None:
-                self.hit(monster, self.arrow_damage, facing)
+                self.hit(monster, power, facing)
 
     def move_player(self, dx, dy):
         p = self.p
@@ -681,7 +688,7 @@ class Game:
                     if previous_surface is None:
                         self.land_until = self.tick + 5
                         self.effects.append(("dust", self.tick, p["x"], landing, 12, self.facing))
-        self.walk = self.walk + abs(p["x"] - old_x) if self.surface and dx else 0
+        self.walk = self.walk + 1 if self.surface and p["x"] != old_x else 0
 
     def step(self, keys):
         self.tick += 1
