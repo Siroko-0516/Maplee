@@ -3,6 +3,10 @@ from pathlib import Path
 import argparse
 import ast
 import hashlib
+import base64
+import gzip
+import json
+import mimetypes
 import shutil
 from urllib.request import urlopen
 
@@ -45,6 +49,8 @@ def build(output, cache):
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     page = page.replace('<link rel="stylesheet" href="maplee/ui.css">', '<style>\n' +
                         (ROOT / "maplee/ui.css").read_text(encoding="utf-8") + '\n</style>')
+    page = page.replace('<script src="maplee/palette.js"></script>', '<script>\n' +
+                        (ROOT/"maplee/palette.js").read_text(encoding="utf-8") + '</script>')
     for name, expected in RUNTIME.items():
         shutil.copyfile(runtime(name, expected, cache), vendor / name)
         page = page.replace(CDN + name, "vendor/" + name)
@@ -52,7 +58,7 @@ def build(output, cache):
     if page.count(expect) != 1:
         raise ValueError("Expected one Python entry point")
     modules = "\n\n".join(inline_python(ROOT / "maplee" / (name + ".py"))
-                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "engine", "render", "classic_skin", "windows", "ui"))
+                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
     packed = modules + "\n\ngame_app = App()"
     if "</script" in packed.lower():
         raise ValueError("Unexpected HTML delimiter in Python source")
@@ -64,6 +70,21 @@ def build(output, cache):
     for name in IMAGES.values():
         shutil.copyfile(ROOT / "assets" / name, assets / name)
     (output / "index.html").write_text(page, encoding="utf-8")
+    bundle = {}
+    for source in [output/"index.html", *assets.iterdir(), *vendor.iterdir()]:
+        path = '/' + source.relative_to(output).as_posix()
+        if not source.is_file():
+            continue
+        raw = source.read_bytes()
+        kind = mimetypes.guess_type(source.name)[0] or "application/octet-stream"
+        compressed = kind.startswith("text/") or source.suffix == ".js"
+        blob = gzip.compress(raw,mtime=0) if compressed else raw
+        bundle[path] = (kind,compressed,base64.b64encode(blob).decode("ascii"))
+    worker = output / "server"
+    worker.mkdir(exist_ok=True)
+    main = (ROOT/"server/accounts.mjs").read_text().removeprefix('import { asset } from "./static.mjs";\n')
+    static = (ROOT/"server/static.mjs").read_text()
+    (worker/"index.js").write_text("const ASSETS = " + json.dumps(bundle) + ";\n" + static + "\n" + main)
     return output
 
 

@@ -2,11 +2,13 @@
 import json
 from browser import document, window
 from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS
-from .engine import SAVE_KEY, START_X, STEP, Game, area_at
+from .engine import START_X, STEP, Game, area_at
+from .hunting import HUNT_ZONES
+from .lobby import Lobby
+from .content import STARTER_WEAPONS
 from .render import Renderer, number
 from .windows import GameInterface
 
-SITE = "https://maplee-pixel-world.jisung-20090725.chatgpt.site"
 MENUS = {"character": "능력치", "skills": "스킬", "inventory": "장비·가방", "journal": "퀘스트",
          "map": "지도", "bestiary": "도감", "account": "계정", "hotkeys": "설정"}
 SHORTCUTS = dict(zip(("KeyC", "KeyS", "KeyI", "KeyQ", "KeyM", "KeyB"), tuple(MENUS)[:6]))
@@ -32,11 +34,10 @@ def item_details(id):
 
 class App:
     def __init__(self):
-        try:
-            saved = json.loads(window.localStorage.getItem(SAVE_KEY) or "null")
-        except Exception:
-            saved = None
-        self.game = Game(saved)
+        self.game = Game()
+        self.profile = None
+        self.active = False
+        self.portal_until = 0
         self.panel = None
         self.category = {}
         self.rows = []
@@ -55,15 +56,39 @@ class App:
         self.screen = GameInterface(self, document["interface"], MENUS)
         window.bind("resize", self.resize)
         self.bind()
-        self.toast("방향키 이동 · Space 점프 · Z 공격 · ↑ 대화")
+        self.lobby = Lobby(self)
         window.requestAnimationFrame(self.frame)
 
-    def save(self):
-        try:
-            window.localStorage.setItem(SAVE_KEY, json.dumps(self.game.p, ensure_ascii=False))
-            return True
-        except Exception:
-            return False
+    def start_character(self, profile, progress):
+        self.game = Game(progress)
+        self.profile = profile
+        if progress is None:
+            job = profile["job"]
+            weapon = STARTER_WEAPONS[job]
+            self.game.p["job"] = job
+            self.game.p["bag"] = {weapon:1}
+            self.game.p["equipment"]["weapon"] = weapon
+            self.game.changed()
+            stats = self.game.stats()
+            self.game.p.update(hp=stats["hp"],mp=stats["mp"])
+        self.active = True
+        self.clear_input()
+        self.close_panel()
+        self.paused = False
+        self.previous = None
+        self.accumulator = 0
+        self.screen.canvas.focus()
+        self.toast("방향키 이동 · Space 점프 · Z 공격 · ↑ 포털·대화")
+        self.save()
+
+    def leave_character(self):
+        self.active = False
+        self.profile = None
+        self.close_panel()
+        self.clear_input()
+
+    def save(self, keepalive=False):
+        return self.active and self.lobby.save_progress(self.game.p,keepalive)
 
     def clear_input(self, _=None):
         self.keys.clear()
@@ -75,7 +100,7 @@ class App:
         window.bind("keydown", self.key_down)
         window.bind("keyup", lambda event: self.keys.discard(event.code))
         window.bind("blur", self.clear_input)
-        window.bind("pagehide", lambda _: self.save())
+        window.bind("pagehide", lambda _: self.save(True))
         document.bind("visibilitychange", self.visibility_changed)
 
     def resize(self, _=None):
@@ -85,11 +110,11 @@ class App:
     def visibility_changed(self, _):
         if document.hidden:
             self.clear_input()
-            self.save()
+            self.save(True)
         self.previous = None
 
     def key_down(self, event):
-        if event.metaKey or event.ctrlKey or event.altKey:
+        if not self.active or event.metaKey or event.ctrlKey or event.altKey:
             return
         target = event.target
         if getattr(target, "tagName", "") in ("INPUT", "SELECT", "TEXTAREA"):
@@ -110,6 +135,8 @@ class App:
             self.action(code)
 
     def action(self, code):
+        if not self.active:
+            return
         if code in SHORTCUTS:
             self.show_panel(SHORTCUTS[code])
             return
@@ -131,14 +158,17 @@ class App:
             if kind == "portal":
                 game.travel(target[1])
                 self.clear_input()
-                self.toast(AREAS[target[2]]["name"])
+                area, hunt = AREAS[target[2]], HUNT_ZONES[target[2]]
+                self.portal_until = number(window.performance.now())+320
+                low, high = hunt["levels"]
+                self.toast(f"{area['name']} · {hunt['label']} · Lv. {low}–{high}")
                 self.save()
             elif kind == "npc":
                 self.show_panel(target["kind"], target)
         elif code == "KeyR":
             self.home()
         elif code == "KeyK":
-            self.toast("모험을 저장했어요." if self.save() else "저장 공간을 사용할 수 없어요.")
+            self.manual_save()
 
     def home(self):
         self.game.travel(START_X)
@@ -312,7 +342,7 @@ class App:
         self.render_panel()
 
     def map_panel(self):
-        self.note("한 길로 이어진 7개 지역 · 방향키로 이동")
+        self.note("지역 끝 포털에서 ↑로 다음 지역에 이동해요.")
         self.rows.append(("route",))
 
     def bestiary(self):
@@ -344,16 +374,13 @@ class App:
         self.render_panel()
 
     def account(self):
-        hosted = window.location.origin == SITE
-        self.note("진행 기록은 이 브라우저에 저장돼요.")
-        self.row("ChatGPT 계정", "웹 버전 계정 인증", "로그아웃" if hosted else "로그인",
-                 lambda: self.visit_account(hosted))
-        self.row("진행 기록", f"Lv. {self.game.p['level']} · {AREAS[area_at(self.game.p['x'])]['name']}", "저장",
-                 lambda: self.toast("모험을 저장했어요." if self.save() else "저장 공간을 사용할 수 없어요."))
+        self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
+        self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
+        self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
 
-    def visit_account(self, hosted):
-        self.save()
-        window.open("/signout-with-chatgpt" if hosted else SITE, "_top")
+    def manual_save(self):
+        if self.save():
+            self.toast(self.lobby.message)
 
     def shop(self, npc):
         game, p = self.game, self.game.p
@@ -455,16 +482,21 @@ class App:
         if self.previous is not None:
             self.accumulator += min(68, now - self.previous)
         self.previous = now
+        self.lobby.flush_preview()
+        if not self.active:
+            self.accumulator = 0
+            window.requestAnimationFrame(self.frame)
+            return
         game = self.game
         while self.accumulator >= STEP:
             if self.renderer.ready and not self.paused:
                 game.step(self.keys | set(self.pointers.values()))
-                if game.tick % 600 == 0:
+                if game.tick % 300 == 0:
                     self.save()
             self.accumulator -= STEP
         if game.dirty:
             self.hud()
         self.messages()
-        self.renderer.draw(game, self.paused)
+        self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320))
         self.screen.draw(now)
         window.requestAnimationFrame(self.frame)

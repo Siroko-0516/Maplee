@@ -2,9 +2,10 @@
 from bisect import bisect_right
 from math import ceil, sin
 from random import random
+from .hunting import HUNT_ZONES, next_hunting_wave
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
+    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
@@ -115,6 +116,8 @@ class Game:
                 p[key] = int(value)
         p["level"] = limit(p["level"], 1, 200)
         p["x"] = limit(p["x"], 24, WORLD_WIDTH - 24)
+        area = AREAS[area_at(p["x"])]
+        p["x"] = limit(p["x"], area["start"]+24, area["end"]-24)
         p["y"] = ground_at(p["x"])
         if saved.get("job") in CLASSES:
             p["job"] = saved["job"]
@@ -283,10 +286,7 @@ class Game:
         p = self.p
         if p["level"] < 5 or p["job"] == job or job not in SUPPORTS:
             return False
-        starter = {
-            "guardian": "blade", "ranger": "bow", "mage": "wand",
-            "thief": "dagger", "pirate": "knuckle", "cleric": "chimewand",
-        }[job]
+        starter = STARTER_WEAPONS[job]
         p["job"] = job
         if starter not in p["bag"]:
             self.add_item(starter)
@@ -379,7 +379,8 @@ class Game:
         return f"{quest['who']}에게 보고" if count >= quest["target"] else f"{quest['name']} {count}/{quest['target']}"
 
     def camera_target(self):
-        return limit(self.p["x"] - WIDTH / 2, 0, WORLD_WIDTH - WIDTH)
+        area = AREAS[area_at(self.p["x"])]
+        return limit(self.p["x"] - WIDTH/2, area["start"], area["end"]-WIDTH)
 
     def travel(self, x):
         if area_at(x) != area_at(self.p["x"]):
@@ -515,7 +516,7 @@ class Game:
             if target is not None and target["dead"] is None and overlaps(box, monster_bounds(target,self.tick)):
                 self.hit(target, power, facing, "stab_hit")
             return
-        targets = [m for m in self.monsters if m["dead"] is None
+        targets = [m for m in self.monsters if m["dead"] is None and area_at(m["home"]) == area_at(p["x"])
                    and (shape != "heal" or m["spec"].get("undead"))
                    and id(m) not in self.swing["struck"] and overlaps(box, monster_bounds(m,self.tick))]
         if skill:
@@ -542,33 +543,15 @@ class Game:
         return monster
 
     def populate(self):
-        def kind(x, i):
-            if x < 3780:
-                return 0
-            if x < 6100:
-                return 1
-            if x < 9100:
-                return 2
-            if x < 12000:
-                return 3 if i % 2 else 5
-            if x < 13040:
-                return 5 if i % 2 else 6
-            if x < 14900:
-                return 6 if i % 3 else 7
-            if x >= 21400:
-                return 12
-            if x >= 18300:
-                return 11
-            return 8 if i % 2 else 9
-        for i, x in enumerate(range(2580, WORLD_WIDTH-130, 213)):
-            if not (9290 <= x <= 10810 or 11520 < x < 12500 or 14900 < x < 15500):
-                self.spawn(x, kind(x, i), i)
-        for i, ledge in enumerate(LEDGES):
-            x = ledge["x"]
-            if x >= 2450 and i % 3 and not 9100 <= x <= 10900:
-                self.spawn(x + int(.6 * ledge["w"]), kind(x, i), i, ledge)
-        self.spawn(11780, 4, 1)
-        self.spawn(18120, 10, 1)
+        ledges = {ledge["x"]: ledge for ledge in LEDGES}
+        for zone in HUNT_ZONES:
+            for spot in zone["spots"]:
+                for x, kind in spot["ground"]:
+                    self.spawn(x, kind, len(self.monsters))
+                for left, kind in spot["ledges"]:
+                    ledge = ledges[left]
+                    x = left + ledge["w"] // 2
+                    self.spawn(x, kind, len(self.monsters), ledge)
 
     def hit(self, monster, power, facing, impact="impact"):
         spec = monster["spec"]
@@ -591,6 +574,8 @@ class Game:
     def reward(self, monster):
         spec = monster["spec"]
         monster["dead"] = self.tick
+        zone = HUNT_ZONES[area_at(monster["home"])]
+        monster["revive_at"] = next_hunting_wave(zone, self.tick, spec.get("elite", False))
         monster["windup"] = 0
         p = self.p
         p["kills"] += 1
@@ -639,11 +624,11 @@ class Game:
     def monster_step(self, monster):
         tick, p, spec = self.tick, self.p, monster["spec"]
         if monster["dead"] is not None:
-            if tick - monster["dead"] >= (900 if spec.get("elite") else 340):
+            if tick >= monster["revive_at"]:
                 monster.update(dead=None, hp=spec["hp"], state="patrol", next=tick + 40)
                 self.move_monster(monster, monster["home"], 500)
             return
-        if abs(monster["home"]-p["x"]) > WIDTH or self.support_value("stealth"):
+        if area_at(monster["home"]) != area_at(p["x"]) or abs(monster["home"]-p["x"]) > WIDTH or self.support_value("stealth"):
             if monster["state"] != "patrol" or monster["windup"]:
                 monster.update(state="patrol", windup=0)
                 self.move_monster(monster, monster["home"], 500)
@@ -723,7 +708,7 @@ class Game:
                 path = (min(previous, arrow_x)-3, y-4, max(previous, arrow_x)+3, y+4)
                 targets = []
                 for m in self.monsters:
-                    if m["dead"] is None:
+                    if m["dead"] is None and area_at(m["home"]) == area_at(x):
                         bounds = monster_bounds(m, self.tick)
                         if overlaps(path, bounds):
                             entry = bounds[0] if facing > 0 else -bounds[2]
@@ -761,7 +746,9 @@ class Game:
             return
         old_x, old_y, previous_surface = p["x"], p["y"], self.surface
         speed = self.stats()["speed"] + self.support_value("speed")
-        p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1), 24, WORLD_WIDTH - 24)
+        area = AREAS[area_at(old_x)]
+        p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1),
+                       area["start"]+24, area["end"]-24)
         floor = ground_at(p["x"])
         if self.surface == "ground":
             p["y"] = floor

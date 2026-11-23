@@ -7,3 +7,74 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 #toast { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
 #toast.failure { clip-path: none; inset: 45% 8% auto; width: auto; height: auto; padding: 12px; background: #182a37; color: white; text-align: center; font: 16px sans-serif; }
 @media (max-width: 740px) { #game-canvas { height: calc(100% - 108px); } }
+
+#lobby[hidden], #lobby [hidden] { display: none !important; }
+#lobby {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  overflow-y: auto;
+  padding: clamp(14px, 5vh, 52px) clamp(12px, 4vw, 44px);
+  background: linear-gradient(120deg, #102837e8, #14384f92 58%, #182844e8),
+              url("assets/ember-grove.png") center/cover fixed;
+  color: #f5efdf;
+  font-size: 16px;
+}
+.lobby-shell {
+  max-width: 900px;
+  min-height: 440px;
+  margin: 0 auto;
+  border: 1px solid #98bcc5;
+  box-shadow: 0 0 0 4px #172631aa, 0 18px 70px #0f1525bf;
+  background: #152c3ce8;
+  border-radius: 14px;
+  padding: clamp(17px, 3vw, 34px);
+}
+.lobby-header, .lobby-heading, .lobby-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lobby-header { border-bottom: 1px solid #a9ced144; padding-bottom: 12px; }
+.lobby-brand { font-weight: 900; font-size: 1.6rem; color: #ffcf7a; letter-spacing: .04em; }
+#lobby h1 { font-size: clamp(1.5rem, 3vw, 2.4rem); margin: .85em 0 .55em; line-height: 1.25; }
+#lobby h2 { font-size: 1.25rem; margin: 0 0 10px; }
+#lobby-auth { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; align-items: center; }
+.lobby-hero { min-height: 280px; display: grid; align-content: center; }
+.lobby-subtitle { color: #ffdb8f; margin-bottom: 0; }
+.lobby-form { display: grid; gap: 8px; padding: 20px; background: #101f30; border: 1px solid #426678; border-radius: 10px; margin-top: 18px; }
+#lobby label { color: #dae8e6; font-size: .9rem; font-weight: 700; }
+#lobby input, #lobby select, #lobby button {
+  color: inherit;
+  font: inherit;
+  border: 1px solid #7897a4;
+  border-radius: 6px;
+  background: #253d4e;
+  min-height: 40px;
+  padding: 7px 10px;
+}
+#lobby input, #lobby select { width: 100%; }
+#lobby button { cursor: pointer; }
+#lobby button:hover, #lobby button[aria-pressed="true"] { border-color: #ffc875; background: #3d5a62; }
+#lobby button.primary { color: #2e261b; background: #ffcc79; border-color: #ffdf9d; font-weight: 800; }
+#lobby button.plain { background: transparent; border-color: transparent; }
+#lobby button:disabled { opacity: .58; cursor: wait; }
+#lobby :focus-visible { outline: 2px solid #ffcc79; outline-offset: 3px; }
+.lobby-slots, .lobby-jobs { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#lobby .lobby-card { display: grid; gap: 4px; place-items: center; text-align: center; padding: 8px; }
+.lobby-card canvas, #lobby-preview { position: static; touch-action: auto; image-rendering: pixelated; background: #101f30c9; border-radius: 8px; }
+.lobby-card canvas { width: 100%; max-width: 80px; height: auto; aspect-ratio: 1; }
+.lobby-card small { color: #c3d5d6; font-size: .78rem; }
+.lobby-options { display: grid; grid-template-columns: 112px repeat(2,minmax(0,1fr)); gap: 9px 13px; margin: 16px 0; align-items: end; }
+#lobby-preview { grid-row: span 2; }
+.lobby-options label { display: grid; gap: 4px; }
+#lobby-status { color: #ffdfac; min-height: 24px; margin: 16px 0 0; }
+@media (max-width: 620px) {
+  #lobby-auth { display: block; }
+  .lobby-hero { min-height: unset; }
+  .lobby-slots, .lobby-jobs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .lobby-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #lobby-preview { grid-row: auto; grid-column: span 2; justify-self: center; }
+}

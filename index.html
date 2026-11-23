@@ -11,9 +11,52 @@
   <canvas id="game-canvas" width="960" height="468" aria-label="Maplee 필드"></canvas>
   <canvas id="interface" width="960" height="540" tabindex="0" aria-label="Maplee 게임. 방향키 이동, Space 점프, Z 공격, ↑ 대화. C 능력치, I 장비, Tab 조작 선택, Enter 실행, Esc 창 닫기."></canvas>
   <output id="toast" role="status" aria-live="polite">게임을 불러오는 중이에요.</output>
+  <section id="lobby" aria-label="Maplee 시작 화면">
+    <div class="lobby-shell">
+      <header class="lobby-header">
+        <span class="lobby-brand">Maplee</span>
+        <button id="lobby-signout" type="button" hidden>로그아웃</button>
+      </header>
+      <div id="lobby-auth">
+        <div class="lobby-hero">
+          <p class="lobby-subtitle">솔방울 마을에서 시작하는 모험</p>
+          <h1>나만의 모험을 시작하세요</h1>
+        </div>
+        <form id="lobby-credentials" class="lobby-form">
+          <h2 id="auth-title">Maplee 로그인</h2>
+          <label for="lobby-id">아이디</label>
+          <input id="lobby-id" name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" placeholder="영문·숫자·밑줄">
+          <label for="lobby-password">비밀번호</label>
+          <input id="lobby-password" name="password" type="password" autocomplete="current-password" required minlength="10" maxlength="128" placeholder="10자 이상">
+          <button id="auth-submit" class="primary" type="submit" disabled>로그인</button>
+          <button id="auth-mode" class="plain" type="button">회원가입</button>
+        </form>
+      </div>
+      <section id="lobby-select" hidden>
+        <h1>캐릭터 선택</h1>
+        <div id="lobby-slots" class="lobby-slots"></div>
+      </section>
+      <section id="lobby-create" hidden>
+        <div class="lobby-heading"><h1>캐릭터 만들기</h1><button id="lobby-back" type="button">캐릭터 목록</button></div>
+        <form id="lobby-character">
+          <div id="lobby-jobs" class="lobby-jobs" aria-label="직업 선택"></div>
+          <div class="lobby-options">
+            <canvas id="lobby-preview" width="112" height="112" aria-label="선택한 캐릭터"></canvas>
+            <label>이름<input id="character-name" required minlength="2" maxlength="14" autocomplete="off"></label>
+            <label>성별<select id="character-sex"><option value="0">남자</option><option value="1">여자</option></select></label>
+            <label>피부색<select id="character-skin"><option value="0">밝은 복숭아</option><option value="1">베이지</option><option value="2">올리브</option><option value="3">구릿빛</option><option value="4">짙은 갈색</option></select></label>
+            <label>머리색<select id="character-hair"><option value="0">검정</option><option value="1">밤색</option><option value="2">밀빛</option><option value="3">구리색</option><option value="4">은색</option><option value="5">보라색</option><option value="6">청록색</option></select></label>
+          </div>
+          <div class="lobby-actions"><button class="primary" id="character-submit" type="submit">캐릭터 만들기</button><button id="lobby-import" type="button" hidden>이 브라우저의 예전 캐릭터 가져오기</button></div>
+        </form>
+      </section>
+      <p id="lobby-status" role="status" aria-live="polite"></p>
+    </div>
+  </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
+<script src="maplee/palette.js"></script>
 <script type="text/python">
 from maplee.ui import App
 game_app = App()

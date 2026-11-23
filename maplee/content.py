@@ -727,3 +727,10 @@ IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
 
 IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
 IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png")
+
+AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
+IMAGES["custom_avatar"] = "maplee-avatars.png"
+STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",
+                   "thief":"dagger","pirate":"knuckle","cleric":"chimewand"}
+for _starter in STARTER_WEAPONS.values():
+    ITEMS[_starter]["level"] = 1

@@ -2,6 +2,7 @@
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
 from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SUPPORTS, monster_art
+from .hunting import HUNT_ZONES
 from .engine import PORTALS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
@@ -403,7 +404,7 @@ class GameInterface:
         self.atlas("interface",0,64,120,100,middle-60,y+6,120,113)
         equipment=p["equipment"]
         self.app.renderer.avatar(self.ctx,equipment,equipment.get("weapon"),idle_pose(self.app.game.tick),
-                                 middle,y+114,115,-1)
+                                 middle,y+114,115,-1,job=p["job"],profile=self.app.profile)
         self.box(middle-60,y+119,120,19,"#374e68")
         self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+128,WHITE,12,True,"center")
         for i,(slot,label) in enumerate(SLOTS.items()):
@@ -464,9 +465,10 @@ class GameInterface:
                     self.box(x+80,y+3,2,42,"#839a99")
                     self.box(x+77,y+19,8,8, "#a8ce33" if i==current else "#68899d")
                     self.text(area["name"],x+94,y+15,INK,14,True)
-                    self.text("현재 위치" if i==current else "← 왼쪽으로 이동" if i<current else "오른쪽으로 이동 →", x+94,y+32,"#567342",12)
-                    if area.get("landmark"):
-                        self.text(area["landmark"],x+94,y+45,"#3a5364",10)
+                    low, high = HUNT_ZONES[i]["levels"]
+                    desc = f"현재 위치 · Lv. {low}–{high}" if i==current else f"포털 이동 · Lv. {low}–{high}"
+                    self.text(desc,x+94,y+32,"#567342",12)
+                    self.text(HUNT_ZONES[i]["label"],x+94,y+45,"#3a5364",10)
                     y += 53
             elif kind == "items":
                 y = self.item_grid(x,y,w,entry[1],entry[2])

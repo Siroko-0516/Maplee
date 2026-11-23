@@ -26,25 +26,27 @@ class WorldTests(unittest.TestCase):
             previous = game.p["y"]
         game.travel(2400)
         self.step(game, 90, "ArrowRight")
-        self.assertEqual(area_at(game.p["x"]), 1)
-        self.assertGreater(game.camera, AREAS[0]["end"] - 960)
+        self.assertEqual(area_at(game.p["x"]), 0)
+        self.assertEqual(game.camera, AREAS[0]["end"] - 960)
         game.travel(PORTALS[0][0])
         kind, portal = game.nearby()
         self.assertEqual(kind, "portal")
         game.travel(portal[1])
         self.assertEqual(area_at(game.p["x"]), 1)
 
-    def test_every_region_border_can_be_crossed_in_both_directions(self):
-        for area in AREAS[:-1]:
-            border = area["end"]
-            for offset, key in ((-10, "ArrowRight"), (10, "ArrowLeft")):
-                game = self.sandbox(border+offset)
-                self.step(game, 10, key)
-                self.assertNotEqual(area_at(border+offset), area_at(game.p["x"]))
-                self.assertEqual(game.p["y"], ground_at(game.p["x"]))
-        game = self.sandbox(WORLD_WIDTH-25)
-        self.step(game, 10, "ArrowRight")
-        self.assertEqual(game.p["x"], WORLD_WIDTH-24)
+    def test_each_region_border_requires_portal_in_both_directions(self):
+        for x, destination, index in PORTALS:
+            game = self.sandbox(x)
+            origin = area_at(x)
+            direction = "ArrowRight" if index>origin else "ArrowLeft"
+            self.step(game, 40, direction)
+            self.assertEqual(area_at(game.p["x"]),origin)
+            game.travel(x)
+            self.assertEqual(game.nearby(),("portal",(x,destination,index)))
+            game.travel(destination)
+            self.assertEqual(area_at(game.p["x"]),index)
+            self.assertEqual(game.p["y"],ground_at(game.p["x"]))
+        self.assertEqual(len(PORTALS),2*(len(AREAS)-1))
 
     def test_reclass_from_existing_save_retains_items_and_health(self):
         game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,
