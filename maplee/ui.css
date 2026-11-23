@@ -174,3 +174,161 @@ button[aria-pressed="true"] { color: #ffe6af; background: #576044; }
 @media (prefers-reduced-motion: reduce) { .loot-line { animation: none; } }
 @media (pointer: coarse) { .loot-feed { bottom: 62px; } }
 .account-link { display: inline-block; padding: 8px 12px; color: #ffe9ad; text-decoration: none; }
+
+/* Native dialog keeps touch and keyboard focus out of the game while a menu is open. */
+#game-modal {
+  position: fixed;
+  width: min(580px, calc(100vw - 20px));
+  max-width: none;
+  max-height: min(82dvh, 710px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  overflow: visible;
+}
+#game-modal::backdrop { background: #0b1b2a82; }
+#game-modal .panel {
+  position: relative;
+  top: auto; left: auto;
+  width: 100%;
+  max-height: min(82dvh, 710px);
+  transform: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 12px;
+}
+.panel-heading {
+  position: sticky; top: -12px; z-index: 2;
+  padding: 8px 1px;
+  background: #142b35;
+}
+.panel-row .row-icon {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #283e4e;
+  outline: 1px solid #8c8c85;
+  background-color: #3b4d58;
+}
+.equipment-grid > div {
+  min-width: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 2px #1a2834;
+}
+.equipment-grid b { overflow-wrap: anywhere; }
+.equip-icon { width: 48px; height: 48px; }
+.pixel-icon { background-size: 800% 400%; }
+.game-menu button, .panel button, .mobile button { touch-action: manipulation; }
+.mobile [data-key] { touch-action: none; user-select: none; }
+.scene > canvas { display: block; object-fit: contain; }
+@media (max-width: 600px) and (orientation: portrait) {
+  .game { grid-template-rows: minmax(0,1fr) auto; }
+  .overlay-top { flex-wrap: wrap; align-items: flex-start; }
+  .overlay-top .quest-card { max-width: 48%; }
+  .minimap-title b { font-size: 11px; }
+  .quest-card strong { overflow-wrap: anywhere; }
+  .mobile { bottom: 10px; gap: 4px; }
+  .mobile > div { display: flex; }
+  .mobile button { min-height: 44px; padding-inline: 5px; }
+  .dock { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  #game-modal .panel { padding: 9px; max-height: 76dvh; }
+  .panel-heading { top: -9px; }
+  .panel-row { gap: 7px; }
+  .panel-row .row-icon { width: 32px; height: 32px; }
+}
+@media (max-height: 440px) and (orientation: landscape) {
+  .dock { gap: 4px 7px; padding-top: 4px; }
+  .mobile { bottom: 3px; }
+  .mobile button { min-height: 34px; }
+  .quickslot { width: 38px; height: 37px; }
+  .overlay-top .minimap-card { width: 160px; }
+}
+
+/* Live side windows leave the battlefield and touch controls active. */
+#game-modal {
+  position: fixed;
+  inset: 54px 14px auto auto;
+  width: min(420px, calc(100vw - 20px));
+  max-height: min(75dvh, 620px);
+  margin: 0;
+}
+#game-modal .panel {
+  max-height: min(75dvh, 620px);
+  color: #24384a;
+  background: #e5e9ed;
+  background-clip: padding-box;
+  border-image: var(--frame-art) 7 / 8px stretch;
+}
+#game-modal .panel h2 { color: #f9ebb6; font-size: 17px; }
+#game-modal .panel-heading {
+  padding: 6px 8px;
+  top: -12px;
+  background: #314858;
+  border-bottom: 2px solid #8c7251;
+}
+#game-modal .panel p, #game-modal .panel-row small { color: #4b6274; }
+#game-modal .panel-row { border-bottom-color: #bac7d1; }
+#game-modal [data-rarity="uncommon"] { color: #2f6a49; }
+#game-modal [data-rarity="rare"] { color: #124e90; }
+#game-modal [data-rarity="epic"] { color: #693093; }
+#game-modal .panel button, .account-link { color: #f3ebd3; }
+.stat-sheet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 9px 0;
+}
+.stat-field {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  border: 1px solid #9fb2c1;
+  background: #fcfdff;
+  color: #253b4a;
+  font-size: 12px;
+}
+.stat-field b { padding: 5px 6px; min-width: 46px; color: #19433f; background: #abddcc; }
+.stat-field span { padding: 5px 6px; flex: 1; text-align: right; overflow-wrap: anywhere; }
+.points-summary { display: flex; justify-content: space-between; border: 1px solid #b89962; background: #fff1d0; color: #5a4630; padding: 6px 9px; margin-top: 7px; }
+.paper-doll {
+  display: grid;
+  grid-template-columns: minmax(75px,1fr) 1.65fr minmax(75px,1fr);
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas: "weapon portrait armor" "charm portrait armor";
+  gap: 5px; margin: 8px 0;
+}
+.doll-slot { background: #d4e3e9; border: 1px solid #879eab; padding: 4px 5px; min-width: 0; }
+.doll-slot small { display: block; color: #4a6576; }
+.doll-slot b { display: block; color: #22394f; font-size: 11px; overflow-wrap: anywhere; }
+.doll-weapon { grid-area: weapon; }
+.doll-armor { grid-area: armor; }
+.doll-charm { grid-area: charm; }
+.equipment-portrait {
+  grid-area: portrait;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  color: #fff1c4;
+  border: 2px solid #56778b;
+  background: linear-gradient(#2b4b68 0 50%,#345b6e 50% 67%,#487879 67% 80%,#36586e 80%);
+  padding: 6px; font-size: 11px; text-align: center;
+}
+.portrait-sprite {
+  width: clamp(64px, 18vw, 125px);
+  height: clamp(64px, 18vw, 125px);
+  background-image: var(--hero-art);
+  background-size: 400% 400%;
+  image-rendering: pixelated;
+}
+#game-modal .panel .close-panel { flex-shrink: 0; min-height: 30px; }
+@media (max-width: 600px) {
+  #game-modal {
+    width: min(390px, calc(100vw - 14px));
+    inset: 57px 7px auto auto;
+    max-height: 56dvh;
+  }
+  #game-modal .panel { max-height: 56dvh; }
+  #game-modal .panel-heading { top: -9px; }
+  .stat-field { font-size: 11px; }
+}

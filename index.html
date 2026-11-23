@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Maplee</title>
-<link rel="stylesheet" href="src/ui.css">
+<link rel="stylesheet" href="maplee/ui.css">
 </head>
 <body>
 <main class="game">
   <div class="scene">
-    <canvas aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, V 보조 스킬, 위 방향키 대화와 출구"></canvas>
+    <canvas id="game-canvas" width="960" height="468" aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, V 보조 스킬, 위 방향키 대화와 출구"></canvas>
     <div class="overlay-top">
       <button id="minimap-button" type="button" class="minimap-card">
         <span class="minimap-title"><b id="region">솔방울 마을</b><kbd>M</kbd></span>
@@ -59,12 +59,22 @@
       <span>EXP</span><div class="exp-track"><div class="fill" id="xpbar"></div><span id="xp"></span></div><span id="xp-percent"></span>
     </div>
   </footer>
-  <section class="panel" id="panel" aria-label="게임 메뉴" hidden></section>
+  <dialog id="game-modal" aria-labelledby="panel-title"><section class="panel" id="panel"></section></dialog>
 </main>
-<script src="src/asset-data.js"></script>
-<script src="src/content.js"></script>
-<script src="src/world.js"></script>
-<script src="src/game-ui.js"></script>
-<script src="src/pixel-render.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
+<script type="text/python">
+from maplee.ui import App
+game_app = App()
+</script>
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+  if (typeof brython === "function") {
+    brython({debug: 1});
+  } else {
+    document.getElementById("toast").textContent = "Python 실행기를 불러오지 못했어요. 새로고침해 주세요.";
+  }
+});
+</script>
 </body>
 </html>
