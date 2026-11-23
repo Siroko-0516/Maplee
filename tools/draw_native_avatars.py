@@ -151,7 +151,7 @@ def attach(im,layer,xy):
     im.paste(layer,xy,Image.frombytes("L",layer.size,layer.tobytes()).point(lambda p:255 if p else 0))
 
 
-def actor(job,fem,cel):
+def actor(job,fem,cel,head_factory=None):
     pose=8 if cel>=28 else cel
     back=24<=pose<=27
     im=new(); d=ImageDraw.Draw(im)
@@ -199,7 +199,7 @@ def actor(job,fem,cel):
     if job in (2,4,5):line([(nx+4,ny+3),(x-4,y-3)],19,2)
     if job in (3,6):poly([(nx-5,ny+1),(nx+3,ny+2),(nx+1,ny+7),(nx-3,ny+5)],12,cloth)
     if cel!=28:arm(0,near)
-    h=head(job,fem,pose==3,pose==14,back)
+    h = head_factory(pose,back) if head_factory else head(job,fem,pose==3,pose==14,back)
     attach(im,h,(nx-22,ny-36))
     return im
 

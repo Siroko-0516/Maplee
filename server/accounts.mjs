@@ -4,7 +4,7 @@ const encoder = new TextEncoder();
 const COOKIE = "maplee_session";
 const SESSION_SECONDS = 14 * 86400;
 const MAX_SAVE_BYTES = 48_000;
-const avatarStyles = new Set(["classic","custom"]);
+const avatarStyles = new Set(["classic","custom","frost"]);
 const JOBS = new Set(["beginner", "guardian", "ranger", "mage", "thief", "pirate", "cleric"]);
 const reply = (body, status = 200, extra = {}) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store", ...extra } });

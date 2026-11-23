@@ -21,12 +21,13 @@ EXPANSION_EQUIPMENT = (
     ("baseball","단풍 바람막이","armor",3,105,3,None),
     ("chimewand","새벽종 완드","weapon",5,245,9,"cleric"),
     ("dawnwand","햇무리 완드","weapon",12,980,26,"cleric"),
+    ("frostspear","서리등 창","weapon",1,65,5,None),
 )
 
 WORN_ITEMS = ("twig", "bronze", "blade", "sunblade", "bow", "nightbow", "wand", "tidewand",
               "coat", "shell", "glasscoat", "crabguard", "cap")
 WORN_ITEMS += tuple(entry[0] for entry in EXPANSION_EQUIPMENT)
-MELEE_WEAPONS = WORN_ITEMS[:4] + ("dagger","shadowdagger","knuckle","stormknuckle")
+MELEE_WEAPONS = WORN_ITEMS[:4] + ("dagger","shadowdagger","knuckle","stormknuckle","frostspear")
 WORN_ROWS = {item: row for row, item in enumerate(WORN_ITEMS)}
 WORN_ROWS.update({item: len(WORN_ITEMS) + len(MELEE_WEAPONS) + row for row, item in enumerate(("dew","prism","shimmer","moonseal"))})
 

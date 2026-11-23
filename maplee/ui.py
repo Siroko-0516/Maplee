@@ -5,7 +5,7 @@ from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLO
 from .engine import START_X, STEP, Game, area_at
 from .hunting import HUNT_ZONES
 from .lobby import Lobby
-from .content import STARTER_WEAPONS
+from .content import AVATAR_STYLES, character_starter
 from .render import Renderer, number
 from .windows import GameInterface
 
@@ -64,7 +64,7 @@ class App:
         self.profile = profile
         if progress is None:
             job = profile["job"]
-            weapon = STARTER_WEAPONS[job]
+            weapon = character_starter(profile)
             self.game.p["job"] = job
             self.game.p["bag"] = {weapon:1}
             self.game.p["equipment"]["weapon"] = weapon
@@ -379,13 +379,13 @@ class App:
     def account(self):
         self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
         self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
-        classic = self.profile["style"] == "classic"
-        self.row("캐릭터 외형", "전 버전 외형" if classic else "직접 꾸민 외형",
-                 "꾸민 외형" if classic else "전 버전 외형", self.switch_avatar)
+        for key, label in AVATAR_STYLES.items():
+            if key != self.profile["style"]:
+                self.row(label,"캐릭터 외형","적용",lambda key=key:self.switch_avatar(key))
         self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
 
-    def switch_avatar(self):
-        self.profile["style"] = "custom" if self.profile["style"] == "classic" else "classic"
+    def switch_avatar(self, style):
+        self.profile["style"] = style
         self.save()
         self.render_panel()
 

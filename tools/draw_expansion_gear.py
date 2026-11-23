@@ -97,6 +97,17 @@ class Grip:
 def blade(image, kind, grip, angle):
     w = Grip(image, grip, angle)
     w.factor = 1.35
+    if kind == "frostspear":
+        w.factor = 1
+        w.plate([(-31,-1),(-29,-2),(20,-2),(22,0),(20,2),(-29,2),(-31,1)],"#ad7648")
+        w.line([(-29,-1),(20,-1)],"#f0c273")
+        w.plate([(-31,-2),(-27,-3),(-25,-1),(-25,2),(-28,3),(-31,2)],"#bda168")
+        w.plate([(-5,-2),(3,-2),(4,2),(-6,2)],"#355774")
+        w.plate([(18,-2),(23,-6),(28,-5),(35,0),(28,6),(23,6),(18,2)],"#c58549")
+        w.plate([(21,-1),(25,-4),(32,0),(25,4)],"#f0cf87")
+        w.line([(24,-3),(32,-1),(28,0)],"#fff1c2")
+        w.jewel(22,0,2,"#7dcbd8")
+        return
     if kind in KNUCKLES:
         steel, shine, jewel = ("#7990a2","#c6dce3","#ec944f") if kind=="knuckle" else ("#3d466e","#9ec3ea","#b67bfb")
         w.plate([(-8,-4),(-3,-7),(8,-6),(12,-2),(12,4),(8,7),(-4,6),(-8,3)],steel)
@@ -364,6 +375,8 @@ def scaled_weapon(image, kind, grip, pose):
     # Keep the palm fixed when enlarging the bow or wand around its grip.
     if kind in MELEE_WEAPONS:
         angle = {8:-139,9:-11,10:-113,11:-52,12:-32,13:-48,14:-25}.get(pose,-33)
+        if kind == "frostspear" and pose not in (8,9,10):
+            angle = (-14,-10,-8,-10)[pose%4]
         blade(image,kind,(grip[0]+PAD,grip[1]+PAD),angle)
         return
     tool = Image.new("RGBA",(80,80))
@@ -416,6 +429,7 @@ CUT_EDGE = {
     "bronze":   ((22, -1), "#d19b71", "#fff0be"),
     "blade":    ((22, -6), "#a29bd6", "#e3dafa"),
     "sunblade": ((23, -4), "#d98eab", "#ffdfc2"),
+    "frostspear": ((26, 0), "#a7a177", "#ffedac"),
 }
 
 

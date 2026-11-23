@@ -565,7 +565,7 @@ for species, pool in zip(SPECIES, (
     species["equipmentDrops"] = pool
 
 NPCS = [{'x': 475, 'name': '리나', 'role': '의뢰', 'kind': 'quest'},
- {'x': 870, 'name': '샘', 'role': '보급품', 'kind': 'shop', 'stock': ['potion', 'tonic', 'bronze', 'coat', 'dew', 'redcap', 'bandana', 'blazer', 'baseball', 'apprenticehat', 'greenhood']},
+ {'x': 870, 'name': '샘', 'role': '보급품', 'kind': 'shop', 'stock': ['potion', 'tonic', 'bronze', 'coat', 'dew', 'redcap', 'bandana', 'blazer', 'baseball', 'apprenticehat', 'greenhood', 'frostspear']},
  {'x': 1430, 'name': '헬레나', 'role': '전직', 'kind': 'trainer'},
  {'x': 2230, 'name': '쿤', 'role': '숲길 안내', 'kind': 'guide'},
  {'x': 5710, 'name': '마야', 'role': '숲길 의뢰', 'kind': 'quest', 'quest': 2},
@@ -729,7 +729,8 @@ IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-sw
 IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
-IMAGES["custom_avatar"] = "maplee-avatars.png"
+IMAGES.update(custom_avatar="maplee-avatars.png", frost_avatar="hero-frost-lancer.png")
+AVATAR_STYLES = {"classic":"전 버전 외형","custom":"직접 꾸민 외형","frost":"서리등 창병"}
 STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",
                    "thief":"dagger","pirate":"knuckle","cleric":"chimewand"}
 for _starter in STARTER_WEAPONS.values():
@@ -739,6 +740,13 @@ for _starter in STARTER_WEAPONS.values():
 def avatar_style(profile, progress=None):
     """Resolve explicit selections and preserve customized older profiles."""
     style = (progress or {}).get("avatarStyle", profile.get("style"))
-    if style in ("classic","custom"):
+    if isinstance(style,str) and style in AVATAR_STYLES:
         return style
     return "custom" if any(profile[field] for field in ("sex","skin","hair")) else "classic"
+
+
+def character_starter(profile):
+    job = profile["job"]
+    if avatar_style(profile) == "frost" and job in ("beginner","guardian"):
+        return "frostspear"
+    return STARTER_WEAPONS[job]

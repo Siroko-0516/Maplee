@@ -1,7 +1,7 @@
 """Maplee account, character selection, and acknowledged autosaves."""
 import json
 from browser import document, html, window
-from .content import AVATAR_JOBS, CLASSES, STARTER_WEAPONS, avatar_style
+from .content import AVATAR_JOBS, CLASSES, avatar_style, character_starter
 from .engine import SAVE_KEY
 
 
@@ -110,7 +110,7 @@ class Lobby:
         size = int(canvas.attrs["width"])
         ctx.clearRect(0,0,size,size)
         job = profile["job"]
-        weapon = STARTER_WEAPONS[job] if starter else None
+        weapon = character_starter(profile) if starter else None
         self.app.renderer.avatar(ctx,{},weapon,0,size*38/80,size*75/80,size,1,
                                  job=job,profile=profile,preview=True)
 

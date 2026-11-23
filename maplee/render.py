@@ -131,7 +131,11 @@ class Renderer:
                 body_sheet, column, row = "expansion_swing", int(far_hand), 2*len(MELEE_WEAPONS)
             else:
                 frame, column, row = 11, 3, 2
-        if profile and avatar_style(profile) == "custom":
+        style = avatar_style(profile) if profile else "classic"
+        if style == "frost":
+            cel = 28+int(far_hand) if body_sheet=="expansion_swing" else frame
+            ctx.drawImage(self.images["frost_avatar"],cel*80,0,80,80,left,top,size,size)
+        elif style == "custom":
             column = 28+int(far_hand) if body_sheet=="expansion_swing" else frame
             image = self.custom_avatar(profile, job or profile["job"], not preview)
             ctx.drawImage(image,column*80,0,80,80,left,top,size,size)

@@ -37,7 +37,7 @@ test("independent accounts, four slots, and versioned saves",async () => {
   assert.equal((await call("/api/login","POST",{ ...credentials,password:"not-the-password" })).status,401);
   assert.equal((await call("/api/session")).status,401);
 
-  const profile = { name:"안개 모험가", job:"cleric", sex:1, skin:4, hair:6 };
+  const profile = { name:"안개 모험가", job:"cleric", sex:1, skin:4, hair:6, style:"frost" };
   for (let i=0; i<4; i++) assert.equal((await call("/api/slot/"+i,"POST",{profile},first)).status,201);
   assert.equal((await call("/api/slot/4","POST",{profile},first)).status,404);
   assert.equal((await call("/api/slot/1","POST",{profile},first)).status,409);
