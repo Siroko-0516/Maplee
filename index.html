@@ -4,92 +4,58 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Maplee</title>
-<style>
-* { box-sizing: border-box; }
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #102b36; color: #fff8da; font: 15px system-ui, sans-serif; }
-button { font: inherit; cursor: pointer; color: #fff8dc; border: 1px solid #adad78; border-radius: 4px; background: linear-gradient(#526d53,#293e34); padding: 7px 12px; }
-button:hover:not(:disabled) { filter: brightness(1.23); }
-button:disabled { opacity: .5; cursor: default; }
-button[aria-pressed="true"] { background: #6f6f42; }
-button:focus-visible { outline: 2px solid #fff2a0; outline-offset: 3px; }
-.game { position: relative; width: 100vw; height: 100dvh; overflow: hidden; }
-canvas { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; touch-action: none; }
-.top, .hud { position: absolute; left: 12px; right: 12px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; }
-.top { top: 12px; align-items: start; }
-.hud { bottom: 12px; align-items: end; }
-.map, .quest, .stats, .actions { background: #152c2bef; border: 1px solid #b9b680; box-shadow: 0 4px 14px #10252388; border-radius: 5px; }
-.map, .quest { padding: 9px 13px; max-width: 55%; }
-.map span, .quest small { display: block; color: #aacba5; font-size: 12px; margin-bottom: 3px; }
-.quest strong { color: #ffe1a3; font-size: 14px; }
-.toast { position: absolute; top: 77px; left: 50%; transform: translateX(-50%); max-width: 82%; background: #173634ec; border: 1px solid #b5bc8b; border-radius: 4px; padding: 7px 12px; text-align: center; transition: opacity .25s; pointer-events: none; }
-.stats { width: 260px; padding: 8px 11px; }
-.name { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 9px; font-weight: 700; }
-.name span:last-child { color: #ffde9d; font-size: 12px; }
-.statline { display: grid; grid-template-columns: 27px 1fr 70px; align-items: center; gap: 6px; font-size: 11px; line-height: 1.65; }
-.statline > :last-child { text-align: right; }
-.bar { height: 7px; background: #0d2127; border: 1px solid #648570; }
-.fill { height: 100%; width: 0; background: #ee8076; transition: width .18s; }
-.fill.mp { background: #86cde7; }
-.fill.xp { background: #c9d76d; }
-.actions { max-width: 570px; display: flex; flex-wrap: wrap; justify-content: end; gap: 4px; padding: 6px; pointer-events: auto; }
-.actions button { font-size: 12px; padding: 6px 8px; }
-.help { position: absolute; right: 12px; bottom: 69px; color: #ecf6df; text-shadow: 0 1px 4px #102b36, 0 1px 3px #102b36; font-size: 12px; pointer-events: none; }
-.panel { position: absolute; width: min(550px, 94%); max-height: 74dvh; overflow-y: auto; left: 50%; top: 48%; transform: translate(-50%,-50%); z-index: 3; padding: 14px 17px; background: #f8edd4; color: #28382b; border: 2px solid #ac8c5b; border-radius: 7px; box-shadow: 0 12px 50px #0b2e36b0; }
-.panel-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding-bottom: 7px; border-bottom: 1px solid #d0be96; }
-.panel h2 { font-size: 20px; margin: 0; }
-.panel h3 { font-size: 14px; margin-bottom: 0; color: #456540; }
-.panel p { margin: 9px 0; }
-.panel button { font-size: 13px; }
-.panel-row { display: flex; align-items: center; justify-content: space-between; min-height: 43px; gap: 10px; border-bottom: 1px solid #e2d4b8; padding: 6px 0; }
-.panel-row small { display: block; margin-top: 2px; color: #52644d; }
-.panel-row button { flex-shrink: 0; }
-.panel-tabs { display: flex; gap: 6px; margin: 8px 0; }
-.mobile { display: none; position: absolute; bottom: 110px; left: 10px; right: 10px; justify-content: space-between; pointer-events: none; }
-.mobile button { min-height: 42px; min-width: 40px; margin: 2px; pointer-events: auto; touch-action: none; padding: 5px; }
-@media (pointer: coarse) { .mobile { display: flex; } .help { display: none; } }
-@media (max-width: 730px) {
-  .top, .hud { left: 6px; right: 6px; gap: 5px; }
-  .map, .quest { padding: 6px 9px; font-size: 12px; }
-  .map span, .quest small { font-size: 10px; }
-  .quest strong { font-size: 11px; }
-  .stats { width: min(230px, 43%); padding: 5px; }
-  .statline { grid-template-columns: 24px 1fr 55px; gap: 3px; font-size: 10px; }
-  .name { font-size: 11px; gap: 2px; }
-  .name span:last-child { font-size: 10px; }
-  .actions { max-width: 260px; padding: 4px; }
-  .actions button { padding: 4px 5px; font-size: 11px; }
-  .help { display: none; }
-}
-</style>
+<link rel="stylesheet" href="src/ui.css">
 </head>
 <body>
 <main class="game">
-  <canvas aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, 위 방향키 대화와 출구, I 장비와 가방"></canvas>
-  <div class="top">
-    <div class="map"><span>Maplee</span><strong id="region">솔방울 마을</strong></div>
-    <div class="quest"><small>의뢰</small><strong id="quest">마을의 리나와 대화</strong></div>
+  <div class="scene">
+    <canvas aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, V 보조 스킬, 위 방향키 대화와 출구"></canvas>
+    <div class="overlay-top">
+      <button id="minimap-button" type="button" class="minimap-card">
+        <span class="minimap-title"><b id="region">솔방울 마을</b><kbd>M</kbd></span>
+        <span class="minimap-plot">
+          <canvas id="minimap" width="200" height="46" aria-hidden="true"></canvas>
+          <span id="minimap-player" aria-hidden="true"></span>
+        </span>
+      </button>
+      <button class="quest-card" id="quest-button" type="button">
+        <span><b>퀘스트</b><kbd>Q</kbd></span><strong id="quest">마을의 리나와 대화</strong>
+      </button>
+    </div>
+    <div class="toast" id="toast" role="status">그래픽을 불러오는 중이에요.</div>
+    <div class="buff" id="buff-status"></div>
+    <div class="mobile" aria-label="터치 조작">
+      <div><button aria-label="왼쪽" data-key="ArrowLeft">◀</button><button aria-label="오른쪽" data-key="ArrowRight">▶</button><button aria-label="사다리 내려가기" data-key="ArrowDown">↓</button></div>
+      <div><button data-key="Space">점프</button><button data-key="KeyZ">공격</button><button data-key="KeyX">스킬</button><button data-key="ArrowUp">대화·출구</button></div>
+    </div>
   </div>
-  <div class="toast" id="toast" role="status">그래픽을 불러오는 중이에요.</div>
-  <div class="help">← → 이동　Space 점프　↓ + Space 내려가기　Z 공격　X 스킬　↑ 대화·출구　I 가방　M 지도</div>
-  <div class="hud">
-    <div class="stats">
+  <footer class="dock">
+    <section class="vitals" aria-label="캐릭터 상태">
       <div class="name"><span><b id="lv"></b> <b id="job"></b></span><span id="gold"></span></div>
-      <div class="statline"><span>HP</span><div class="bar"><div class="fill" id="hpbar"></div></div><span id="hp"></span></div>
-      <div class="statline"><span>MP</span><div class="bar"><div class="fill mp" id="mpbar"></div></div><span id="mp"></span></div>
-      <div class="statline"><span>EXP</span><div class="bar"><div class="fill xp" id="xpbar"></div></div><span id="xp"></span></div>
-      <span id="kills" hidden></span>
+      <div class="vital-track">
+        <div class="meter hp"><div class="fill" id="hpbar"></div><span><b>HP</b> <span id="hp"></span></span></div>
+        <div class="meter mp"><div class="fill" id="mpbar"></div><span><b>MP</b> <span id="mp"></span></span></div>
+      </div>
+    </section>
+    <nav class="hotbar" aria-label="1~4 단축키">
+      <button class="quickslot" type="button" id="slot-0"><kbd>1</kbd><b id="slot-symbol-0"></b><small id="slot-count-0"></small></button>
+      <button class="quickslot" type="button" id="slot-1"><kbd>2</kbd><b id="slot-symbol-1"></b><small id="slot-count-1"></small></button>
+      <button class="quickslot" type="button" id="slot-2"><kbd>3</kbd><b id="slot-symbol-2"></b><small id="slot-count-2"></small></button>
+      <button class="quickslot" type="button" id="slot-3"><kbd>4</kbd><b id="slot-symbol-3"></b><small id="slot-count-3"></small></button>
+    </nav>
+    <nav class="game-menu" aria-label="게임 메뉴">
+      <button type="button" id="character"><kbd>C</kbd>능력치 <span id="point-badge"></span></button>
+      <button type="button" id="skills"><kbd>S</kbd>스킬 <span id="skill-point-badge"></span></button>
+      <button type="button" id="inventory"><kbd>I</kbd>장비·가방</button>
+      <button type="button" id="journal"><kbd>Q</kbd>퀘스트</button>
+      <button type="button" id="map"><kbd>M</kbd>지도</button>
+      <button type="button" id="hotkeys">설정</button>
+      <button type="button" id="pause">일시정지</button>
+    </nav>
+    <div class="experience">
+      <span>EXP</span><div class="exp-track"><div class="fill" id="xpbar"></div><span id="xp"></span></div><span id="xp-percent"></span>
     </div>
-    <div class="actions">
-      <button type="button" id="potion">HP 물약 <span id="pots"></span></button><button type="button" id="tonic">MP 물약 <span id="tonics"></span></button>
-      <button type="button" id="inventory">장비·가방</button><button type="button" id="mapbutton">지도</button>
-      <button type="button" id="returnbutton">마을 귀환</button><button type="button" id="savebutton">저장</button>
-      <button type="button" id="pause">일시정지</button><button type="button" id="sound">소리 켜기</button>
-    </div>
-  </div>
-  <div class="mobile">
-    <div><button aria-label="왼쪽" data-key="ArrowLeft">◀</button><button aria-label="오른쪽" data-key="ArrowRight">▶</button><button aria-label="사다리 내려가기" data-key="ArrowDown">↓</button></div>
-    <div><button data-key="Space">점프</button><button data-key="KeyZ">공격</button><button data-key="KeyX">스킬</button><button data-key="ArrowUp">대화·출구</button></div>
-  </div>
+  </footer>
   <section class="panel" id="panel" aria-label="게임 메뉴" hidden></section>
 </main>
 <script src="src/asset-data.js"></script>

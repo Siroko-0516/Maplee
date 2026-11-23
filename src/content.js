@@ -48,6 +48,27 @@ const CLASSES = {
   mage: {name: '별빛술사', skill: '별비', attack: 1, hp: 0, mp: 32, cost: 16, cooldown: 155, reach: 188, power: 2.35, shape: 'stars'}
 };
 
+const ATTRIBUTES = {
+  strength: {name: '힘', detail: '공격력 +2', icon: '◆', attack: 2},
+  vitality: {name: '체력', detail: '최대 HP +8 · 방어력 +1', icon: '♥', hp: 8, defense: 1},
+  spirit: {name: '정신', detail: '최대 MP +5', icon: '✦', mp: 5},
+  agility: {name: '민첩', detail: '이동 속도 +0.09', icon: '➟', speed: 0.09}
+};
+const SUPPORTS = {
+  guardian: {name: '철벽 맹세', summary: '잠시 방어력을 높여요.', stat: 'defense', power: 7, cost: 12},
+  ranger: {name: '순풍 걸음', summary: '잠시 이동 속도를 높여요.', stat: 'speed', power: 1.25, cost: 12},
+  mage: {name: '별불 집중', summary: '잠시 공격력을 높여요.', stat: 'attack', power: 8, cost: 15}
+};
+const HOTKEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
+const DEFAULT_HOTBAR = ['hp', 'mp', 'skill', 'support'];
+const HOTBAR_ACTIONS = {
+  hp: {name: '체력 물약', icon: '♥', color: 'rose'},
+  mp: {name: '마력 물약', icon: '◆', color: 'sky'},
+  skill: {name: '직업 스킬', icon: '✦', color: 'violet'},
+  support: {name: '보조 스킬', icon: '⬡', color: 'mint'},
+  home: {name: '마을 귀환', icon: '⌂', color: 'gold'}
+};
+
 const ITEMS = {
   twig: {name: '여행자의 목검', slot: 'weapon', level: 1, attack: 2, price: 25},
   bronze: {name: '청동 검', slot: 'weapon', level: 2, attack: 5, price: 78},
@@ -79,10 +100,21 @@ const NPCS = [
   {x: 870, name: '토비', role: '보급품', kind: 'shop', stock: ['potion','tonic','bronze','coat','dew']},
   {x: 1430, name: '다온', role: '전직', kind: 'trainer'},
   {x: 2230, name: '유란', role: '숲길 안내', kind: 'guide'},
+  {x: 5710, name: '노을', role: '숲길 의뢰', kind: 'quest', quest: 2},
   {x: 9660, name: '마레', role: '항구 장비점', kind: 'shop', stock: ['potion','tonic','blade','bow','wand','shell','prism']},
   {x: 10670, name: '등대지기', role: '의뢰', kind: 'harbor'}
 ];
 const QUESTS = [
-  {name: '숲길 청소', who: '리나', target: 8, matches: [0,1], xp: 85, gold: 95, item: 'coat'},
-  {name: '항구의 불빛', who: '등대지기', target: 1, matches: [4], xp: 220, gold: 190, item: 'prism'}
+  {
+    name: '숲길 청소', who: '리나', area: 0, target: 8, matches: [0, 1], xp: 85, gold: 95, item: 'coat',
+    detail: '숲길의 이슬방울과 호박 갓버섯을 처치하세요.'
+  },
+  {
+    name: '항구의 불빛', who: '등대지기', area: 2, target: 1, matches: [4], xp: 220, gold: 190, item: 'prism',
+    detail: '항구 끝에 있는 등대 수문장을 처치하세요.'
+  },
+  {
+    name: '종꽃에 남은 안개', who: '노을', area: 1, target: 5, matches: [2], xp: 155, gold: 120, item: 'dew',
+    detail: '숲길 깊은 곳에서 안개 정령을 처치하세요.'
+  }
 ];

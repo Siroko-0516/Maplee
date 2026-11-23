@@ -10,16 +10,18 @@ const root = path.resolve(__dirname, '..');
 async function main() {
   execFileSync(process.execPath, [path.join(root, 'scripts/build.mjs')]);
   const html = fs.readFileSync(path.join(root, 'dist/maple-local.html'), 'utf8');
-  assert(!html.includes('<script src='), 'offline build embeds all code');
+  assert(!html.includes('<script src=') && !html.includes('href="src/'), 'offline build embeds code and stylesheet');
   const canvas = createCanvas(960, 468);
+  const mini = createCanvas(200, 46);
   function node(tag) {
     return {
-      tag, children: [], style: {},
+      tag, children: [], style: {}, dataset: {},
       append(...children) { this.children.push(...children); },
       replaceChildren() { this.children = []; }, setAttribute() {}
     };
   }
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, node(id)]));
+  elements.set('minimap', mini);
   const key = 'maple-local-world-v1';
   const storage = {[key]: JSON.stringify({x: 310, level: 2, xp: 12, hp: 62, gold: 17, kills: 4, pots: 3, quest: 1})};
   const sandbox = vm.createContext({
@@ -40,6 +42,18 @@ async function main() {
     function check(value, message) { if (!value) throw new Error(message); }
     function advance(steps) { for (let i = 0; i < steps; i++) step(); }
     check(p.level === 2 && p.hp === 62 && p.quests[0].count === 4 && p.job === 'beginner', 'legacy save migration');
+    check(remainingAP() === 3 && remainingSP() === 1, 'legacy saves receive points earned by level');
+    handleKey('KeyC');
+    check(panel?.kind === 'character', 'character shortcut opens the AP panel');
+    const initialAttack = stats().attack;
+    allocateAttribute('strength');
+    allocateAttribute('vitality');
+    allocateAttribute('agility');
+    allocateAttribute('spirit');
+    check(stats().attack === initialAttack + 2 && stats().hp === 118 && stats().speed > 4.2,
+      'AP modifies combat stats and movement');
+    check(remainingAP() === 0 && p.attributes.spirit === 0, 'AP cannot be overspent');
+    closePanel();
     monsters = [];
     travelTo(390);
     keys.ArrowRight = true;
@@ -109,7 +123,10 @@ async function main() {
     p.xp = 0;
     gainXP(450);
     check(p.level >= 5 && p.hp === stats().hp, 'XP levels up and restores health');
+    upgradeSkill('primary');
+    check(p.skillRanks.primary === 2 && primarySkill().power > CLASSES.beginner.power, 'SP raises primary skill power');
     changeJob('ranger');
+    check(p.skillRanks.primary === 2, 'primary skill rank follows the job change');
     check(p.job === 'ranger' && p.equipment.weapon === 'bow', 'job change grants and equips starter weapon');
     toggleEquipment('wand');
     check(p.equipment.weapon === 'bow', 'equipment class restriction');
@@ -131,12 +148,44 @@ async function main() {
     travelTo(11780);
     step();
     check(p.bag.prism >= 1, 'elite equipment can be picked up');
+    p.quests[2].state = 1;
+    handleKey('KeyQ');
+    check(panel?.kind === 'journal', 'quest shortcut opens journal');
+    p.trackedQuest = 2;
+    updateHUD();
+    check($('#quest').textContent.startsWith(QUESTS[2].name), 'quest tracker follows selected quest');
+    closePanel();
+
+    while (p.level < 7) gainXP(xpNeeded());
+    upgradeSkill('support');
+    check(p.skillRanks.support === 1, 'class support unlocks at level seven');
+    openPanel('hotkeys');
+    const selects = $('#panel').children.flatMap(node => node.children).filter(node => node.tag === 'select');
+    check(selects.length === 4, 'settings expose four quickslot assignments');
+    selects[0].value = 'support';
+    selects[0].onchange();
+    selects[3].value = '';
+    selects[3].onchange();
+    closePanel();
+    p.mp = stats().mp;
+    const beforeSupport = p.mp;
+    handleKey('Digit1');
+    check(p.mp === beforeSupport - SUPPORTS.ranger.cost && supportValue('speed') > 0, 'assigned quickslot activates class support');
+    const spentMP = p.mp;
+    handleKey('Digit1');
+    check(p.mp === spentMP && $('#slot-count-0').textContent.endsWith('초'), 'cooldown locks use and appears on quickslot');
+    supportUntil = tick;
+    check(supportValue('speed') === 0, 'support buff expires');
+    check($('#minimap-player').style.left.endsWith('%'), 'minimap marker follows the current map');
     const oldGold = p.gold;
     save();
     p.gold = 0;
     p.job = 'beginner';
     loadGame();
     check(p.job === 'ranger' && p.gold === oldGold && p.bag.prism >= 1 && !p.bag.twig, 'progression survives a save round trip without restoring sold items');
+    check(p.attributes.strength === 1 && p.skillRanks.primary === 2 && p.skillRanks.support === 1 &&
+      p.hotbar[0] === 'support' && p.hotbar[3] === null && p.trackedQuest === 2,
+      'points, skill ranks, quickslots and tracked quest persist');
   `);
 
   for (const [index, x] of [650, 4720, 10470].entries()) {
@@ -174,7 +223,7 @@ async function main() {
       }
     }
   `);
-  console.log('PASS: offline HTML, slopes, three separate maps, ground and backdrop continuity, ladder, combat, jobs, equipment, shop, quests, saves');
+  console.log('PASS: offline HTML, slopes, three separate maps, ground and backdrop continuity, ladder, combat, jobs, equipment, shop, quests, AP/SP, quickslots, minimap and saves');
 }
 
 main().catch(error => {

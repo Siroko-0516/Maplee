@@ -56,7 +56,10 @@ const p = {
   x: START_X, y: groundAt(START_X), vy: 0, dir: 1, grounded: true, surface: 'ground',
   hp: 100, mp: 35, level: 1, xp: 0, gold: 0, kills: 0, pots: 5, tonics: 1,
   job: 'beginner', bag: {twig: 1}, equipment: {weapon: 'twig', armor: null, charm: null},
-  quests: QUESTS.map(() => ({state: 0, count: 0}))
+  quests: QUESTS.map(() => ({state: 0, count: 0})),
+  attributes: Object.fromEntries(Object.keys(ATTRIBUTES).map(id => [id, 0])),
+  skillRanks: {primary: 1, support: 0}, hotbar: DEFAULT_HOTBAR.slice(),
+  trackedQuest: null
 };
 let camera = 0;
 let tick = 0;
@@ -67,6 +70,8 @@ let climbing = null;
 let invulnerableUntil = 0;
 let hurtUntil = 0;
 let skillCooldown = 0;
+let supportCooldown = 0;
+let supportUntil = 0;
 let walkDistance = 0;
 let walking = false;
 let lastArea = null;
@@ -80,14 +85,45 @@ function stats() {
   const job = CLASSES[p.job];
   const result = {
     hp: 100 + (p.level - 1) * 10 + job.hp, mp: 35 + (p.level - 1) * 4 + job.mp,
-    attack: 4 + (p.level - 1) * 2 + job.attack, defense: Math.floor((p.level - 1) / 2)
+    attack: 4 + (p.level - 1) * 2 + job.attack, defense: Math.floor((p.level - 1) / 2), speed: 4.2
   };
   for (const id of Object.values(p.equipment)) {
     if (!id) continue;
     const item = ITEMS[id];
     for (const key of Object.keys(result)) result[key] += item[key] ?? 0;
   }
+  for (const [id, amount] of Object.entries(p.attributes)) {
+    for (const key of Object.keys(result)) result[key] += (ATTRIBUTES[id][key] ?? 0) * amount;
+  }
   return result;
+}
+
+function allocatedAP() {
+  return Object.values(p.attributes).reduce((total, points) => total + points, 0);
+}
+function remainingAP() { return Math.max(0, (p.level - 1) * 3 - allocatedAP()); }
+function remainingSP() { return Math.max(0, p.level - p.skillRanks.primary - p.skillRanks.support); }
+function rankRequirement(id, rank) { return id === 'primary' ? rank * 2 - 1 : 5 + rank * 2; }
+
+function primarySkill() {
+  const job = CLASSES[p.job];
+  return {...job, power: job.power + (p.skillRanks.primary - 1) * 0.25};
+}
+function supportValue(stat) {
+  const support = SUPPORTS[p.job];
+  if (supportUntil <= tick || support?.stat !== stat) return 0;
+  return support.power * (1 + (p.skillRanks.support - 1) * 0.35);
+}
+function useSupport() {
+  if (!pixelReady || paused || panel || hurtUntil > tick || !p.skillRanks.support || supportCooldown > 0) return;
+  const support = SUPPORTS[p.job];
+  if (p.mp < support.cost) { toast('마력이 부족해요.'); return; }
+  p.mp -= support.cost;
+  supportUntil = tick + 420 + (p.skillRanks.support - 1) * 90;
+  supportCooldown = 720;
+  textEffect(support.name, p.x, p.y - 64, '#bcf8cf');
+  beep(690);
+  updateHUD();
 }
 
 function canEquip(id) {
@@ -130,6 +166,24 @@ function loadGame() {
     p.quests[0] = {state: saved.quest >= 2 ? 2 : 1, count: Math.min(QUESTS[0].target, p.kills)};
     if (saved.quest >= 4) p.quests[1] = {state: 2, count: 1};
   }
+  p.attributes = Object.fromEntries(Object.keys(ATTRIBUTES).map(id => [id, 0]));
+  let ap = (p.level - 1) * 3;
+  for (const id of Object.keys(ATTRIBUTES)) {
+    const value = saved.attributes?.[id];
+    if (!Number.isSafeInteger(value) || value < 0) continue;
+    p.attributes[id] = Math.min(value, ap);
+    ap -= p.attributes[id];
+  }
+  const primaryRank = saved.skillRanks?.primary;
+  p.skillRanks.primary = Number.isSafeInteger(primaryRank) ? clamp(primaryRank, 1, Math.min(5, Math.ceil(p.level / 2))) : 1;
+  const supportRank = saved.skillRanks?.support;
+  p.skillRanks.support = SUPPORTS[p.job] && Number.isSafeInteger(supportRank)
+    ? clamp(supportRank, 0, Math.min(3, Math.max(0, Math.floor((p.level - 5) / 2)), p.level - p.skillRanks.primary)) : 0;
+  p.hotbar = DEFAULT_HOTBAR.map((fallback, i) => {
+    const action = saved.hotbar?.[i];
+    return action === null || Object.hasOwn(HOTBAR_ACTIONS, action) ? action : fallback;
+  });
+  p.trackedQuest = Number.isInteger(saved.trackedQuest) && p.quests[saved.trackedQuest]?.state === 1 ? saved.trackedQuest : null;
   const limits = stats();
   p.hp = clamp(p.hp, 1, limits.hp);
   p.mp = clamp(p.mp, 0, limits.mp);
@@ -177,16 +231,17 @@ function updateHUD() {
   $('#xp').textContent = p.xp + ' / ' + xpNeeded();
   $('#xpbar').style.width = Math.min(100, p.xp / xpNeeded() * 100) + '%';
   $('#gold').textContent = p.gold + ' 메소';
-  $('#pots').textContent = p.pots;
-  $('#tonics').textContent = p.tonics;
-  $('#kills').textContent = '처치 ' + p.kills;
-  const questIndex = p.quests.findIndex(quest => quest.state === 1);
+  $('#point-badge').textContent = remainingAP() || '';
+  $('#skill-point-badge').textContent = remainingSP() || '';
+  $('#xp-percent').textContent = Math.floor(p.xp / xpNeeded() * 100) + '%';
+  const questIndex = p.trackedQuest ?? p.quests.findIndex(quest => quest.state === 1);
   const active = QUESTS[questIndex];
   $('#quest').textContent = active
     ? (p.quests[questIndex].count >= active.target ? active.who + '에게 보고' :
       active.name + ' · ' + p.quests[questIndex].count + ' / ' + active.target)
     : p.quests[0].state === 0 ? '마을의 리나와 대화' : p.job === 'beginner'
       ? 'Lv. 5에 다온에게 전직' : p.quests[1].state === 0 ? '항구의 등대지기와 대화' : '모험 계속하기';
+  updateHotbar();
 }
 
 function gainXP(amount) {
@@ -201,7 +256,7 @@ function gainXP(amount) {
     p.hp = limits.hp;
     p.mp = limits.mp;
     textEffect('LEVEL UP!', p.x, p.y - 76, '#ffe69e');
-    toast(previous < 5 && p.level >= 5 ? 'Lv. 5 달성! 다온에게 전직할 수 있어요.' : '레벨 ' + p.level + ' 달성');
+    toast(previous < 5 && p.level >= 5 ? 'Lv. 5 달성! 다온에게 전직할 수 있어요.' : '레벨 ' + p.level + ' 달성 · C 능력치 · S 스킬');
     beep(840);
   }
 }
@@ -278,7 +333,7 @@ function pickupDrops() {
 
 function attack(skill = false) {
   if (!pixelReady || paused || panel || swing || climbing || hurtUntil > tick) return;
-  const job = CLASSES[p.job];
+  const job = primarySkill();
   if (skill) {
     if (skillCooldown) return;
     if (p.mp < job.cost) {
@@ -314,8 +369,8 @@ function advanceAttack() {
   if (swing.hit || elapsed < attackAnimation.durations[0]) return;
   swing.hit = true;
   const {skill, direction} = swing;
-  const job = CLASSES[p.job];
-  const power = stats().attack;
+  const job = primarySkill();
+  const power = Math.round(stats().attack + supportValue('attack'));
   beep(skill ? 760 : 510);
   if (skill && job.shape === 'arrow') {
     effects.push({
@@ -376,7 +431,7 @@ function moveMonsters() {
       monster.strikeAt = 0;
       monster.nextStrike = tick + 62;
       if (close && tick >= invulnerableUntil) {
-        const lost = Math.max(1, monster.species.attack - stats().defense);
+        const lost = Math.max(1, monster.species.attack - Math.floor(stats().defense + supportValue('defense')));
         p.hp = Math.max(0, p.hp - lost);
         invulnerableUntil = tick + 55;
         hurtUntil = tick + 10;
@@ -444,7 +499,8 @@ function movePlayer(dx) {
   }
 
   const area = areaAt(p.x);
-  p.x = clamp(p.x + dx * (swing && p.grounded ? 2.4 : 4.2), area.start + 24, area.end - 24);
+  const speed = stats().speed + supportValue('speed');
+  p.x = clamp(p.x + dx * speed * (swing && p.grounded ? 2.4 / 4.2 : 1), area.start + 24, area.end - 24);
   const floor = groundAt(p.x);
   if (p.grounded && p.surface === 'ground') { p.y = floor; return; }
   const oldY = p.y;
@@ -474,6 +530,7 @@ function step() {
   if (!pixelReady || paused || panel) return;
   tick++;
   if (skillCooldown) skillCooldown--;
+  if (supportCooldown) supportCooldown--;
   const dx = Number(!!keys.ArrowRight) - Number(!!keys.ArrowLeft);
   if (dx && !swing) p.dir = dx;
   if (keys.KeyX) attack(true);
@@ -492,9 +549,10 @@ function step() {
   if (area !== lastArea) {
     if (lastArea) toast(area.name);
     lastArea = area;
-    $('#region').textContent = area.icon + ' ' + area.name;
+    $('#region').textContent = area.name;
   }
   if (tick % 90 === 0 && p.mp < stats().mp) { p.mp++; updateHUD(); }
+  if (tick % 6 === 0) updateCombatHUD();
   if (tick % 600 === 0) save();
   const target = cameraTarget(p.x);
   camera += (target - camera) * 0.18;

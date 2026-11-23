@@ -14,7 +14,7 @@ for (const name of ASSETS) {
   image.onload = () => {
     if (++pixelLoaded === ASSETS.length) {
       pixelReady = true;
-      toast('↑ 대화·출구 · I 장비와 가방 · M 지도');
+      toast('↑ 대화·출구 · Z 공격 · X 스킬 · 1~4 퀵슬롯');
     }
   };
   image.onerror = () => { loadingError = true; };
@@ -195,7 +195,12 @@ function drawScenery(area) {
     const tint = npc.kind === 'shop' ? 'hue-rotate(42deg)' : npc.kind === 'trainer' ? 'hue-rotate(196deg)' : 'none';
     atlas('hero', frame, npc.x, y, heroScale, p.x > npc.x ? 1 : -1, 1, tint);
     pixelText(npc.name + ' · ' + npc.role, npc.x, y - 56, '#ffe3a6');
+    const questId = npc.kind === 'harbor' ? 1 : npc.kind === 'quest' ? npc.quest ?? 0 : null;
+    const progress = p.quests[questId];
     if (nearbyNPC() === npc) pixelText('↑ 대화', npc.x, y - 72, '#fffbd8', 12);
+    else if (progress?.state === 0 || progress?.state === 1 && progress.count >= QUESTS[questId].target) {
+      pixelText(progress.state === 0 ? '◆' : '✓', npc.x, y - 72, '#ffdc80', 15);
+    }
   }
   g.restore();
 }
@@ -212,6 +217,12 @@ function drawPlayer() {
   }
   const direction = swing?.direction ?? p.dir;
   const opacity = invulnerableUntil > tick && hurtUntil <= tick && tick % 6 < 3 ? 0.55 : 1;
+  if (supportUntil > tick) {
+    rect(p.x - 12, p.y - 2, 24, 2, '#9de6bd77');
+    for (let i = 0; i < 3; i++) {
+      rect(p.x - 12 + i * 11, p.y - (tick + i * 11) % 36, 2, 2, '#a0f3ca');
+    }
+  }
   atlas('hero', frameAt(animations[name], time), p.x, p.y, heroScale, direction, opacity);
   pixelText('Lv.' + p.level + ' ' + CLASSES[p.job].name, p.x, p.y - 61);
 }

@@ -12,7 +12,8 @@ if (process.argv.includes('--asset-data')) {
   fs.writeFileSync(1, packed);
 } else {
   const template = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const html = template.replace(/<script src="(src\/[\w-]+\.js)"><\/script>/g, (_, source) => {
+  const stylesheet = fs.readFileSync(path.join(root, 'src/ui.css'), 'utf8');
+  const html = template.replace('<link rel="stylesheet" href="src/ui.css">', '<style>\n' + stylesheet + '\n</style>').replace(/<script src="(src\/[\w-]+\.js)"><\/script>/g, (_, source) => {
     const script = source === 'src/asset-data.js' ? packed : fs.readFileSync(path.join(root, source), 'utf8');
     return '<script>\n' + script + '\n</script>';
   });
