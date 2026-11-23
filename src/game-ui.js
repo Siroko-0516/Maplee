@@ -5,6 +5,44 @@ let panelTab = 'buy';
 let bagTab = 'gear';
 let journalTab = 'active';
 let lastMinimapArea;
+const MAPLEE_SITE = 'https://maplee-pixel-world.jisung-20090725.chatgpt.site';
+const onMapleeSite = typeof location !== 'undefined' && location.origin === MAPLEE_SITE;
+const atlasStyle = document.documentElement.style;
+atlasStyle.setProperty('--item-art', 'url("' + PIXEL_DATA.icons + '")');
+atlasStyle.setProperty('--frame-art', 'url("' + PIXEL_DATA.frame + '")');
+
+function applyIcon(element, icon) {
+  element.classList.add('pixel-icon');
+  element.style.backgroundPosition = ((icon % 4) * 100 / 3) + '% ' + (Math.floor(icon / 4) * 100 / 3) + '%';
+}
+function makeIcon(icon, className = '') {
+  const element = document.createElement('span');
+  element.className = className;
+  element.setAttribute('aria-hidden', 'true');
+  applyIcon(element, icon);
+  return element;
+}
+const rarityLabels = {uncommon: '고급', rare: '희귀', epic: '영웅'};
+let lootTimer;
+
+function reportLoot(ids, gold) {
+  const feed = $('#loot-feed');
+  const line = document.createElement('div');
+  line.className = 'loot-line';
+  if (gold) {
+    line.append(makeIcon(7));
+    addText('b', '+' + gold + ' 메소', line);
+  }
+  for (const id of ids) {
+    line.append(makeIcon(itemIcon(id)));
+    const text = addText('span', ITEMS[id].name, line);
+    if (ITEMS[id].rarity) text.dataset.rarity = ITEMS[id].rarity;
+  }
+  feed.replaceChildren(line);
+  feed.hidden = false;
+  clearTimeout(lootTimer);
+  lootTimer = setTimeout(() => { feed.hidden = true; }, 3900);
+}
 
 function makeTabs(options, active, change) {
   const tabs = document.createElement('nav');
@@ -19,7 +57,7 @@ function makeTabs(options, active, change) {
 
 const menuPanels = [
   ['character', '능력치', 'C'], ['skills', '스킬', 'S'], ['inventory', '장비·가방', 'I'],
-  ['journal', '퀘스트', 'Q'], ['map', '지도', 'M']
+  ['journal', '퀘스트', 'Q'], ['map', '지도', 'M'], ['bestiary', '도감', 'B'], ['account', '계정', null]
 ];
 
 function runSlot(index) {
@@ -42,7 +80,11 @@ function updateHotbar() {
     button.dataset.color = entry?.color ?? 'empty';
     button.title = name ?? '빈 슬롯';
     button.setAttribute('aria-label', (i + 1) + '번 · ' + (name ?? '빈 슬롯'));
-    $('#slot-symbol-' + i).textContent = entry?.icon ?? '–';
+    const icon = $('#slot-symbol-' + i);
+    const icons = {hp: 4, mp: 5, skill: p.job === 'ranger' ? 1 : p.job === 'mage' ? 2 : 0, support: 13, home: 6};
+    icon.classList.remove('pixel-icon');
+    icon.textContent = entry ? '' : '–';
+    if (entry) applyIcon(icon, icons[action]);
   }
   updateCombatHUD();
 }
@@ -135,6 +177,7 @@ function openPanel(kind, data = null) {
 }
 function itemDetails(item) {
   const parts = [];
+  if (item.rarity) parts.push(rarityLabels[item.rarity]);
   if (item.slot) parts.push(SLOTS[item.slot], 'Lv. ' + item.level);
   if (item.job) parts.push(CLASSES[item.job].name);
   for (const [key, label] of Object.entries({attack: '공격', defense: '방어', hp: '최대 HP', mp: '최대 MP'})) {
@@ -142,11 +185,14 @@ function itemDetails(item) {
   }
   return parts.join(' · ');
 }
-function panelRow(title, details, action, handler, blocked = false) {
+function panelRow(title, details, action, handler, blocked = false, itemId = null) {
   const row = document.createElement('div');
   row.className = 'panel-row';
+  if (itemId) row.append(makeIcon(itemIcon(itemId), 'row-icon'));
   const label = document.createElement('div');
-  addText('b', title, label);
+  label.className = 'row-label';
+  const itemTitle = addText('b', title, label);
+  if (itemId && ITEMS[itemId].rarity) itemTitle.dataset.rarity = ITEMS[itemId].rarity;
   if (details) addText('small', details, label);
   row.append(label);
   if (action) row.append(shownButton(action, handler, blocked));
@@ -187,13 +233,14 @@ function renderInventory() {
       const id = p.equipment[slot];
       const card = document.createElement('div');
       addText('small', label, card);
+      card.append(makeIcon(id ? itemIcon(id) : 6, id ? 'equip-icon' : 'equip-icon empty-icon'));
       addText('b', id ? ITEMS[id].name : '비어 있음', card);
       equipped.append(card);
     }
     panelElement.append(equipped);
   } else if (bagTab === 'supply') {
-    panelRow('체력 물약 × ' + p.pots, 'HP 55 회복', '사용', () => healWith('potion'), !p.pots);
-    panelRow('마력 물약 × ' + p.tonics, 'MP 35 회복', '사용', () => healWith('tonic'), !p.tonics);
+    panelRow('체력 물약 × ' + p.pots, 'HP 55 회복', '사용', () => healWith('potion'), !p.pots, 'potion');
+    panelRow('마력 물약 × ' + p.tonics, 'MP 35 회복', '사용', () => healWith('tonic'), !p.tonics, 'tonic');
     return;
   }
   const items = Object.entries(p.bag).filter(([id]) => bagTab === 'gear' ? ITEMS[id].slot : !ITEMS[id].slot);
@@ -203,7 +250,7 @@ function renderInventory() {
     const equipped = item.slot && p.equipment[item.slot] === id;
     const details = item.slot ? itemDetails(item) : '상점 판매가 ' + Math.floor(item.price / 2) + ' 메소';
     panelRow(item.name + ' × ' + amount, details, item.slot ? (equipped ? '해제' : '장착') : null,
-      () => toggleEquipment(id), !canEquip(id));
+      () => toggleEquipment(id), !canEquip(id), id);
   }
 }
 
@@ -329,14 +376,14 @@ function renderShop(npc) {
   if (panelTab === 'buy') {
     for (const id of npc.stock) {
       const item = ITEMS[id];
-      panelRow(item.name, itemDetails(item), item.price + ' 메소', () => buy(id, npc.stock), p.gold < item.price);
+      panelRow(item.name, itemDetails(item), item.price + ' 메소', () => buy(id, npc.stock), p.gold < item.price, id);
     }
   } else {
     for (const [id, quantity] of Object.entries(p.bag)) {
       const item = ITEMS[id];
       const locked = p.equipment[item.slot] === id && quantity === 1;
       panelRow(item.name + ' × ' + quantity, locked ? '장착 중' : itemDetails(item),
-        Math.max(1, Math.floor(item.price / 2)) + ' 메소 받기', () => sell(id), locked);
+        Math.max(1, Math.floor(item.price / 2)) + ' 메소 받기', () => sell(id), locked, id);
     }
   }
 }
@@ -395,12 +442,62 @@ function renderQuest(index) {
     addText('p', '의뢰를 완료했어요.');
   }
 }
+function canCraft(recipe) {
+  return p.gold >= recipe.gold && Object.entries(recipe.ingredients).every(([id, amount]) => (p.bag[id] ?? 0) >= amount);
+}
+function craft(id) {
+  const recipe = RECIPES.find(entry => entry.item === id);
+  if (panel?.kind !== 'forge' || !recipe || !canCraft(recipe)) return;
+  for (const [material, amount] of Object.entries(recipe.ingredients)) {
+    p.bag[material] -= amount;
+    if (!p.bag[material]) delete p.bag[material];
+  }
+  p.gold -= recipe.gold;
+  addItem(id);
+  reportLoot([id], 0);
+  updateAfterChange();
+  toast(ITEMS[id].name + ' 제작 완료');
+}
+function renderForge() {
+  addText('p', '보유 메소 ' + p.gold + ' · 재료는 몬스터에게서 얻을 수 있어요.');
+  for (const recipe of RECIPES) {
+    const item = ITEMS[recipe.item];
+    const ingredients = Object.entries(recipe.ingredients).map(([id, amount]) => ITEMS[id].name + ' ' + (p.bag[id] ?? 0) + '/' + amount);
+    panelRow(item.name, [itemDetails(item), ...ingredients, recipe.gold + ' 메소'].join(' · '),
+      '제작', () => craft(recipe.item), !canCraft(recipe), recipe.item);
+  }
+}
+function renderBestiary() {
+  const found = SPECIES.filter((_, index) => p.bestiary[index]).length;
+  addText('p', '발견한 몬스터 ' + found + '/' + SPECIES.length + ' · 몬스터를 처음 잡으면 드롭 정보가 열려요.');
+  for (const [index, species] of SPECIES.entries()) {
+    const count = p.bestiary[index] ?? 0;
+    const title = 'Lv. ' + species.level + ' · ' + (count ? species.name : '미발견');
+    const detail = count ? '처치 ' + count + ' · 드롭 ' + ITEMS[species.loot].name + ' · ' + ITEMS[species.rare].name : null;
+    panelRow(title, detail, null, null, false, count ? species.loot : null);
+  }
+}
+function renderAccount() {
+  addText('p', onMapleeSite ? '이 사이트는 ChatGPT 계정으로 인증한 소유자만 입장할 수 있어요.' :
+    '웹 버전은 ChatGPT 계정 인증으로 입장해요.');
+  const link = document.createElement('a');
+  link.className = 'account-link';
+  link.href = onMapleeSite ? '/signout-with-chatgpt' : MAPLEE_SITE;
+  link.target = '_top';
+  link.textContent = onMapleeSite ? 'ChatGPT 로그아웃' : '웹에서 ChatGPT 로그인';
+  if (onMapleeSite) link.onclick = () => save();
+  panelElement.append(link);
+  addText('p', '캐릭터와 진행 기록은 지금 브라우저에 저장돼요.');
+  panelRow('진행 상황', 'Lv. ' + p.level + ' ' + CLASSES[p.job].name + ' · ' + areaAt(p.x).name,
+    '저장', () => handleKey('KeyK'));
+}
 function renderPanel() {
   panelElement.replaceChildren();
   panelElement.hidden = false;
   const {kind, data} = panel;
   const title = {inventory: '장비와 가방', map: '지역 지도', guide: '유란 · 숲길 안내',
-    character: '캐릭터 능력치', skills: '스킬', journal: '퀘스트 기록', hotkeys: '단축키와 설정'};
+    character: '캐릭터 능력치', skills: '스킬', journal: '퀘스트 기록', hotkeys: '단축키와 설정',
+    bestiary: '몬스터 도감', account: '계정과 저장'};
   const heading = document.createElement('div');
   heading.className = 'panel-heading';
   addText('h2', title[kind] ?? (data.name + ' · ' + data.role), heading);
@@ -416,6 +513,9 @@ function renderPanel() {
   if (kind === 'journal') renderJournal();
   if (kind === 'hotkeys') renderHotkeys();
   if (kind === 'shop') renderShop(data);
+  if (kind === 'forge') renderForge();
+  if (kind === 'bestiary') renderBestiary();
+  if (kind === 'account') renderAccount();
   if (kind === 'trainer') renderTrainer();
   if (kind === 'quest' || kind === 'harbor') renderQuest(data.quest ?? (kind === 'quest' ? 0 : 1));
   if (kind === 'guide') addText('p', '맵 가장자리의 출구에서 ↑를 누르면 다음 지역으로 이동해요. 숲길 깊은 곳과 항구 끝에서는 강한 몬스터가 나와요.');
@@ -454,7 +554,7 @@ function handleKey(code) {
   if (code === 'KeyX') attack(true);
   if (code === 'KeyV') useSupport();
   if (code === 'ArrowUp' && !panel) interact();
-  const menu = menuPanels.find(([, , shortcut]) => code === 'Key' + shortcut);
+  const menu = menuPanels.find(([, , shortcut]) => shortcut && code === 'Key' + shortcut);
   if (menu) openPanel(menu[0]);
   if (code === 'KeyR') home();
   if (code === 'KeyK') toast(save() ? '모험을 저장했어요.' : '저장 공간을 사용할 수 없어요.');

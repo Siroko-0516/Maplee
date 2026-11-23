@@ -2,7 +2,7 @@
 
 const pixelImages = {};
 const pixelMeta = PIXEL_DATA.meta;
-const ASSETS = ['hero', 'monsters', 'background', 'terrain', 'stone', 'props'];
+const ASSETS = ['hero', 'wildlife', 'background', 'terrain', 'stone', 'props', 'depths', 'icons'];
 const heroScale = 0.72;
 const walkCycle = pixelMeta.hero.animations.walk.durations.reduce((sum, duration) => sum + duration, 0);
 let pixelLoaded = 0;
@@ -62,12 +62,13 @@ function rect(x, y, width, height, color) {
   g.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
 }
 function drawBackdrop(area) {
-  const image = pixelImages.background;
+  const image = pixelImages[area.image ?? 'background'];
   const [start, end] = area.backdrop;
   const progress = clamp((camera - area.start) / (area.end - area.start - canvas.width), 0, 1);
   const x = Math.round(image.width * (start + (end - start) * progress));
   // Sample a moving camera window inside the panorama. There is no wrap or tile edge.
-  g.drawImage(image, x, 123, Math.floor(image.width * 0.36), 505, 0, 0, canvas.width, canvas.height);
+  g.drawImage(image, x, area.image ? 0 : 123, Math.floor(image.width * 0.36), area.image ? image.height : 505,
+    0, 0, canvas.width, canvas.height);
 }
 
 function textureBand(image, left, right, deep = false) {
@@ -229,30 +230,70 @@ function drawPlayer() {
 function drawMonster(monster) {
   const death = monster.deathAt === null ? 0 : tick - monster.deathAt;
   if (death >= 20) return;
-  const species = monster.species;
-  const key = ['slime', 'mushroom', 'spirit'][species.sprite];
-  const animation = pixelMeta.monsters.animations[key];
+  const {species} = monster;
   const hurt = Math.max(0, monster.hitUntil - tick);
-  const time = tick * STEP_MS + monster.phase * 7;
-  const frame = hurt || monster.deathAt !== null ? animation.hurtFrame : frameAt(animation, time);
-  const hover = species.float ? Math.sin(time / 220) * 4 : 0;
-  const scale = species.elite ? 1.22 : 0.74;
-  const tint = monster.strikeAt ? 'brightness(1.38)' : species.tint;
-  atlas('monsters', frame, monster.x + (monster.hitDirection ?? 0) * hurt * 0.35,
-    monster.y - hover - death * 0.25, scale, monster.dir, 1 - death / 20, tint);
-  if (monster.deathAt !== null) return;
-  const tagY = monster.y - (species.elite ? 77 : 49);
-  if (species.elite || Math.abs(monster.x - p.x) < 100) pixelText('Lv.' + species.level + ' ' + species.name, monster.x, tagY, '#fff4bf', 10);
-  if (monster.hp < species.hp) {
-    rect(monster.x - 15, tagY + 4, 30, 4, '#263526');
-    rect(monster.x - 14, tagY + 5, 28 * monster.hp / species.hp, 2, '#d3ec82');
+  const walking = Math.floor((tick + monster.phase) / (monster.state === 'pursuit' ? 6 : 10)) % 4;
+  const attacking = monster.lastStrike !== undefined && tick - monster.lastStrike < 8;
+  const pose = hurt || monster.deathAt !== null ? 3 :
+    monster.strikeAt ? 2 : attacking ? 5 : [0, 1, 0, 4][walking];
+  const hop = species.float ? Math.sin((tick + monster.phase) / 10) * 3 : 0;
+  const scale = species.elite ? 1.6 : species.sprite === 4 ? 1.16 : 1.03;
+  const x = monster.x + (monster.hitDirection ?? 0) * hurt * 0.35;
+  if (monster.strikeAt) {
+    const reach = monster.attackRange ?? 25;
+    const left = monster.dir > 0 ? monster.x : monster.x - reach;
+    rect(left, monster.y - 2, reach, 4, species.elite ? '#ffd379a8' : '#f1a57187');
   }
-  if (monster.strikeAt) pixelText('!', monster.x, tagY - 12, '#ffb776', 17);
+  atlas('wildlife', species.sprite * 6 + pose, x, monster.y - hop - death * 0.25,
+    scale, monster.dir, 1 - death / 20, species.tint);
+  if (monster.deathAt !== null) return;
+  const tagY = monster.y - (species.elite ? 77 : 53);
+  const visible = species.elite || Math.abs(monster.x - p.x) < 100;
+  if (visible) pixelText('Lv.' + species.level + ' ' + species.name, monster.x, tagY, '#fff4bf', 10);
+  if (monster.hp < species.hp || species.elite) {
+    const width = species.elite ? 64 : 30;
+    rect(monster.x - width / 2, tagY + 4, width, 5, '#241d32');
+    rect(monster.x - width / 2 + 1, tagY + 5, (width - 2) * monster.hp / species.hp, 3, species.elite ? '#f39477' : '#d3ec82');
+  }
+  if (monster.strikeAt) pixelText('!', monster.x, tagY - 12, '#ffbc77', 17);
+}
+function drawIcon(index, x, y, size) {
+  const tile = pixelImages.icons.width / 4;
+  g.drawImage(pixelImages.icons, index % 4 * tile, Math.floor(index / 4) * tile,
+    tile, tile, Math.round(x - size / 2), Math.round(y - size / 2), size, size);
+}
+function drawDrop(drop) {
+  const progress = Math.min(1, (tick - drop.start) / 26);
+  const height = Math.sin(progress * Math.PI) * 35;
+  const bounce = progress === 1 ? Math.sin((tick - drop.start) / 8) * 3 : 0;
+  const y = drop.y - 9 - height + bounce;
+  drawIcon(7, drop.x - 12, y + 2, 18);
+  drawIcon(itemIcon(drop.item), drop.x + 4, y, 23);
+  if (drop.rare) {
+    drawIcon(itemIcon(drop.rare), drop.x + 22, y - 4, 25);
+    const sparkle = tick % 36;
+    if (sparkle < 16) {
+      rect(drop.x + 30, y - 17 - sparkle / 2, 2, 9, '#fff1ab');
+      rect(drop.x + 27, y - 13 - sparkle / 2, 8, 2, '#fff1ab');
+    }
+  }
 }
 function drawEffect(effect) {
   const {shape, x, y, color, text, direction, duration, start} = effect;
   const progress = (tick - start) / duration;
   if (effect.expired) return;
+  if (shape === 'pickup') {
+    const eased = 1 - (1 - progress) ** 2;
+    drawIcon(effect.icon, x + (effect.endX - x) * eased,
+      y + (effect.endY - y) * eased - Math.sin(progress * Math.PI) * 12, 20);
+    return;
+  }
+  if (shape === 'boss-wave') {
+    const step = Math.round(progress * 8);
+    for (let i = -3; i <= 3; i++) rect(x + i * effect.size / 4, y - (3 - Math.abs(i)) * step,
+      8 + step, 4 + step / 2, step < 5 ? '#fff0a0' : '#f19b7b88');
+    return;
+  }
   if (shape === 'arrow') {
     rect(x - direction * 12, y - 1, 13, 2, '#b6f6df');
     rect(x, y - 2, 4, 4, '#fff4b0');
@@ -293,6 +334,7 @@ function draw() {
   const area = areaAt(p.x);
   drawBackdrop(area);
   drawScenery(area);
+  if (area.tint) rect(0, 0, canvas.width, canvas.height, area.tint);
   const left = Math.floor(camera);
   g.save();
   g.translate(-left, 0);
@@ -301,10 +343,7 @@ function draw() {
   }
   for (const drop of drops) {
     if (areaAt(drop.x) !== area || drop.x < left || drop.x > left + canvas.width) continue;
-    const y = drop.y - 9 + Math.sin(tick / 8) * 3;
-    rect(drop.x - 4, y, 8, 6, '#8f5726');
-    rect(drop.x - 3, y + 1, 6, 4, '#f8d06d');
-    if (drop.rare) rect(drop.x + 5, y - 6, 4, 8, '#96f7fa');
+    drawDrop(drop);
   }
   drawPlayer();
   for (const effect of effects) drawEffect(effect);

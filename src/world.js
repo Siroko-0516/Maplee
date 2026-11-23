@@ -59,7 +59,7 @@ const p = {
   quests: QUESTS.map(() => ({state: 0, count: 0})),
   attributes: Object.fromEntries(Object.keys(ATTRIBUTES).map(id => [id, 0])),
   skillRanks: {primary: 1, support: 0}, hotbar: DEFAULT_HOTBAR.slice(),
-  trackedQuest: null
+  trackedQuest: null, bestiary: {}
 };
 let camera = 0;
 let tick = 0;
@@ -183,6 +183,11 @@ function loadGame() {
     const action = saved.hotbar?.[i];
     return action === null || Object.hasOwn(HOTBAR_ACTIONS, action) ? action : fallback;
   });
+  p.bestiary = {};
+  for (const [index] of SPECIES.entries()) {
+    const count = saved.bestiary?.[index];
+    if (Number.isSafeInteger(count) && count > 0) p.bestiary[index] = count;
+  }
   p.trackedQuest = Number.isInteger(saved.trackedQuest) && p.quests[saved.trackedQuest]?.state === 1 ? saved.trackedQuest : null;
   const limits = stats();
   p.hp = clamp(p.hp, 1, limits.hp);
@@ -269,27 +274,38 @@ function addItem(id) {
 
 function spawn(x, kind, index, ledge = null) {
   const species = SPECIES[kind];
+  const stride = species.elite ? 134 : 86;
   monsters.push({
     x, home: x, y: ledge?.y ?? groundAt(x), kind, ledge, species,
-    left: ledge ? ledge.x + 16 : Math.max(areaAt(x).start + 24, x - 86),
-    right: ledge ? ledge.x + ledge.w - 16 : Math.min(areaAt(x).end - 24, x + 86),
+    left: ledge ? ledge.x + 16 : Math.max(areaAt(x).start + 24, x - stride),
+    right: ledge ? ledge.x + ledge.w - 16 : Math.min(areaAt(x).end - 24, x + stride),
     dir: index % 2 ? 1 : -1, hp: species.hp, deathAt: null, hitUntil: 0,
-    nextStrike: 0, strikeAt: 0, phase: index * 31
+    nextStrike: 0, strikeAt: 0, phase: index * 31, state: 'patrol'
   });
 }
 
 function populate() {
-  const kindFor = x => x < 3780 ? 0 : x < 6100 ? 1 : x < 9100 ? 2 : 3;
-  for (let index = 0, x = 2580; x < 11520; x += 213, index++) {
-    if (x >= 9290 && x <= 10810) continue;
-    spawn(x, kindFor(x), index);
+  const kindFor = (x, index) => {
+    if (x < 3780) return 0;
+    if (x < 6100) return 1;
+    if (x < 9100) return 2;
+    if (x < 12000) return index % 2 ? 3 : 5;
+    if (x < 13040) return index % 2 ? 5 : 6;
+    if (x < 14900) return index % 3 ? 6 : 7;
+    return index % 2 ? 8 : 9;
+  };
+  for (let index = 0, x = 2580; x < 18070; x += 213, index++) {
+    if (x >= 9290 && x <= 10810 || x > 11520 && x < 12500 ||
+      x > 14900 && x < 15500) continue;
+    spawn(x, kindFor(x, index), index);
   }
   for (const [index, ledge] of ledges.entries()) {
     if (ledge.x >= 2450 && index % 3 !== 0 && (ledge.x < 9100 || ledge.x > 10900)) {
-      spawn(ledge.x + Math.round(ledge.w * 0.6), kindFor(ledge.x), index, ledge);
+      spawn(ledge.x + Math.round(ledge.w * 0.6), kindFor(ledge.x, index), index, ledge);
     }
   }
   spawn(11780, 4, 1);
+  spawn(18120, 10, 1);
 }
 
 function textEffect(text, x, y, color = '#ffe381') {
@@ -300,6 +316,7 @@ function reward(monster) {
   monster.deathAt = tick;
   monster.strikeAt = 0;
   p.kills++;
+  p.bestiary[monster.kind] = (p.bestiary[monster.kind] ?? 0) + 1;
   gainXP(monster.species.xp);
   for (const [index, quest] of QUESTS.entries()) {
     const entry = p.quests[index];
@@ -309,8 +326,9 @@ function reward(monster) {
     }
   }
   drops.push({
-    x: monster.x, y: monster.y, gold: monster.species.gold, item: monster.species.loot,
-    rare: monster.species.elite || Math.random() < 0.16 ? monster.species.rare : null, until: tick + 1000
+    x: monster.x, y: monster.y, gold: monster.species.gold, item: monster.species.loot, start: tick,
+    rare: monster.species.elite || Math.random() < 0.16 ? monster.species.rare : null,
+    bonus: Math.random() < 0.18 ? (monster.kind % 2 ? 'tonic' : 'potion') : null, until: tick + 1000
   });
   updateHUD();
 }
@@ -321,10 +339,11 @@ function pickupDrops() {
     if (Math.abs(drop.x - p.x) > 34 || Math.abs(drop.y - p.y) > 30) return true;
     p.gold += drop.gold;
     addItem(drop.item);
-    if (drop.rare) {
-      addItem(drop.rare);
-      toast(ITEMS[drop.rare].name + ' 획득 · I 가방');
-    }
+    if (drop.rare) addItem(drop.rare);
+    if (drop.bonus) addItem(drop.bonus);
+    reportLoot([drop.item, drop.rare, drop.bonus].filter(Boolean), drop.gold);
+    effects.push({shape: 'pickup', icon: itemIcon(drop.rare ?? drop.item), x: drop.x, y: drop.y - 7,
+      endX: p.x, endY: p.y - 35, duration: 19, start: tick});
     textEffect('+' + drop.gold + ' 메소', p.x, p.y - 54);
     updateHUD();
     return false;
@@ -355,7 +374,11 @@ function damage(monster, amount, direction) {
   monster.hp -= amount;
   monster.hitUntil = tick + 10;
   monster.hitDirection = direction;
-  monster.strikeAt = 0;
+  if (!monster.species.elite) {
+    monster.strikeAt = 0;
+    monster.nextStrike = Math.max(monster.nextStrike, tick + 13);
+  }
+  if (monster.species.aggro && monster.state !== 'return') monster.state = 'pursuit';
   monster.x = clamp(monster.x + direction * 8, monster.left, monster.right);
   if (!monster.ledge) monster.y = groundAt(monster.x);
   textEffect(String(amount), monster.x, monster.y - 46);
@@ -409,47 +432,100 @@ function advanceEffects() {
   }
 }
 
+function moveMonsterToward(monster, destination, speed) {
+  const difference = destination - monster.x;
+  if (difference) monster.dir = Math.sign(difference);
+  monster.x = clamp(monster.x + clamp(difference, -speed, speed), monster.left, monster.right);
+  if (!monster.ledge) monster.y = groundAt(monster.x);
+}
+
+function receiveHit(monster, power) {
+  if (tick < invulnerableUntil) return;
+  const lost = Math.max(1, power - Math.floor(stats().defense + supportValue('defense')));
+  p.hp = Math.max(0, p.hp - lost);
+  invulnerableUntil = tick + 55;
+  hurtUntil = tick + 10;
+  climbing = swing = null;
+  p.grounded = false;
+  p.vy = -3.4;
+  textEffect('-' + lost, p.x, p.y - 52, '#ffad9e');
+  beep(monster.species.elite ? 108 : 150);
+  if (!p.hp) {
+    travelTo(START_X);
+    p.hp = stats().hp;
+    p.mp = stats().mp;
+    toast('솔방울 마을에서 회복했어요.');
+  }
+  updateHUD();
+}
+
 function moveMonsters() {
   for (const monster of monsters) {
+    const {species} = monster;
     if (monster.deathAt !== null) {
-      if (tick - monster.deathAt >= (monster.species.elite ? 900 : 340)) {
-        monster.hp = monster.species.hp;
+      if (tick - monster.deathAt >= (species.elite ? 900 : 340)) {
+        monster.hp = species.hp;
         monster.x = monster.home;
         monster.y = monster.ledge?.y ?? groundAt(monster.x);
         monster.deathAt = null;
+        monster.state = 'patrol';
+        monster.strikeAt = 0;
         monster.nextStrike = tick + 40;
       }
       continue;
     }
-    if (!monster.strikeAt && monster.hitUntil <= tick) {
-      monster.x = clamp(monster.x + monster.dir * monster.species.speed, monster.left, monster.right);
-      if (monster.x === monster.left || monster.x === monster.right) monster.dir *= -1;
-      if (!monster.ledge) monster.y = groundAt(monster.x);
-    }
-    const close = areaAt(monster.x) === areaAt(p.x) && Math.abs(monster.x - p.x) < (monster.species.elite ? 65 : 27) && Math.abs(monster.y - p.y) < 26;
-    if (monster.strikeAt && tick >= monster.strikeAt) {
-      monster.strikeAt = 0;
-      monster.nextStrike = tick + 62;
-      if (close && tick >= invulnerableUntil) {
-        const lost = Math.max(1, monster.species.attack - Math.floor(stats().defense + supportValue('defense')));
-        p.hp = Math.max(0, p.hp - lost);
-        invulnerableUntil = tick + 55;
-        hurtUntil = tick + 10;
-        climbing = swing = null;
-        p.grounded = false;
-        p.vy = -3.4;
-        textEffect('-' + lost, p.x, p.y - 52, '#ffad9e');
-        beep(150);
-        if (!p.hp) {
-          travelTo(START_X);
-          p.hp = stats().hp;
-          p.mp = stats().mp;
-          toast('솔방울 마을에서 회복했어요.');
-        }
-        updateHUD();
+    if (areaAt(monster.home) !== areaAt(p.x)) {
+      if (monster.state !== 'patrol' || monster.strikeAt) {
+        monster.x = monster.home;
+        monster.y = monster.ledge?.y ?? groundAt(monster.x);
+        monster.state = 'patrol';
+        monster.strikeAt = 0;
       }
-    } else if (!monster.strikeAt && close && tick >= monster.nextStrike && monster.hitUntil <= tick) {
-      monster.strikeAt = tick + (monster.species.elite ? 30 : 16);
+      continue;
+    }
+    const sameHeight = Math.abs(monster.y - p.y) < 37;
+    const distance = Math.abs(monster.x - p.x);
+    const enraged = species.elite && monster.hp <= species.hp * 0.5;
+    const reach = species.elite ? (enraged ? 90 : 60) : 25;
+    if (monster.strikeAt) {
+      if (tick < monster.strikeAt) continue;
+      monster.strikeAt = 0;
+      monster.lastStrike = tick;
+      monster.nextStrike = tick + (enraged ? 46 : 64);
+      const attackRange = monster.attackRange ?? reach;
+      if (species.elite) effects.push({
+        shape: 'boss-wave', x: monster.x + monster.dir * attackRange / 2, y: monster.y - 10,
+        size: attackRange / 2 + 6, duration: 20, start: tick
+      });
+      const offset = (p.x - monster.x) * monster.dir;
+      if (sameHeight && offset >= -12 && offset <= attackRange) {
+        receiveHit(monster, Math.ceil(species.attack * (enraged ? 1.2 : 1)));
+      }
+      continue;
+    }
+    if (monster.hitUntil > tick) continue;
+    const nearHome = Math.abs(p.x - monster.home) <= (species.aggro ?? 55) + 70;
+    if (monster.state === 'pursuit' && (!nearHome || !sameHeight || distance > (species.aggro ?? 45) + 80)) {
+      monster.state = 'return';
+    }
+    if (monster.state === 'patrol' && species.aggro && sameHeight && nearHome && distance <= species.aggro) {
+      monster.state = 'pursuit';
+    }
+    if (monster.state !== 'return' && sameHeight && distance <= reach && tick >= monster.nextStrike) {
+      monster.dir = Math.sign(p.x - monster.x) || monster.dir;
+      monster.attackRange = reach;
+      monster.strikeAt = tick + (species.elite ? (enraged ? 24 : 34) : 17);
+      continue;
+    }
+    if (monster.state === 'return') {
+      moveMonsterToward(monster, monster.home, species.speed * 1.6);
+      if (monster.x === monster.home) monster.state = 'patrol';
+    } else if (monster.state === 'pursuit') {
+      if (distance > reach - 2) moveMonsterToward(monster, p.x, species.speed * (enraged ? 2.35 : 1.9));
+    } else {
+      const target = monster.dir > 0 ? monster.right : monster.left;
+      moveMonsterToward(monster, target, species.speed);
+      if (monster.x === target) monster.dir *= -1;
     }
   }
 }

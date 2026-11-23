@@ -1,10 +1,12 @@
 'use strict';
 
-const WORLD_WIDTH = 12000;
+const WORLD_WIDTH = 18300;
 const AREAS = [
   {name: '솔방울 마을', start: 0, end: 2450, icon: '🍄', material: 'stone', backdrop: [0.01, 0.14]},
   {name: '종꽃 숲길', start: 2450, end: 9100, icon: '🌿', material: 'terrain', backdrop: [0.19, 0.49]},
-  {name: '푸른돛 항구', start: 9100, end: WORLD_WIDTH, icon: '⚓', material: 'stone', backdrop: [0.56, 0.63]}
+  {name: '푸른돛 항구', start: 9100, end: 12000, icon: '⚓', material: 'stone', backdrop: [0.56, 0.63]},
+  {name: '유리빛 광산', start: 12000, end: 14900, icon: '💎', material: 'stone', image: 'depths', backdrop: [0.02, 0.13], tint: '#271d5455'},
+  {name: '달바람 고원', start: 14900, end: WORLD_WIDTH, icon: '🌙', material: 'terrain', image: 'depths', backdrop: [0.51, 0.63], tint: '#44275933'}
 ];
 
 const groundPoints = [
@@ -13,7 +15,9 @@ const groundPoints = [
   [4460, 403], [4800, 403], [5050, 358], [5430, 358], [5710, 318], [6050, 318],
   [6350, 382], [6820, 382], [7110, 332], [7540, 332], [7820, 413], [8180, 413],
   [8460, 379], [8740, 379], [9090, 397], [9510, 397], [9800, 352], [10310, 352],
-  [10640, 305], [11000, 305], [11310, 355], [WORLD_WIDTH, 355]
+  [10640, 305], [11000, 305], [11310, 355], [12000, 355], [12450, 398], [12860, 398], [13220, 336],
+  [13550, 336], [13910, 397], [14250, 397], [14600, 342], [14900, 342], [15250, 388], [15750, 388],
+  [16120, 324], [16600, 324], [16900, 379], [17270, 379], [17600, 339], [WORLD_WIDTH, 339]
 ];
 
 const ledges = [
@@ -26,7 +30,13 @@ const ledges = [
   [7200, 162, 252, 20], [7510, 223, 295, 122], [7820, 288, 224, 103], [8030, 198, 244, 16],
   [8320, 285, 275, 151], [8570, 214, 253, 18], [8860, 271, 223, 117], [9120, 224, 309, 145],
   [9410, 147, 215, 16], [9705, 246, 291, 122], [10040, 197, 263, 137], [10400, 221, 249, 135],
-  [10640, 138, 230, 16], [10970, 212, 298, 155], [11240, 152, 184, 18], [11510, 237, 280, 95]
+  [10640, 138, 230, 16], [10970, 212, 298, 155], [11240, 152, 184, 18], [11510, 237, 280, 95],
+  [12100,262,260,114], [12330,169,290,22], [12630,280,260,96], [12890,224,280,105],
+  [13140,138,230,20], [13410,237,275,108], [13710,294,240,110], [13950,195,260,125],
+  [14200,274,280,102], [14450,179,250,26], [14710,245,175,75], [15020,246,250,99],
+  [15250,154,260,16], [15550,268,270,135], [15850,208,282,132], [16110,123,260,17],
+  [16400,238,255,122], [16650,182,265,19], [16950,275,312,116], [17250,186,240,25],
+  [17500,252,254,119], [17800,209,340,120]
 ].map(([x, y, w, ladderOffset]) => ({x, y, w, ladderX: x + ladderOffset}));
 
 const sceneryProps = [
@@ -38,7 +48,10 @@ const sceneryProps = [
   [6180,3,109,276], [6370,2,179], [6760,3,102,124], [7050,3,117,252], [7445,2,181],
   [7680,3,100,223], [7990,2,162], [8170,3,114,198], [8430,2,170], [8765,3,121,214],
   [9000,2,145], [9300,4,154,224], [9470,4,217], [9850,2,120], [10150,4,182],
-  [10355,3,76], [10730,5,196], [11155,4,205], [11670,5,185]
+  [10355,3,76], [10730,5,196], [11155,4,205], [11670,5,185],
+  [12200,3,105,262], [12439,3,108], [13000,3,105,224], [13555,3,130], [14020,3,119,195],
+  [14630,3,122], [15140,2,134,246], [15500,3,115], [16020,2,143,208],
+  [16520,3,104,238], [17010,2,170], [17660,3,114,252], [18140,2,184]
 ];
 
 const CLASSES = {
@@ -85,7 +98,18 @@ const ITEMS = {
   ash: {name: '안개 가루', price: 39},
   coral: {name: '바람 산호', price: 56},
   potion: {name: '체력 물약', price: 28},
-  tonic: {name: '마력 물약', price: 32}
+  tonic: {name: '마력 물약', price: 32},
+  quartz: {name: '별철 원석', price: 68, icon: 12, rarity: 'uncommon'},
+  plume: {name: '달바람 깃털', price: 85, icon: 15, rarity: 'uncommon'},
+  anchor: {name: '수문장의 닻 파편', price: 120, icon: 13, rarity: 'rare'},
+  nightcore: {name: '달철 심장', price: 220, icon: 13, rarity: 'epic'},
+  glasscoat: {name: '유리맥 갑옷', slot: 'armor', level: 10, defense: 12, hp: 54, price: 620, icon: 14, rarity: 'rare'},
+  moonseal: {name: '달바람 인장', slot: 'charm', level: 12, attack: 8, hp: 36, mp: 42, price: 830, icon: 12, rarity: 'epic'},
+  sunblade: {name: '황혼의 대검', slot: 'weapon', level: 11, job: 'guardian', attack: 29, hp: 26, price: 920, icon: 0, rarity: 'epic'},
+  nightbow: {name: '월백의 순풍궁', slot: 'weapon', level: 11, job: 'ranger', attack: 27, mp: 22, price: 920, icon: 1, rarity: 'epic'},
+  tidewand: {name: '유리별 홀', slot: 'weapon', level: 11, job: 'mage', attack: 27, mp: 34, price: 920, icon: 2, rarity: 'epic'},
+  crabguard: {name: '산호 외투', slot: 'armor', level: 8, defense: 9, hp: 43, price: 515, icon: 3, rarity: 'rare'},
+  shimmer: {name: '반딧불 목걸이', slot: 'charm', level: 9, hp: 27, mp: 30, price: 555, icon: 13, rarity: 'rare'}
 };
 const SLOTS = {weapon: '무기', armor: '방어구', charm: '장신구'};
 const SPECIES = [
@@ -93,7 +117,13 @@ const SPECIES = [
   {name: '호박 갓버섯', level: 3, sprite: 1, hp: 34, attack: 13, xp: 32, gold: 23, speed: 0.8, loot: 'spores', rare: 'cap'},
   {name: '안개 정령', level: 5, sprite: 2, hp: 57, attack: 19, xp: 52, gold: 35, speed: 1.0, float: true, loot: 'ash', rare: 'dew'},
   {name: '소금 갓버섯', level: 7, sprite: 1, tint: 'hue-rotate(143deg)', hp: 84, attack: 25, xp: 75, gold: 50, speed: 1.05, loot: 'coral', rare: 'shell'},
-  {name: '등대 수문장', level: 9, sprite: 2, tint: 'hue-rotate(42deg)', hp: 190, attack: 34, xp: 190, gold: 140, speed: 1.2, float: true, loot: 'coral', rare: 'prism', elite: true}
+  {name: '등대 수문장', level: 9, sprite: 2, tint: 'hue-rotate(42deg)', hp: 190, attack: 34, xp: 190, gold: 140, speed: 1.2, float: true, loot: 'anchor', rare: 'prism', elite: true, aggro: 105},
+  {name: '유리집게', level: 8, sprite: 3, hp: 95, attack: 24, xp: 83, gold: 54, speed: 1.25, loot: 'coral', rare: 'crabguard', aggro: 110},
+  {name: '수정방울', level: 9, sprite: 0, tint: 'hue-rotate(138deg)', hp: 119, attack: 28, xp: 103, gold: 67, speed: 1.00, loot: 'quartz', rare: 'glasscoat', aggro: 90},
+  {name: '별철 파수꾼', level: 11, sprite: 4, hp: 175, attack: 35, xp: 142, gold: 81, speed: 1.05, loot: 'quartz', rare: 'glasscoat', aggro: 144},
+  {name: '달바람 정령', level: 12, sprite: 2, tint: 'hue-rotate(277deg)', hp: 204, attack: 39, xp: 171, gold: 93, speed: 1.35, float: true, loot: 'plume', rare: 'shimmer', aggro: 143},
+  {name: '월광 집게', level: 13, sprite: 3, tint: 'hue-rotate(65deg)', hp: 231, attack: 43, xp: 196, gold: 104, speed: 1.5, loot: 'plume', rare: 'moonseal', aggro: 147},
+  {name: '달철 기사', level: 15, sprite: 4, tint: 'hue-rotate(215deg)', hp: 655, attack: 55, xp: 680, gold: 390, speed: 1.28, loot: 'nightcore', rare: 'moonseal', elite: true, aggro: 193}
 ];
 const NPCS = [
   {x: 475, name: '리나', role: '의뢰', kind: 'quest'},
@@ -102,7 +132,13 @@ const NPCS = [
   {x: 2230, name: '유란', role: '숲길 안내', kind: 'guide'},
   {x: 5710, name: '노을', role: '숲길 의뢰', kind: 'quest', quest: 2},
   {x: 9660, name: '마레', role: '항구 장비점', kind: 'shop', stock: ['potion','tonic','blade','bow','wand','shell','prism']},
-  {x: 10670, name: '등대지기', role: '의뢰', kind: 'harbor'}
+  {x: 10670, name: '등대지기', role: '의뢰', kind: 'harbor'},
+  {x: 12170, name: '리오', role: '대장간', kind: 'forge'},
+  {x: 12425, name: '하람', role: '광산 의뢰', kind: 'quest', quest: 3},
+  {x: 13370, name: '수아', role: '광산 조사', kind: 'quest', quest: 4},
+  {x: 15095, name: '여울', role: '고원 의뢰', kind: 'quest', quest: 5},
+  {x: 15320, name: '찬별', role: '고원 보급품', kind: 'shop', stock: ['potion','tonic','crabguard','glasscoat','shimmer']},
+  {x: 16645, name: '자야', role: '달철 기사 의뢰', kind: 'quest', quest: 6}
 ];
 const QUESTS = [
   {
@@ -116,5 +152,26 @@ const QUESTS = [
   {
     name: '종꽃에 남은 안개', who: '노을', area: 1, target: 5, matches: [2], xp: 155, gold: 120, item: 'dew',
     detail: '숲길 깊은 곳에서 안개 정령을 처치하세요.'
-  }
+  },
+  {name: '유리맥 안전 점검', who: '하람', area: 3, target: 8, matches: [6,7], xp: 350, gold: 240, item: 'glasscoat',
+    detail: '광산의 수정방울과 별철 파수꾼을 처치하세요.'},
+  {name: '광산의 푸른 집게', who: '수아', area: 3, target: 5, matches: [5], xp: 240, gold: 165, item: 'crabguard',
+    detail: '광산 입구와 항구에서 유리집게를 처치하세요.'},
+  {name: '달바람 관측', who: '여울', area: 4, target: 9, matches: [8,9], xp: 500, gold: 330, item: 'shimmer',
+    detail: '고원의 달바람 정령과 월광 집게를 처치하세요.'},
+  {name: '납빛 갑옷의 밤', who: '자야', area: 4, target: 1, matches: [10], xp: 720, gold: 450, item: 'moonseal',
+    detail: '고원 끝의 달철 기사를 쓰러뜨리세요.'}
 ];
+
+const RECIPES = [
+  {item: 'crabguard', ingredients: {coral: 4}, gold: 105},
+  {item: 'glasscoat', ingredients: {quartz: 5, coral: 2}, gold: 180},
+  {item: 'shimmer', ingredients: {ash: 4, quartz: 2}, gold: 160},
+  {item: 'sunblade', ingredients: {quartz: 8, anchor: 1}, gold: 325},
+  {item: 'nightbow', ingredients: {quartz: 8, anchor: 1}, gold: 325},
+  {item: 'tidewand', ingredients: {quartz: 8, anchor: 1}, gold: 325},
+  {item: 'moonseal', ingredients: {plume: 6, nightcore: 1}, gold: 390}
+];
+const ITEM_ICONS = {twig: 0, bronze: 0, blade: 0, bow: 1, wand: 2, coat: 14, cap: 14,
+  dew: 12, shell: 3, prism: 12, jelly: 8, spores: 9, ash: 10, coral: 11, potion: 4, tonic: 5};
+const itemIcon = id => ITEMS[id]?.icon ?? ITEM_ICONS[id] ?? 6;

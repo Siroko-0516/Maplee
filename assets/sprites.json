@@ -84,58 +84,6 @@
       }
     }
   },
-  "monsters": {
-    "file": "monsters.png",
-    "columns": 4,
-    "rows": 3,
-    "frameWidth": 80,
-    "frameHeight": 80,
-    "anchor": [
-      40,
-      76
-    ],
-    "animations": {
-      "slime": {
-        "frames": [
-          0,
-          1,
-          2
-        ],
-        "hurtFrame": 3,
-        "durations": [
-          220,
-          150,
-          220
-        ]
-      },
-      "mushroom": {
-        "frames": [
-          4,
-          5,
-          6
-        ],
-        "hurtFrame": 7,
-        "durations": [
-          220,
-          150,
-          220
-        ]
-      },
-      "spirit": {
-        "frames": [
-          8,
-          9,
-          10
-        ],
-        "hurtFrame": 11,
-        "durations": [
-          220,
-          150,
-          220
-        ]
-      }
-    }
-  },
   "props": [
     [
       0,
@@ -173,5 +121,15 @@
       108,
       155
     ]
-  ]
+  ],
+  "wildlife": {
+    "columns": 6,
+    "rows": 5,
+    "frameWidth": 72,
+    "frameHeight": 72,
+    "anchor": [
+      36,
+      66
+    ]
+  }
 }

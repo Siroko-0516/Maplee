@@ -15,7 +15,8 @@ async function main() {
   const mini = createCanvas(200, 46);
   function node(tag) {
     return {
-      tag, children: [], style: {}, dataset: {},
+      tag, children: [], style: {setProperty(name, value) { this[name] = value; }}, dataset: {},
+      classList: {add() {}, remove() {}},
       append(...children) { this.children.push(...children); },
       replaceChildren() { this.children = []; }, setAttribute() {}
     };
@@ -26,6 +27,7 @@ async function main() {
   const storage = {[key]: JSON.stringify({x: 310, level: 2, xp: 12, hp: 62, gold: 17, kills: 4, pots: 3, quest: 1})};
   const sandbox = vm.createContext({
     document: {
+      documentElement: node('html'),
       querySelector: selector => selector === 'canvas' ? canvas : elements.get(selector.slice(1)),
       querySelectorAll: () => [], createElement: node
     },
@@ -147,7 +149,13 @@ async function main() {
     check(p.quests[1].count === 1 && drops.at(-1).rare === 'prism', 'elite drop and quest');
     travelTo(11780);
     step();
-    check(p.bag.prism >= 1, 'elite equipment can be picked up');
+    check(p.bag.prism >= 1 && p.bestiary[4] === 1, 'boss equipment is picked up and recorded');
+    check(effects.some(effect => effect.shape === 'pickup'), 'loot pickup animation');
+    handleKey('KeyB');
+    check(panel.kind === 'bestiary' && $('#panel').children.some(child =>
+      child.children?.some(inner => inner.children?.some(text => text.textContent?.includes('등대 수문장')))),
+      'bestiary opens and lists defeated bosses');
+    closePanel();
     p.quests[2].state = 1;
     handleKey('KeyQ');
     check(panel?.kind === 'journal', 'quest shortcut opens journal');
@@ -186,9 +194,56 @@ async function main() {
     check(p.attributes.strength === 1 && p.skillRanks.primary === 2 && p.skillRanks.support === 1 &&
       p.hotbar[0] === 'support' && p.hotbar[3] === null && p.trackedQuest === 2,
       'points, skill ranks, quickslots and tracked quest persist');
+    check(p.bestiary[4] === 1, 'bestiary survives a save round trip');
+
+    monsters = [];
+    const miner = NPCS.find(npc => npc.kind === 'forge');
+    travelTo(miner.x);
+    interact();
+    check(panel?.kind === 'forge', 'mine blacksmith opens crafting');
+    p.bag.quartz = 5;
+    p.bag.coral = 2;
+    p.gold = 179;
+    const coats = p.bag.glasscoat ?? 0;
+    craft('glasscoat');
+    check((p.bag.glasscoat ?? 0) === coats && p.bag.quartz === 5, 'cannot craft without payment');
+    p.gold = 200;
+    craft('glasscoat');
+    check(p.bag.glasscoat === coats + 1 && p.gold === 20 && !p.bag.quartz && !p.bag.coral,
+      'forge exchanges loot and gold for equipment');
+    closePanel();
+
+    travelTo(12670);
+    spawn(12750, 5, 0);
+    const crab = monsters[0];
+    const crabStart = crab.x;
+    advance(4);
+    check(crab.state === 'pursuit' && crab.x < crabStart, 'crab detects and pursues player');
+    travelTo(12990);
+    step();
+    check(crab.state === 'return', 'leash stops pursuit');
+    advance(80);
+    check(crab.state === 'patrol', 'crab resumes patrol at home');
+
+    monsters = [];
+    travelTo(18154);
+    spawn(18120, 10, 0);
+    const elite = monsters[0];
+    elite.hp = Math.floor(elite.hp / 2);
+    step();
+    check(elite.strikeAt > tick && elite.attackRange === 90, 'late boss enters enraged attack windup');
+    const beforeDodge = p.hp;
+    travelTo(18260);
+    advance(25);
+    check(p.hp === beforeDodge && effects.some(e => e.shape === 'boss-wave'), 'boss telegraph resolves and can be dodged');
+
+    openPanel('account');
+    check($('#panel').children.some(child => child.tag === 'a' && child.href.startsWith('https://maplee-')),
+      'offline account panel leads to native hosted login');
+    closePanel();
   `);
 
-  for (const [index, x] of [650, 4720, 10470].entries()) {
+  for (const [index, x] of [650, 4720, 10470, 13050, 17570].entries()) {
     run('monsters = []; populate(); travelTo(' + x + '); effects = []; drops = []; draw();');
     if (process.env.MAPLEE_RENDER_DIR) {
       fs.writeFileSync(path.join(process.env.MAPLEE_RENDER_DIR, 'maplee-area-' + index + '.png'), canvas.toBuffer('image/png'));
@@ -223,7 +278,7 @@ async function main() {
       }
     }
   `);
-  console.log('PASS: offline HTML, slopes, three separate maps, ground and backdrop continuity, ladder, combat, jobs, equipment, shop, quests, AP/SP, quickslots, minimap and saves');
+  console.log('PASS: offline HTML, slopes, five separate maps, ground and backdrop continuity, ladder, combat, jobs, equipment, shop, quests, AP/SP, quickslots, forge, bestiary, monster AI, minimap and saves');
 }
 
 main().catch(error => {
