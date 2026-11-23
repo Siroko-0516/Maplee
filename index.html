@@ -8,58 +8,9 @@
 </head>
 <body>
 <main class="game">
-  <div class="scene">
-    <canvas id="game-canvas" width="960" height="468" aria-label="Maplee 게임 화면. 방향키 이동, 스페이스 점프, Z 공격, X 스킬, V 보조 스킬, 위 방향키 대화와 출구"></canvas>
-    <div class="overlay-top">
-      <button id="minimap-button" type="button" class="minimap-card">
-        <span class="minimap-title"><b id="region">솔방울 마을</b><kbd>M</kbd></span>
-        <span class="minimap-plot">
-          <canvas id="minimap" width="200" height="46" aria-hidden="true"></canvas>
-          <span id="minimap-player" aria-hidden="true"></span>
-        </span>
-      </button>
-      <button class="quest-card" id="quest-button" type="button">
-        <span><b>퀘스트</b><kbd>Q</kbd></span><strong id="quest">마을의 리나와 대화</strong>
-      </button>
-    </div>
-    <div class="toast" id="toast" role="status">그래픽을 불러오는 중이에요.</div>
-    <div class="buff" id="buff-status"></div>
-    <div id="loot-feed" class="loot-feed" role="status" hidden></div>
-    <div class="mobile" aria-label="터치 조작">
-      <div><button aria-label="왼쪽" data-key="ArrowLeft">◀</button><button aria-label="오른쪽" data-key="ArrowRight">▶</button><button aria-label="사다리 내려가기" data-key="ArrowDown">↓</button></div>
-      <div><button data-key="Space">점프</button><button data-key="KeyZ">공격</button><button data-key="KeyX">스킬</button><button data-key="ArrowUp">대화·출구</button></div>
-    </div>
-  </div>
-  <footer class="dock">
-    <section class="vitals" aria-label="캐릭터 상태">
-      <div class="name"><span><b id="lv"></b> <b id="job"></b></span><span id="gold"></span></div>
-      <div class="vital-track">
-        <div class="meter hp"><div class="fill" id="hpbar"></div><span><b>HP</b> <span id="hp"></span></span></div>
-        <div class="meter mp"><div class="fill" id="mpbar"></div><span><b>MP</b> <span id="mp"></span></span></div>
-      </div>
-    </section>
-    <nav class="hotbar" aria-label="1~4 단축키">
-      <button class="quickslot" type="button" id="slot-0"><kbd>1</kbd><b id="slot-symbol-0"></b><small id="slot-count-0"></small></button>
-      <button class="quickslot" type="button" id="slot-1"><kbd>2</kbd><b id="slot-symbol-1"></b><small id="slot-count-1"></small></button>
-      <button class="quickslot" type="button" id="slot-2"><kbd>3</kbd><b id="slot-symbol-2"></b><small id="slot-count-2"></small></button>
-      <button class="quickslot" type="button" id="slot-3"><kbd>4</kbd><b id="slot-symbol-3"></b><small id="slot-count-3"></small></button>
-    </nav>
-    <nav class="game-menu" aria-label="게임 메뉴">
-      <button type="button" id="character"><kbd>C</kbd>능력치 <span id="point-badge"></span></button>
-      <button type="button" id="skills"><kbd>S</kbd>스킬 <span id="skill-point-badge"></span></button>
-      <button type="button" id="inventory"><kbd>I</kbd>장비·가방</button>
-      <button type="button" id="journal"><kbd>Q</kbd>퀘스트</button>
-      <button type="button" id="map"><kbd>M</kbd>지도</button>
-      <button type="button" id="bestiary"><kbd>B</kbd>도감</button>
-      <button type="button" id="account">계정</button>
-      <button type="button" id="hotkeys">설정</button>
-      <button type="button" id="pause">일시정지</button>
-    </nav>
-    <div class="experience">
-      <span>EXP</span><div class="exp-track"><div class="fill" id="xpbar"></div><span id="xp"></span></div><span id="xp-percent"></span>
-    </div>
-  </footer>
-  <dialog id="game-modal" aria-labelledby="panel-title"><section class="panel" id="panel"></section></dialog>
+  <canvas id="game-canvas" width="960" height="468" aria-label="Maplee 필드"></canvas>
+  <canvas id="interface" width="960" height="540" tabindex="0" aria-label="Maplee 게임. 방향키 이동, Space 점프, Z 공격, ↑ 대화. C 능력치, I 장비, Tab 조작 선택, Enter 실행, Esc 창 닫기."></canvas>
+  <output id="toast" role="status" aria-live="polite">게임을 불러오는 중이에요.</output>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
@@ -69,9 +20,8 @@ game_app = App()
 </script>
 <script>
 window.addEventListener("DOMContentLoaded", () => {
-  if (typeof brython === "function") {
-    brython({debug: 1});
-  } else {
+  if (typeof brython !== "function") {
+    document.getElementById("toast").className = "failure";
     document.getElementById("toast").textContent = "Python 실행기를 불러오지 못했어요. 새로고침해 주세요.";
   }
 });

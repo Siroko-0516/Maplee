@@ -21,14 +21,25 @@ class Renderer:
         self.ctx = canvas.getContext("2d")
         self.ctx.imageSmoothingEnabled = False
         self.images = {}
+        self.sizes = {}
         self.loaded = set()
         self.failed = set()
         for name, path in IMAGES.items():
             img = window.Image.new()
-            img.onload = lambda *events, name=name: self.loaded.add(name)
+            img.onload = lambda *events, name=name, img=img: self.image_loaded(name, img)
             img.onerror = lambda *events, name=name: self.failed.add(name)
             self.images[name] = img
             img.src = "assets/" + path
+
+    def image_loaded(self, name, image):
+        # Brython reserves DOMNode.width/height for CSS. Decode intrinsic pixels once.
+        width = int(number(image.naturalWidth))
+        height = int(number(image.naturalHeight))
+        if width > 0 and height > 0:
+            self.sizes[name] = (width, height)
+            self.loaded.add(name)
+        else:
+            self.failed.add(name)
 
     def resize(self, _=None):
         bounds = self.canvas.getBoundingClientRect()
@@ -80,15 +91,18 @@ class Renderer:
                            round(x - size / 2), round(y - size / 2), size, size)
 
     def backdrop(self, area, left):
-        image = self.images[area.get("image", "background")]
+        key = area.get("image", "background")
+        image = self.images[key]
+        width, height = self.sizes[key]
         start, end = area["backdrop"]
         progress = limit((left - area["start"]) / (area["end"] - area["start"] - WIDTH), 0, 1)
-        self.ctx.drawImage(image, round(image.width * (start + (end - start) * progress)), 0 if area.get("image") else 123,
-                           int(.36 * image.width), image.height if area.get("image") else 505, 0, 0, WIDTH, HEIGHT)
+        self.ctx.drawImage(image, round(width * (start + (end - start) * progress)), 0 if area.get("image") else 123,
+                           int(.36 * width), height if area.get("image") else 505, 0, 0, WIDTH, HEIGHT)
 
-    def tile_band(self, image, left, right, deep=False):
+    def tile_band(self, material, left, right, deep=False):
         ctx = self.ctx
-        width, height = image.width, image.height
+        image = self.images[material]
+        width, height = self.sizes[material]
         for tile in range(int(left // width), int(right // width) + 1):
             mirrored = tile % 2
             ctx.save()
@@ -102,7 +116,7 @@ class Renderer:
                 ctx.drawImage(image, 0, height - 52, width, 52, 0, height - 52, width, 52)
             ctx.restore()
 
-    def ground(self, image, left, right, stone):
+    def ground(self, material, left, right, stone):
         ctx = self.ctx
         segments = []
         for (x, y), (end, end_y) in zip(GROUND, GROUND[1:]):
@@ -127,13 +141,13 @@ class Renderer:
             ctx.rect(start - .5, 0, end - start + 1, HEIGHT)
             ctx.clip()
             ctx.transform(1, slope, 0, 1, 0, offset)
-            self.tile_band(image, start - .5, end + .5, True)
+            self.tile_band(material, start - .5, end + .5, True)
             ctx.restore()
         ctx.restore()
 
     def scenery(self, game, area, left, right):
         ctx = self.ctx
-        image = self.images[area["material"]]
+        material = area["material"]
         for prop in PROPS:
             x, id, width = prop[:3]
             if not area["start"] <= x < area["end"] or not left - 175 < x < right + 175:
@@ -148,7 +162,7 @@ class Renderer:
                 self.rect(x + 6, top, 4, bottom - top, "#956b48")
                 for y in range(top + 8, ceil_height(bottom), 10):
                     self.rect(x - 7, y, 15, 2, "#d1af75")
-        self.ground(image, left, right, area["material"] == "stone")
+        self.ground(material, left, right, area["material"] == "stone")
         for ledge in LEDGES:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
             if x < area["start"] or x + w > area["end"] or x + w <= left or x >= right:
@@ -158,7 +172,7 @@ class Renderer:
             ctx.roundRect(x, y - 5, w, 32, 5)
             ctx.clip()
             ctx.translate(0, y - 5)
-            self.tile_band(image, x, x + w)
+            self.tile_band(material, x, x + w)
             self.rect(x, 28, w, 4, "#233121aa")
             ctx.restore()
         for x, _, target in PORTALS:
@@ -212,7 +226,7 @@ class Renderer:
         gait = (0, 1, 0, 4)[(old // (6 if m["state"] == "pursuit" else 10)) % 4]
         frame = 3 if dead is not None or game.tick < m["hurt"] else 2 if m["windup"] else 5 if game.tick - m["strike"] < 8 else gait
         y = m["y"] - (sin(old / 10) * 3 if species.get("float") else 0) - .25 * elapsed
-        scale = 1.6 if species.get("elite") else 1.02
+        scale = 1.5 if species.get("elite") else 1
         if m["windup"]:
             reach = m["range"]
             self.rect(m["x"] if m["dir"] > 0 else m["x"] - reach, m["y"] - 2, reach, 4, "#fbb070a5")
@@ -220,7 +234,7 @@ class Renderer:
                     1 - elapsed / 20, species.get("tint", "none"))
         if dead is not None:
             return
-        y = m["y"] - (75 if species.get("elite") else 52)
+        y = y - round(68 * scale) - 6
         if species.get("elite") or abs(m["x"] - game.p["x"]) < 105:
             self.label(f"Lv.{species['level']} {species['name']}", m["x"], y, "#fff2bd", 10)
         if m["hp"] < species["hp"] or species.get("elite"):

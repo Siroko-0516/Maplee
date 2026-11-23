@@ -66,7 +66,7 @@ class Game:
         self.p = {
             "x": START_X, "y": ground_at(START_X), "hp": 100, "mp": 35, "level": 1, "xp": 0,
             "gold": 0, "kills": 0, "pots": 5, "tonics": 1, "job": "beginner", "bag": {"twig": 1},
-            "equipment": {"weapon": "twig", "armor": None, "charm": None},
+            "equipment": dict.fromkeys(SLOTS) | {"weapon": "twig"},
             "quests": [{"state": 0, "count": 0} for _ in QUESTS],
             "attributes": dict.fromkeys(ATTRIBUTES, 0), "skillRanks": {"primary": 1, "support": 0},
             "hotbar": DEFAULT_HOTBAR[:], "trackedQuest": None, "bestiary": {},
@@ -110,10 +110,16 @@ class Game:
                         and id not in ("potion", "tonic")}
             p["equipment"]["weapon"] = None
         equipped = saved.get("equipment") or {}
-        for slot in SLOTS:
-            id = equipped.get(slot, p["equipment"][slot])
-            if id is None or (id in p["bag"] and self.can_equip(id) and ITEMS[id]["slot"] == slot):
-                p["equipment"][slot] = id
+        if isinstance(equipped, dict):
+            for old_slot, item in equipped.items():
+                if old_slot not in SLOTS:
+                    continue
+                if item is None:
+                    if old_slot == "weapon":
+                        p["equipment"]["weapon"] = None
+                elif isinstance(item, str) and item in p["bag"] and self.can_equip(item):
+                    # Older saves put hats in armor and rings and seals in charm.
+                    p["equipment"][ITEMS[item]["slot"]] = item
         if isinstance(saved.get("quests"), list):
             for index, entry in enumerate(saved["quests"][:len(QUESTS)]):
                 if isinstance(entry, dict) and entry.get("state") in (0, 1, 2) and isinstance(entry.get("count"), int):

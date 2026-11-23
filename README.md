@@ -24,11 +24,11 @@ python build.py
 | 퀘스트·지도·도감 | Q · M · B |
 | 퀵슬롯·마을 귀환·저장 | 1~4 · R · K |
 
-상태창과 장비창을 열어도 게임은 계속됩니다. 일시정지 버튼으로만 멈출 수 있습니다. 호스팅 버전은 ChatGPT로 인증하고 세이브는 현재 브라우저에 저장합니다.
+상태창과 장비창을 열어도 이동과 전투는 계속됩니다. 제목 표시줄을 끌어 창을 옮기고, 휠·터치·창 안의 화살표로 내용을 스크롤할 수 있습니다. 가방의 도트 아이콘을 누르면 장착 조건과 능력치가 표시됩니다. 일시정지 버튼으로만 멈출 수 있습니다. 호스팅 버전은 ChatGPT로 인증하고 세이브는 현재 브라우저에 저장합니다.
 
 ## 소스와 검사
 
 - `maplee/engine.py`는 물리, 전투, 몬스터 AI, 진행을 담당합니다.
-- `maplee/render.py`와 `maplee/ui.py`는 Python으로 캔버스, 화면, 입력을 제어합니다. HTML·CSS와 Brython 실행용 로더를 사용합니다.
-- `tools/draw_hero.py`, `tools/draw_gear.py`로 딱딱한 픽셀 경계의 원본 스프라이트를 재생성할 수 있습니다. 재생성 스크립트는 Pillow를 사용합니다.
+- `maplee/render.py`는 필드를, `maplee/windows.py`는 HUD와 게임 창을 별도 캔버스에 그립니다. `maplee/ui.py`에서 입력을 게임 동작에 연결합니다.
+- `tools/draw_hero.py`, `tools/draw_gear.py`, `tools/draw_interface.py`, `tools/draw_wildlife.py`로 딱딱한 픽셀 경계의 원본 스프라이트를 재생성할 수 있습니다. 재생성 스크립트는 Pillow를 사용합니다.
 - `python -m unittest discover -s tests`로 맵, 타격 타이밍, 보스 드롭, 제작, 세이브 호환성을 검사합니다.
