@@ -1,9 +1,10 @@
 """Static world layout, jobs, items, encounters and quests."""
 
 from bisect import bisect_right
+from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
-WORLD_WIDTH = 18300
+WORLD_WIDTH = 24700
 
 AREAS = [{'name': '솔방울 마을', 'start': 0, 'end': 2450, 'icon': '🍄', 'material': 'stone', 'backdrop': [0.01, 0.14]},
  {'name': '종꽃 숲길', 'start': 2450, 'end': 9100, 'icon': '🌿', 'material': 'terrain', 'backdrop': [0.19, 0.49]},
@@ -24,6 +25,13 @@ AREAS = [{'name': '솔방울 마을', 'start': 0, 'end': 2450, 'icon': '🍄', '
   'image': 'depths',
   'backdrop': [0.51, 0.63],
   'tint': '#44275933'}]
+
+AREAS.extend((
+    dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain",
+         image="ember_grove", backdrop=(.02,.59), landmark="잿불 나무 · 이끼 망령"),
+    dict(name="안개등 부두", start=21400, end=WORLD_WIDTH, icon="⚓", material="stone",
+         image="lantern_quay", backdrop=(.02,.59), landmark="침수된 선착장 · 닻불 망령"),
+))
 
 GROUND = [[0, 390],
  [400, 390],
@@ -77,6 +85,10 @@ GROUND = [[0, 390],
  [17270, 379],
  [17600, 339],
  [18300, 339]]
+
+GROUND.extend(((18540,358),(18920,390),(19360,390),(19740,332),(20200,332),
+               (20520,378),(20860,378),(21400,355),(21740,355),(22140,402),
+               (22500,402),(22980,327),(23340,327),(23740,371),(24060,371),(24700,356)))
 
 LEDGES = [{'x': 260, 'y': 248, 'w': 240, 'ladderX': 372},
  {'x': 533, 'y': 195, 'w': 240, 'ladderX': 711},
@@ -199,6 +211,19 @@ PROPS = [[195, 0, 175],
  [17660, 3, 114, 252],
  [18140, 2, 184]]
 
+LEDGES.extend(
+    dict(x=x,y=y,w=w,ladderX=x+w//2)
+    for x,y,w in ((18450,236,280),(18820,262,300),(19180,201,275),(19740,224,326),
+                  (20200,191,240),(20570,265,320),(21030,227,270),(21540,240,270),
+                  (22120,289,310),(22500,219,280),(23000,210,290),(23400,254,280),
+                  (23900,251,320),(24330,199,255))
+)
+PROPS.extend((
+    (18540,4,135),(18890,3,151),(19160,4,165),(19790,4,177),(20270,3,155),
+    (20670,4,165),(21150,4,142),(21670,3,149),(22130,1,118),(22550,5,160),
+    (23080,3,148),(23560,5,130),(23960,1,123),(24440,3,167),
+))
+
 CLASSES = {'beginner': {'name': '모험가',
               'skill': '별빛 파동',
               'attack': 0,
@@ -240,14 +265,28 @@ CLASSES = {'beginner': {'name': '모험가',
           'power': 2.35,
           'shape': 'stars'}}
 
+CLASSES.update({
+    "thief": dict(name="그림자 척후병", skill="쌍섬", shape="stab", attack=3, hp=12, mp=8, cost=8, cooldown=65, reach=79, power=1.15),
+    "pirate": dict(name="파도 격투가", skill="파도 돌려차기", shape="kick", attack=3, hp=24, mp=4, cost=12, cooldown=86, reach=85, power=2.1),
+    "cleric": dict(name="새벽 치유사", skill="새벽의 종", shape="heal", attack=1, hp=6, mp=34, cost=14, cooldown=98, reach=168, power=1.9),
+})
+CLASSES["guardian"]["skill"] = "반달 베기"
+CLASSES["mage"]["skill"] = "별벼락"
+CLASSES["ranger"]["skill"] = "폭뢰 화살"
+
 ATTRIBUTES = {'strength': {'name': '힘', 'detail': '공격력 +2', 'icon': '◆', 'attack': 2},
  'vitality': {'name': '체력', 'detail': '최대 HP +8 · 방어력 +1', 'icon': '♥', 'hp': 8, 'defense': 1},
  'spirit': {'name': '정신', 'detail': '최대 MP +5', 'icon': '✦', 'mp': 5},
  'agility': {'name': '민첩', 'detail': '이동 속도 +0.09', 'icon': '➟', 'speed': 0.09}}
 
-SUPPORTS = {'guardian': {'name': '철벽 맹세', 'summary': '잠시 방어력을 높여요.', 'stat': 'defense', 'power': 7, 'cost': 12},
- 'ranger': {'name': '순풍 걸음', 'summary': '잠시 이동 속도를 높여요.', 'stat': 'speed', 'power': 1.25, 'cost': 12},
- 'mage': {'name': '별불 집중', 'summary': '잠시 공격력을 높여요.', 'stat': 'attack', 'power': 8, 'cost': 15}}
+SUPPORTS = {
+    "guardian": dict(name="가시 방벽", summary="받은 접촉 피해 일부를 몬스터에게 돌려줘요.", stat="reflect", power=.35, cost=12),
+    "ranger": dict(name="바람걸음", summary="이동 속도와 점프력이 증가해요.", stat="speed", power=1.25, cost=12),
+    "mage": dict(name="마력 장막", summary="피해 일부를 MP로 대신 받아요.", stat="guard", power=.6, cost=15),
+    "thief": dict(name="연막 잠행", summary="공격하기 전까지 몬스터 접촉을 피해요.", stat="stealth", power=1, cost=10),
+    "pirate": dict(name="물결 질주", summary="이동 속도와 점프력이 증가해요.", stat="speed", power=1.7, cost=10),
+    "cleric": dict(name="새벽의 축복", summary="공격력과 방어력이 증가해요.", stat="bless", power=6, cost=14),
+}
 
 HOTKEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4']
 
@@ -259,20 +298,20 @@ HOTBAR_ACTIONS = {'hp': {'name': '체력 물약', 'icon': '♥', 'color': 'rose'
  'support': {'name': '보조 스킬', 'icon': '⬡', 'color': 'mint'},
  'home': {'name': '마을 귀환', 'icon': '⌂', 'color': 'gold'}}
 
-ITEMS = {'twig': {'name': '죽도', 'slot': 'weapon', 'level': 1, 'attack': 2, 'price': 25, 'icon': 0},
- 'bronze': {'name': '글라디우스', 'slot': 'weapon', 'level': 2, 'attack': 5, 'price': 78, 'icon': 16},
+ITEMS = {'twig': {'name': '마른가지 검', 'slot': 'weapon', 'level': 1, 'attack': 2, 'price': 25, 'icon': 0},
+ 'bronze': {'name': '등대 청동검', 'slot': 'weapon', 'level': 2, 'attack': 5, 'price': 78, 'icon': 16},
  'coat': {'name': '갈색 하드래더', 'slot': 'armor', 'level': 2, 'defense': 2, 'hp': 12, 'price': 65, 'icon': 14},
  'cap': {'name': '갈색 삿갓', 'slot': 'head', 'level': 3, 'defense': 4, 'hp': 20, 'price': 110, 'icon': 28},
  'dew': {'name': '반짝이는 반지', 'slot': 'ring', 'level': 3, 'hp': 18, 'mp': 10, 'price': 96, 'icon': 24},
- 'blade': {'name': '사브르',
+ 'blade': {'name': '푸른결 곡검',
            'slot': 'weapon',
            'level': 5,
            'job': 'guardian',
            'attack': 12,
            'price': 245,
            'icon': 17},
- 'bow': {'name': '배틀 보우', 'slot': 'weapon', 'level': 5, 'job': 'ranger', 'attack': 11, 'price': 245, 'icon': 1},
- 'wand': {'name': '우드 완드',
+ 'bow': {'name': '솔가지 활', 'slot': 'weapon', 'level': 5, 'job': 'ranger', 'attack': 11, 'price': 245, 'icon': 1},
+ 'wand': {'name': '별나무 완드',
           'slot': 'weapon',
           'level': 5,
           'job': 'mage',
@@ -316,7 +355,7 @@ ITEMS = {'twig': {'name': '죽도', 'slot': 'weapon', 'level': 1, 'attack': 2, '
               'price': 830,
               'icon': 25,
               'rarity': 'epic'},
- 'sunblade': {'name': '메이플 소드',
+ 'sunblade': {'name': '노을 장검',
               'slot': 'weapon',
               'level': 11,
               'job': 'guardian',
@@ -325,7 +364,7 @@ ITEMS = {'twig': {'name': '죽도', 'slot': 'weapon', 'level': 1, 'attack': 2, '
               'price': 920,
               'icon': 18,
               'rarity': 'epic'},
- 'nightbow': {'name': '메이플 헌터스',
+ 'nightbow': {'name': '초승달 활',
               'slot': 'weapon',
               'level': 11,
               'job': 'ranger',
@@ -334,7 +373,7 @@ ITEMS = {'twig': {'name': '죽도', 'slot': 'weapon', 'level': 1, 'attack': 2, '
               'price': 920,
               'icon': 19,
               'rarity': 'epic'},
- 'tidewand': {'name': '크리스탈 완드',
+ 'tidewand': {'name': '얼음결 완드',
               'slot': 'weapon',
               'level': 11,
               'job': 'mage',
@@ -359,6 +398,15 @@ ITEMS = {'twig': {'name': '죽도', 'slot': 'weapon', 'level': 1, 'attack': 2, '
              'price': 555,
              'icon': 27,
              'rarity': 'rare'}}
+
+for icon, (key, name, slot, level, price, bonus, job) in enumerate(EXPANSION_EQUIPMENT, 32):
+    item = {"name":name, "slot":slot, "level":level, "price":price, "icon":icon}
+    item["attack" if slot=="weapon" else "defense"] = bonus
+    if slot!="weapon":
+        item["hp"] = 3*level
+    if job:
+        item["job"] = job
+    ITEMS[key] = item
 
 SLOTS = {'head': '모자', 'armor': '방어구', 'weapon': '무기', 'ring': '반지', 'charm': '목걸이', 'seal': '훈장'}
 
@@ -487,15 +535,37 @@ for _species in SPECIES:
     _source, _species["body_size"], _species["framebooks"] = MOB_BOOKS[_species["sprite"]]
 
 
+for name, level, row, loot, equipment in (
+    ("이끼 망령",16,0,"spores",("shadowdagger","hwarang")),
+    ("닻불 망령",18,1,"ash",("stormknuckle","dawnwand")),
+):
+    SPECIES.append(dict(name=name,level=level,sprite=row,hp=140+level*16,
+                        attack=33+level,xp=level*9,gold=level*6,speed=1.1,
+                        loot=loot,rare=equipment[0],equipmentDrops=equipment,
+                        aggro=147,undead=True,body_size=(46,48),image="expansion_mobs",
+                        **({"float": True} if row else {})))
+
+
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
+    if species.get("image") == "expansion_mobs":
+        frame = {"stand":0, "move":ticks//6%4, "attack1":5, "hit1":6, "die1":7}[action]
+        return frame*64, species["sprite"]*64, 64, 64, -32, -60
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
     return MOB_FRAMES[first + bisect_right(ends, position)]
 
 
+for species, pool in zip(SPECIES, (
+    ("redcap","blazer"), ("bandana","baseball"), ("greenhood","apprenticehat"),
+    ("blackthief","dagger"), ("archertop","knuckle"), ("sergeant","steelhelm"),
+    ("wizardhat","orangethief"), ("steelhelm","stormknuckle"), ("vikinghelm","hwarang"),
+    ("hwarang","shadowdagger"), ("shadowdagger","stormknuckle"),
+)):
+    species["equipmentDrops"] = pool
+
 NPCS = [{'x': 475, 'name': '리나', 'role': '의뢰', 'kind': 'quest'},
- {'x': 870, 'name': '샘', 'role': '보급품', 'kind': 'shop', 'stock': ['potion', 'tonic', 'bronze', 'coat', 'dew']},
+ {'x': 870, 'name': '샘', 'role': '보급품', 'kind': 'shop', 'stock': ['potion', 'tonic', 'bronze', 'coat', 'dew', 'redcap', 'bandana', 'blazer', 'baseball', 'apprenticehat', 'greenhood']},
  {'x': 1430, 'name': '헬레나', 'role': '전직', 'kind': 'trainer'},
  {'x': 2230, 'name': '쿤', 'role': '숲길 안내', 'kind': 'guide'},
  {'x': 5710, 'name': '마야', 'role': '숲길 의뢰', 'kind': 'quest', 'quest': 2},
@@ -503,7 +573,7 @@ NPCS = [{'x': 475, 'name': '리나', 'role': '의뢰', 'kind': 'quest'},
   'name': '나타샤',
   'role': '항구 장비점',
   'kind': 'shop',
-  'stock': ['potion', 'tonic', 'blade', 'bow', 'wand', 'shell', 'prism']},
+  'stock': ['potion', 'tonic', 'blade', 'bow', 'wand', 'shell', 'prism', 'dagger', 'knuckle', 'chimewand', 'archertop', 'sergeant', 'steelhelm', 'blackthief']},
  {'x': 10670, 'name': '리더 알', 'role': '의뢰', 'kind': 'harbor'},
  {'x': 12170, 'name': '스미스', 'role': '대장간', 'kind': 'forge'},
  {'x': 12425, 'name': '윈스턴', 'role': '광산 의뢰', 'kind': 'quest', 'quest': 3},
@@ -513,7 +583,7 @@ NPCS = [{'x': 475, 'name': '리나', 'role': '의뢰', 'kind': 'quest'},
   'name': '해리',
   'role': '고원 보급품',
   'kind': 'shop',
-  'stock': ['potion', 'tonic', 'crabguard', 'glasscoat', 'shimmer']},
+  'stock': ['potion', 'tonic', 'crabguard', 'glasscoat', 'shimmer', 'shadowdagger', 'stormknuckle', 'dawnwand', 'wizardhat', 'vikinghelm', 'orangethief', 'hwarang']},
  {'x': 16645, 'name': '만지', 'role': '머쉬맘 의뢰', 'kind': 'quest', 'quest': 6}]
 
 QUESTS = [{'name': '숲길 청소',
@@ -644,17 +714,16 @@ NPC_IDLE = (
     (74, (1000, 100, 100, 100, 100, 100, 800, 100, 100, 800, 100, 100)),
     (57, (1200,)), (79, (1200, 100, 150)), (79, (1200,)),
 )
-WORN_ITEMS = ("twig", "bronze", "blade", "sunblade", "bow", "nightbow", "wand", "tidewand",
-              "coat", "shell", "glasscoat", "crabguard", "cap")
-WORN_ROWS = {item: row for row, item in enumerate(WORN_ITEMS)}
-WORN_ROWS.update({item: len(WORN_ITEMS) + 4 + row for row, item in enumerate(("dew","prism","shimmer","moonseal"))})
 # One weapon cel per simulation tick. Body and damage use the same timeline.
 MELEE_ANIMATION = SPRITES["hero"]["animations"]["attack"]
 MELEE_POSES = tuple(pose for pose, ticks in zip(MELEE_ANIMATION["frames"], MELEE_ANIMATION["ticks"])
                     for _ in range(ticks))
 MELEE_IMPACT = MELEE_POSES.index(10)
-WEAPON_ATTACKS = {"bow": "arrow", "nightbow": "arrow", "wand": "bolt", "tidewand": "bolt"}
+WEAPON_ATTACKS = {"bow": "arrow", "nightbow": "arrow", "wand": "bolt", "tidewand": "bolt", "chimewand": "bolt", "dawnwand": "bolt"}
 
 IMAGES = {'classic_ui': 'classic-ui.png', 'damage': 'damage.png', 'swing_weapons': 'swing-weapons.png', 'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
 JOB_LOOKS = {job: "hero_" + job for job in ("guardian", "ranger", "mage")}
 IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
+
+IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
+IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png")

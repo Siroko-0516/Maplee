@@ -1,8 +1,8 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
-from math import sin, pi
+from math import cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, CLASSES, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
+from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -100,47 +100,65 @@ class Renderer:
                       -round(anchor[0] * scale), -round(anchor[1] * scale), round(width * scale), round(height * scale))
         ctx.restore()
 
-    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None):
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None, rotation=0, thrust=False):
         """Draw identical anchored artwork in world and equipment coordinates."""
         ctx.save()
         ctx.globalAlpha = opacity
         ctx.translate(round(x), round(y))
         ctx.scale(facing, 1)
+        if rotation:
+            ctx.translate(0,-27)
+            ctx.rotate(rotation)
+            ctx.translate(0,27)
         left, top = -round(38 * size / 80), -round(75 * size / 80)
-        sword = weapon in WORN_ITEMS[:4]
+        sword = weapon in MELEE_WEAPONS
         far_hand = facing < 0
         body_sheet, column, row = "hero", frame % 4, frame // 4
         if sword and swing_tick is not None:
             if swing_tick < 18:
                 frame = 8
-                body_sheet, column, row = "swing_weapons", int(far_hand), 8
+                body_sheet, column, row = "expansion_swing", int(far_hand), 2*len(MELEE_WEAPONS)
             else:
                 frame, column, row = 11, 3, 2
         if job in JOB_LOOKS:
             # Each job cel extends eight native pixels around the equipment grid.
-            if body_sheet == "swing_weapons":
+            if body_sheet == "expansion_swing":
                 row = 7
             pad = round(size * 8 / 80)
             ctx.drawImage(self.images[JOB_LOOKS[job]], column*96, row*96, 96, 96,
                           left-pad, top-pad, size+2*pad, size+2*pad)
+        elif body_sheet == "expansion_swing":
+            ctx.drawImage(self.images[body_sheet],column*112+16,row*112+16,80,80,left,top,size,size)
         else:
             ctx.drawImage(self.images[body_sheet], column * 80, row * 80, 80, 80,
                           left, top, size, size)
         for item in (equipment.get("armor"), equipment.get("charm"), equipment.get("seal"),
                      equipment.get("head"), equipment.get("ring"), weapon):
             if item in WORN_ROWS:
-                moving_blade = item == weapon and swing_tick is not None
-                sheet = "swing_weapons" if moving_blade else "worn"
+                if item in LEGACY_WORN:
+                    ctx.drawImage(self.images["worn"],frame*80,LEGACY_WORN[item]*80,80,80,left,top,size,size)
+                    continue
+                moving_blade = item == weapon and swing_tick is not None and sword
+                sheet = "expansion_swing" if moving_blade else "expansion_worn"
                 column = swing_tick if moving_blade else frame
                 row = WORN_ROWS[item]
-                if item == weapon and sword and far_hand:
-                    row += 4 if moving_blade else len(WORN_ITEMS)
-                ctx.drawImage(self.images[sheet], column * 80, row * 80, 80, 80,
-                              left, top, size, size)
+                if item == weapon and sword:
+                    index = MELEE_WEAPONS.index(item)
+                    if moving_blade and thrust:
+                        row = 2*len(MELEE_WEAPONS)+1+2*int(far_hand)+int(weapon=="shadowdagger")
+                    elif moving_blade:
+                        row = index + int(far_hand)*len(MELEE_WEAPONS)
+                    elif far_hand:
+                        row = len(WORN_ITEMS) + index
+                pad = round(size*16/80)
+                ctx.drawImage(self.images[sheet],column*112,row*112,112,112,
+                              left-pad,top-pad,size+2*pad,size+2*pad)
         ctx.restore()
 
     def icon(self, index, x, y, size):
-        self.ctx.drawImage(self.images["icons"], index % 8 * 32, index // 8 * 32, 32, 32,
+        sheet = "expansion_icons" if index in EXPANSION_ICON_COLUMNS else "icons"
+        index = EXPANSION_ICON_COLUMNS.get(index,index)
+        self.ctx.drawImage(self.images[sheet], index % 8 * 32, index // 8 * 32, 32, 32,
                            round(x - size / 2), round(y - size / 2), size, size)
 
     def backdrop(self, area, left):
@@ -149,8 +167,9 @@ class Renderer:
         width, height = self.sizes[key]
         start, end = area["backdrop"]
         progress = limit((left - area["start"]) / (area["end"] - area["start"] - WIDTH), 0, 1)
-        self.ctx.drawImage(image, round(width * (start + (end - start) * progress)), 0 if area.get("image") else 123,
-                           int(.36 * width), height if area.get("image") else 505, 0, 0, WIDTH, HEIGHT)
+        sy = 0 if area.get("image") else min(123,height//5)
+        self.ctx.drawImage(image, round(width * (start + (end - start) * progress)), sy,
+                           int(.36 * width), min(505,height-sy) if sy else height, 0, 0, WIDTH, HEIGHT)
 
     def tile_band(self, material, left, right, deep=False):
         ctx = self.ctx
@@ -215,7 +234,7 @@ class Renderer:
                 self.rect(x + 6, top, 4, bottom - top, "#956b48")
                 for y in range(top + 8, ceil_height(bottom), 10):
                     self.rect(x - 7, y, 15, 2, "#d1af75")
-        self.ground(material, left, right, area["material"] == "stone")
+        self.ground(material, max(left,area["start"]), min(right,area["end"]), area["material"] == "stone")
         for ledge in LEDGES:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
             if x < area["start"] or x + w > area["end"] or x + w <= left or x >= right:
@@ -289,7 +308,7 @@ class Renderer:
         dead = m["dead"]
         elapsed = game.tick - dead if dead is not None else 0
         species = m["spec"]
-        books = species["framebooks"]
+        books = species.get("framebooks", {"attack1":(0,(22,)), "die1":(0,(18,))})
         phase_tick = game.tick + m["phase"]
         after_strike = game.tick - m["strike"]
         phase = None
@@ -321,7 +340,7 @@ class Renderer:
         ctx.save()
         ctx.translate(round(m["x"]), round(y))
         ctx.scale(m["dir"]*scale, scale)
-        ctx.drawImage(self.images["wildlife"], sx, sy, sw, sh, dx, dy, sw, sh)
+        ctx.drawImage(self.images[species.get("image","wildlife")], sx, sy, sw, sh, dx, dy, sw, sh)
         ctx.restore()
         if dead is not None:
             return
@@ -332,6 +351,53 @@ class Renderer:
             w = 64 if species.get("elite") else 30
             self.rect(m["x"] - w / 2, y + 4, w, 5, "#241d32")
             self.rect(m["x"] - w / 2 + 1, y + 5, (w - 2) * m["hp"] / species["hp"], 3, "#ef9875")
+
+    def expansion_effect(self, shape, x, y, age, fraction, facing):
+        ctx = self.ctx
+        ctx.save()
+        ctx.globalAlpha = min(1,(1-fraction)*2)
+        if shape in ("stab","stab_hit","kick_hit","heal_hit"):
+            color = {"stab":"#c9a4fc","stab_hit":"#e7c1ff","kick_hit":"#b6fcff","heal_hit":"#ffcc79"}[shape]
+            for direction in range(8):
+                angle = direction*pi/4
+                radius = (8+age*1.7) * (1.35 if shape.startswith("stab") else 1)
+                px, py = x+radius*cos(angle), y+radius*sin(angle)*.65
+                self.rect(px,py,3,2,color)
+                self.rect(px-3*cos(angle),py-3*sin(angle),2,1,"#fff7df")
+            if shape.startswith("stab"):
+                ctx.translate(round(x),round(y))
+                ctx.scale(facing,1)
+                for offset in (0,5):
+                    for step in range(15):
+                        self.rect(-21 + step*3,offset+5-step//3,
+                                  4,1 if step>12 else 2,color if offset else "#fff3df")
+        else:
+            palette = {
+                "kick": ("#63a8bd","#bff2f5"),
+                "heal": ("#e7ad6b","#fff3b6"),
+                "buff_thief": ("#5e5685","#b490d8"),
+                "buff_pirate": ("#4c9fb7","#b6f1ef"),
+                "buff_cleric": ("#e8b16a","#fff2b5"),
+            }
+            dark, light = palette[shape]
+            if shape in ("heal","kick"):
+                y += 24
+            for band in range(2):
+                size = (34 if shape=="kick" else 23)+fraction*(36 if shape=="kick" else 32)
+                for step in range(24):
+                    angle = step*pi/12 + age*(.17 if band else -.09)
+                    if shape == "kick" and step > 17:
+                        continue
+                    px=x+cos(angle)*size
+                    py=y+sin(angle)*size*(.55 if shape=="kick" else .2) - 10-band*(7+fraction*44)
+                    self.rect(px,py,4 if band else 6,2,dark)
+                    self.rect(px+1,py-1,2,1,light)
+            if shape == "heal":
+                for offset in (-29,-12,14,30):
+                    py=y-20-age*1.8+abs(offset)*.45
+                    self.rect(x+offset-3,py,7,2,light)
+                    self.rect(x+offset,py-3,2,8,light)
+        ctx.restore()
 
     def effect(self, tick, effect):
         shape, start, x, y, duration, data = effect
@@ -354,6 +420,8 @@ class Renderer:
         elif shape == "pickup":
             eased = 1 - (1 - fraction) ** 2
             self.icon(data[0], x + (data[1] - x) * eased, y + (data[2] - y) * eased - sin(fraction * pi) * 12, 21)
+        elif shape in ("stab","stab_hit","kick","kick_hit","heal","heal_hit","buff_thief","buff_pirate","buff_cleric"):
+            self.expansion_effect(shape,x,y,age,fraction,data)
         elif shape in COMBAT_ART:
             row, width, height, origin_x, origin_y, frames = COMBAT_ART[shape]
             if shape in ("slash", "arc", "ring", "stars"):
@@ -391,17 +459,22 @@ class Renderer:
             return
         ctx = self.ctx
         x, y, tick = game.p["x"], game.p["y"], game.tick
-        area = AREAS[area_at(x)]
         left = int(game.camera)
         right = left + WIDTH
-        self.backdrop(area, left)
+        visible = [area for area in AREAS if area["end"] > left and area["start"] < right]
+        self.backdrop(visible[0], left)
+        for area in visible[1:]:
+            ctx.save()
+            blend = limit((right-area["start"])/WIDTH,0,1)
+            ctx.globalAlpha = blend*blend*(3-2*blend)
+            self.backdrop(area,left)
+            ctx.restore()
         ctx.save()
         ctx.translate(-left, 0)
-        self.scenery(game, area, left, right)
-        if area.get("tint"):
-            self.rect(left, 0, WIDTH, HEIGHT, area["tint"])
+        for area in visible:
+            self.scenery(game, area, left, right)
         for m in game.monsters:
-            if left - 75 < m["x"] < right + 75 and area["start"] <= m["x"] < area["end"]:
+            if left - 100 < m["x"] < right + 100:
                 self.monster(game, m)
         for drop in game.drops:
             if left <= drop["x"] <= right:
@@ -418,14 +491,31 @@ class Renderer:
         if game.swing and game.swing["melee"] and tick >= game.hurt_until:
             swing_tick = tick - game.swing["start"]
             lean = MELEE_LEAN[swing_tick] * facing
-        elif game.swing and weapon in WORN_ITEMS[:4] and tick >= game.hurt_until:
+        elif game.swing and weapon in MELEE_WEAPONS and tick >= game.hurt_until:
             # Align the same right-hand stroke with the skill's own impact tick.
             age = tick - game.swing["start"]
             impact = game.swing["impact"]
             duration = game.swing["duration"]
             swing_tick = (age * MELEE_IMPACT // impact if age < impact else
                           MELEE_IMPACT + (age-impact) * (len(MELEE_POSES)-MELEE_IMPACT) // (duration-impact))
-        self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity, swing_tick, game.p["job"])
+        if game.support_value("stealth"):
+            opacity *= .45
+        rotation = 0
+        thrust = False
+        if game.swing and game.swing["shape"] == "stab":
+            age = tick - game.swing["start"]
+            thrust = weapon in ("dagger","shadowdagger") and 5 <= age <= 17
+            swing_tick = age-5 if thrust else None
+            frame = 11
+        if game.swing and game.swing["shape"] == "kick":
+            age = tick - game.swing["start"]
+            progress = limit((age-5)/18,0,1)
+            rotation = 2*pi*progress
+            frame = 12 if progress < .5 else 13
+            swing_tick = None
+            y -= 22*sin(progress*pi)
+        self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity,
+                    swing_tick, game.p["job"], rotation, thrust)
         if tick < game.support_until:
             buff_age = tick - game.support_started
             if buff_age < 48:

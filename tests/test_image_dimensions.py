@@ -25,7 +25,9 @@ class ImageDimensionTest(unittest.TestCase):
             from maplee.render import Renderer
         renderer = Renderer.__new__(Renderer)
         renderer.ctx = Mock()
-        renderer.images = {key: IntrinsicImage() for key in ("background", "depths", "stone", "terrain")}
+        keys = {"background", *(area.get("image", "background") for area in AREAS),
+                *(area["material"] for area in AREAS)}
+        renderer.images = {key: IntrinsicImage() for key in keys}
         renderer.sizes, renderer.loaded, renderer.failed = {}, set(), set()
         for key, image in renderer.images.items():
             renderer.image_loaded(key, image)

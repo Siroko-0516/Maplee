@@ -246,7 +246,8 @@ class Game:
 
     def can_equip(self, id):
         item = ITEMS.get(id, {})
-        return item.get("slot") and self.p["level"] >= item["level"] and item.get("job", self.p["job"]) == self.p["job"]
+        return item.get("slot") and self.p["level"] >= item["level"] and (item.get("job", self.p["job"]) == self.p["job"]
+                    or self.p["job"] == "cleric" and id in ("wand","tidewand"))
 
     def add_item(self, id):
         if id in ("potion", "tonic"):
@@ -278,16 +279,26 @@ class Game:
         self.sound = 620
         return True
 
-    def change_job(self, id):
-        if self.p["level"] < 5 or self.p["job"] != "beginner" or id not in SUPPORTS:
+    def change_job(self, job):
+        p = self.p
+        if p["level"] < 5 or p["job"] == job or job not in SUPPORTS:
             return False
-        weapon = {"guardian": "blade", "ranger": "bow", "mage": "wand"}[id]
-        self.p["job"] = id
-        self.add_item(weapon)
-        self.p["equipment"]["weapon"] = weapon
+        starter = {
+            "guardian": "blade", "ranger": "bow", "mage": "wand",
+            "thief": "dagger", "pirate": "knuckle", "cleric": "chimewand",
+        }[job]
+        p["job"] = job
+        if starter not in p["bag"]:
+            self.add_item(starter)
+        for slot, item in p["equipment"].items():
+            if item and not self.can_equip(item):
+                p["equipment"][slot] = None
+        p["equipment"]["weapon"] = starter
+        self.swing = None
+        self.support_until = self.tick
         self.changed()
-        self.p["hp"], self.p["mp"] = self.stats()["hp"], self.stats()["mp"]
-        self.notice = f"{CLASSES[id]['name']}로 전직했어요."
+        p["hp"], p["mp"] = min(p["hp"], self.stats()["hp"]), min(p["mp"], self.stats()["mp"])
+        self.notice = f"{CLASSES[job]['name']}로 전직했어요."
         return True
 
     def buy(self, id, stock):
@@ -368,8 +379,7 @@ class Game:
         return f"{quest['who']}에게 보고" if count >= quest["target"] else f"{quest['name']} {count}/{quest['target']}"
 
     def camera_target(self):
-        area = AREAS[area_at(self.p["x"])]
-        return limit(self.p["x"] - WIDTH / 2, area["start"], area["end"] - WIDTH)
+        return limit(self.p["x"] - WIDTH / 2, 0, WORLD_WIDTH - WIDTH)
 
     def travel(self, x):
         if area_at(x) != area_at(self.p["x"]):
@@ -398,7 +408,7 @@ class Game:
             self.p["y"] += 2
             self.vy = 1
         else:
-            self.vy = -11.2
+            self.vy = -11.2 - self.support_value("speed")
             self.sound = 300
             self.effects.append(("dust", self.tick, self.p["x"], self.p["y"], 13, self.facing))
         self.surface = self.ladder = None
@@ -407,9 +417,12 @@ class Game:
         return CLASSES[self.p["job"]]
 
     def support_value(self, stat):
+        if self.tick >= self.support_until:
+            return 0
         support = SUPPORTS.get(self.p["job"])
-        return support["power"] * (1 + .35 * (self.p["skillRanks"]["support"] - 1)) if (
-            self.tick < self.support_until and support and support["stat"] == stat) else 0
+        if support and (support["stat"] == stat or support["stat"] == "bless" and stat in ("attack","defense")):
+            return support["power"] * (1 + .35 * (self.p["skillRanks"]["support"] - 1))
+        return 0
 
     def support(self):
         rank = self.p["skillRanks"]["support"]
@@ -445,6 +458,8 @@ class Game:
             self.p["mp"] -= job["cost"]
             self.skill_cd = job["cooldown"]
             self.dirty = True
+        if self.support_value("stealth"):
+            self.support_until = self.tick
         weapon = self.p["equipment"]["weapon"]
         attack = WEAPON_ATTACKS.get(weapon, "slash" if weapon else "punch")
         shape = job["shape"] if skill else attack
@@ -453,9 +468,11 @@ class Game:
         if skill:
             power = ceil(power * (job["power"] + .25 * (self.p["skillRanks"]["primary"] - 1)))
         melee = not skill and attack in ("slash", "punch")
+        impact, duration = (MELEE_IMPACT, len(MELEE_POSES)) if melee else {
+            "stab": (9, 25), "kick": (13, 32), "heal": (16, 35),
+        }.get(shape,(SWING_WINDUP,SWING_END))
         self.swing = {"melee": melee, "struck": set(), "queued": False,
-                      "impact": MELEE_IMPACT if melee else SWING_WINDUP,
-                      "duration": len(MELEE_POSES) if melee else SWING_END,
+                      "impact": impact, "duration": duration,
                       "start": self.tick, "dir": self.facing, "skill": skill, "weapon": weapon,
                       "attack": attack, "shape": shape, "reach": reach, "power": round(power)}
         self.sound = 380
@@ -469,31 +486,48 @@ class Game:
             return
         elapsed = self.tick - self.swing["start"]
         contact_age = elapsed - self.swing["impact"]
-        if not 0 <= contact_age <= (3 if self.swing["melee"] else 0):
+        second_stab = self.swing["shape"] == "stab" and contact_age == 5
+        if not second_stab and not 0 <= contact_age <= (3 if self.swing["melee"] else 0):
             return
         skill, facing = self.swing["skill"], self.swing["dir"]
         p = self.p
         shape, power, radius = self.swing["shape"], self.swing["power"], self.swing["reach"]
-        if contact_age == 0:
+        if contact_age == 0 or second_stab:
             self.sound = 740 if skill else 505
         if shape in ("arrow", "bolt"):
             self.effects.append((shape, self.tick, p["x"] + facing * 18, p["y"] - 24,
-                                 1 + radius // 15, (facing, power)))
+                                 1 + radius // 15, (facing, power, "bomb") if skill and shape == "arrow" else (facing, power)))
             return
-        if not self.swing["melee"]:
+        if shape == "heal":
+            amount = min(self.stats()["hp"] - p["hp"], round(self.stats()["hp"] * (.22 + .04*p["skillRanks"]["primary"])))
+            p["hp"] += amount
+            if amount:
+                self.text("+" + str(amount), p["x"], p["y"]-60, "#92ffac")
+            self.dirty = True
+        if not self.swing["melee"] and shape != "stab":
             self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
-        back = 4 if shape in ("slash", "arc", "punch") else radius
+        back = 4 if shape in ("slash", "arc", "punch", "stab") else radius
         ends = (p["x"] - facing * back, p["x"] + facing * radius)
         height = 92 if shape == "stars" else 64 if skill else 53
         box = (min(ends), p["y"] - height, max(ends), p["y"] + 3)
-        for monster in self.monsters:
-            if monster["dead"] is not None or area_at(monster["x"]) != area_at(p["x"]):
-                continue
-            key = id(monster)
-            if key not in self.swing["struck"] and overlaps(box, monster_bounds(monster, self.tick)):
-                self.swing["struck"].add(key)
-                self.hit(monster, power + (int(random() * 3) if not skill else 0),
-                         direction(monster["x"] - p["x"], facing), shape + "_hit" if skill else "impact")
+        if second_stab:
+            target = self.swing.get("target")
+            if target is not None and target["dead"] is None and overlaps(box, monster_bounds(target,self.tick)):
+                self.hit(target, power, facing, "stab_hit")
+            return
+        targets = [m for m in self.monsters if m["dead"] is None
+                   and (shape != "heal" or m["spec"].get("undead"))
+                   and id(m) not in self.swing["struck"] and overlaps(box, monster_bounds(m,self.tick))]
+        if skill:
+            targets.sort(key=lambda m: abs(m["x"]-p["x"]))
+            targets = targets[:1 if shape == "stab" else 6]
+        for monster in targets:
+            self.swing["struck"].add(id(monster))
+            if shape == "stab":
+                self.swing["target"] = monster
+            effect = "stab" if shape == "stab" else shape + "_hit" if skill else "impact"
+            self.hit(monster, power + (int(random()*3) if not skill else 0),
+                     direction(monster["x"]-p["x"], facing), effect)
 
     def spawn(self, x, kind, index, ledge=None):
         spec = SPECIES[kind]
@@ -521,8 +555,12 @@ class Game:
                 return 5 if i % 2 else 6
             if x < 14900:
                 return 6 if i % 3 else 7
+            if x >= 21400:
+                return 12
+            if x >= 18300:
+                return 11
             return 8 if i % 2 else 9
-        for i, x in enumerate(range(2580, 18070, 213)):
+        for i, x in enumerate(range(2580, WORLD_WIDTH-130, 213)):
             if not (9290 <= x <= 10810 or 11520 < x < 12500 or 14900 < x < 15500):
                 self.spawn(x, kind(x, i), i)
         for i, ledge in enumerate(LEDGES):
@@ -543,7 +581,9 @@ class Game:
         if spec.get("aggro") and monster["state"] != "return":
             monster["state"] = "pursuit"
         self.move_monster(monster, monster["x"] + facing * 8, 8)
-        self.effects.append(("damage", self.tick, monster["x"], monster_bounds(monster, self.tick)[1] - 3, 42, (power, 0)))
+        top = monster_bounds(monster, self.tick)[1]
+        lift = 25 if impact == "stab_hit" else 3
+        self.effects.append(("damage", self.tick, monster["x"], top-lift, 42, (power, 0)))
         self.effects.append((impact, self.tick, monster["x"], (monster_bounds(monster, self.tick)[1] + monster["y"]) / 2, 16, facing))
         if monster["hp"] <= 0:
             self.reward(monster)
@@ -563,6 +603,9 @@ class Game:
         items = [spec["loot"]]
         if spec.get("elite") or random() < .16:
             items.append(spec["rare"])
+        if spec.get("equipmentDrops") and random() < .10:
+            pool = spec["equipmentDrops"]
+            items.append(pool[int(random()*len(pool))])
         if random() < .18:
             items.append("tonic" if monster["kind"] % 2 else "potion")
         self.drops.append({"x": monster["x"], "y": monster["y"], "start": self.tick, "items": items, "gold": spec["gold"]})
@@ -600,7 +643,7 @@ class Game:
                 monster.update(dead=None, hp=spec["hp"], state="patrol", next=tick + 40)
                 self.move_monster(monster, monster["home"], 500)
             return
-        if area_at(monster["home"]) != area_at(p["x"]):
+        if abs(monster["home"]-p["x"]) > WIDTH or self.support_value("stealth"):
             if monster["state"] != "patrol" or monster["windup"]:
                 monster.update(state="patrol", windup=0)
                 self.move_monster(monster, monster["home"], 500)
@@ -618,7 +661,7 @@ class Game:
             if elite:
                 self.effects.append(("wave", tick, monster["x"] + monster["dir"] * reach / 2, monster["y"] - 10, 20, reach / 2))
             if same_height and -12 <= offset * monster["dir"] <= reach:
-                self.take_damage(ceil(spec["attack"] * (1.2 if enraged else 1)))
+                self.take_damage(ceil(spec["attack"] * (1.2 if enraged else 1)), monster)
             return
         if tick < monster["hurt"]:
             return
@@ -643,11 +686,17 @@ class Game:
             if monster["x"] == target:
                 monster["dir"] *= -1
 
-    def take_damage(self, amount):
+    def take_damage(self, amount, source=None):
         if self.tick < self.inv_until:
             return
         p, stats = self.p, self.stats()
         lost = max(1, amount - int(stats["defense"] + self.support_value("defense")))
+        reflected = self.support_value("reflect")
+        if source is not None and reflected:
+            self.hit(source, max(1,round(lost * reflected)), direction(source["x"]-p["x"]))
+        absorbed = min(p["mp"], round(lost * min(.8, self.support_value("guard"))))
+        p["mp"] -= absorbed
+        lost -= absorbed
         p["hp"] -= lost
         self.inv_until, self.hurt_until = self.tick + 55, self.tick + 10
         self.swing = self.ladder = self.surface = None
@@ -668,20 +717,27 @@ class Game:
             if age >= duration:
                 continue
             if shape in ("arrow", "bolt"):
-                facing, power = data
+                facing, power = data[:2]
                 arrow_x = x + facing * 15 * age
                 previous = x + facing * 15 * max(0, age - 1)
                 path = (min(previous, arrow_x)-3, y-4, max(previous, arrow_x)+3, y+4)
                 targets = []
                 for m in self.monsters:
-                    if m["dead"] is None and area_at(m["x"]) == area_at(x):
+                    if m["dead"] is None:
                         bounds = monster_bounds(m, self.tick)
                         if overlaps(path, bounds):
                             entry = bounds[0] if facing > 0 else -bounds[2]
                             targets.append((entry, m))
                 monster = min(targets, key=lambda pair: pair[0])[1] if targets else None
                 if monster:
-                    impacts.append((monster, power, facing, shape + "_hit"))
+                    victims = [monster]
+                    if len(data) > 2 and data[2] == "bomb":
+                        splash = (monster["x"]-75, y-48, monster["x"]+75, y+48)
+                        others = [m for m in self.monsters if m is not monster and m["dead"] is None
+                                  and overlaps(splash, monster_bounds(m,self.tick))]
+                        victims.extend(sorted(others,key=lambda m: abs(m["x"]-monster["x"]))[:5])
+                    for victim in victims:
+                        impacts.append((victim, power, facing, shape + "_hit"))
                     continue
             live.append(effect)
         self.effects = live
@@ -704,9 +760,8 @@ class Game:
                 self.ladder, self.surface = None, "ladder"
             return
         old_x, old_y, previous_surface = p["x"], p["y"], self.surface
-        area = AREAS[area_at(old_x)]
         speed = self.stats()["speed"] + self.support_value("speed")
-        p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1), area["start"] + 24, area["end"] - 24)
+        p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1), 24, WORLD_WIDTH - 24)
         floor = ground_at(p["x"])
         if self.surface == "ground":
             p["y"] = floor

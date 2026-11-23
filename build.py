@@ -52,7 +52,7 @@ def build(output, cache):
     if page.count(expect) != 1:
         raise ValueError("Expected one Python entry point")
     modules = "\n\n".join(inline_python(ROOT / "maplee" / (name + ".py"))
-                            for name in ("wildlife_data", "combat_art", "content", "engine", "render", "classic_skin", "windows", "ui"))
+                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "engine", "render", "classic_skin", "windows", "ui"))
     packed = modules + "\n\ngame_app = App()"
     if "</script" in packed.lower():
         raise ValueError("Unexpected HTML delimiter in Python source")

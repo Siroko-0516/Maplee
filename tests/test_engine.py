@@ -1,6 +1,6 @@
 import json
 import unittest
-from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES
+from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES, WORLD_WIDTH
 from maplee.engine import PORTALS, SWING_WINDUP, Game, area_at, ground_at
 
 
@@ -26,13 +26,61 @@ class WorldTests(unittest.TestCase):
             previous = game.p["y"]
         game.travel(2400)
         self.step(game, 90, "ArrowRight")
-        self.assertEqual(area_at(game.p["x"]), 0)
-        self.assertEqual(game.p["x"], AREAS[0]["end"] - 24)
+        self.assertEqual(area_at(game.p["x"]), 1)
+        self.assertGreater(game.camera, AREAS[0]["end"] - 960)
         game.travel(PORTALS[0][0])
         kind, portal = game.nearby()
         self.assertEqual(kind, "portal")
         game.travel(portal[1])
         self.assertEqual(area_at(game.p["x"]), 1)
+
+    def test_every_region_border_can_be_crossed_in_both_directions(self):
+        for area in AREAS[:-1]:
+            border = area["end"]
+            for offset, key in ((-10, "ArrowRight"), (10, "ArrowLeft")):
+                game = self.sandbox(border+offset)
+                self.step(game, 10, key)
+                self.assertNotEqual(area_at(border+offset), area_at(game.p["x"]))
+                self.assertEqual(game.p["y"], ground_at(game.p["x"]))
+        game = self.sandbox(WORLD_WIDTH-25)
+        self.step(game, 10, "ArrowRight")
+        self.assertEqual(game.p["x"], WORLD_WIDTH-24)
+
+    def test_reclass_from_existing_save_retains_items_and_health(self):
+        game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,
+                                   "bag":{"blade":1},"equipment":{"weapon":"blade"}})
+        for job, equipment in (("thief","dagger"),("pirate","knuckle"),("cleric","chimewand"),("thief","dagger")):
+            self.assertTrue(game.change_job(job))
+            self.assertEqual(game.p["equipment"]["weapon"],equipment)
+            self.assertEqual(game.p["bag"][equipment],1)
+            self.assertEqual((game.p["hp"],game.p["mp"]),(22,10))
+        self.assertEqual(game.p["bag"]["blade"],1)
+
+    def test_thief_strikes_the_nearest_target_twice(self):
+        game = self.sandbox(18630,saved={"level":12,"job":"thief"})
+        far = game.spawn(18682,11,0)
+        near = game.spawn(18650,11,1)
+        self.assertTrue(game.start_attack(True))
+        hit = []
+        game.hit = lambda target,*_: hit.append(target)
+        for tick in range(1,game.swing["duration"]):
+            game.tick=tick
+            game.update_attack()
+        self.assertEqual(hit,[near,near])
+        self.assertNotIn(far,hit)
+
+    def test_heal_restores_hp_and_hits_undead_only(self):
+        game = self.sandbox(19150,saved={"level":12,"job":"cleric","hp":5})
+        ghost = game.spawn(19140,11,0)
+        live = game.spawn(19170,0,1)
+        self.assertTrue(game.start_attack(True))
+        hit=[]
+        game.hit = lambda target,*_: hit.append(target)
+        game.tick = game.swing["impact"]
+        game.update_attack()
+        self.assertGreater(game.p["hp"],5)
+        self.assertEqual(hit,[ghost])
+        self.assertNotIn(live,hit)
 
     def test_attack_frame_landing_and_pickup(self):
         game = self.sandbox(2690)

@@ -1,7 +1,7 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
-from .content import AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SUPPORTS, monster_art
+from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SUPPORTS, monster_art
 from .engine import PORTALS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
@@ -204,7 +204,9 @@ class GameInterface:
             self.hit(x-2,y-2,w+4,h+4,name,callback)
 
     def icon(self, key, index, x, y, size):
-        cols = 8 if key == "icons" else 9
+        if key == "icons" and index in EXPANSION_ICON_COLUMNS:
+            key, index = "expansion_icons", EXPANSION_ICON_COLUMNS[index]
+        cols = 8 if key in ("icons","expansion_icons") else 9
         self.atlas(key, index % cols*32, index // cols*32, 32, 32, x, y, size, size)
 
     def shine(self, x, y, w, h, top, bottom, edge):
@@ -451,6 +453,8 @@ class GameInterface:
                 self.box(x,y+23,w,2,"#eb8d31")
                 y += 27
             elif kind == "route":
+                player = self.app.game.p["x"]
+                current = area_at(player)
                 for i,area in enumerate(AREAS):
                     self.bezel("paper",x,y,w,48)
                     image=area.get("image","background")
@@ -458,10 +462,12 @@ class GameInterface:
                     sx=round(iw*area["backdrop"][0])
                     self.atlas(image,sx,ih//4,max(1,iw//7),ih//2,x+4,y+4,70,40)
                     self.box(x+80,y+3,2,42,"#839a99")
-                    self.box(x+77,y+19,8,8, "#a8ce33" if i==entry[1] else "#68899d")
+                    self.box(x+77,y+19,8,8, "#a8ce33" if i==current else "#68899d")
                     self.text(area["name"],x+94,y+15,INK,14,True)
-                    self.text("현재 위치" if i==entry[1] else "포털에서 ↑로 이동", x+94,y+32,"#567342",12)
-                    y += 49
+                    self.text("현재 위치" if i==current else "← 왼쪽으로 이동" if i<current else "오른쪽으로 이동 →", x+94,y+32,"#567342",12)
+                    if area.get("landmark"):
+                        self.text(area["landmark"],x+94,y+45,"#3a5364",10)
+                    y += 53
             elif kind == "items":
                 y = self.item_grid(x,y,w,entry[1],entry[2])
             elif kind == "doll":
@@ -478,7 +484,7 @@ class GameInterface:
                 self.classic("book_edge",x,y,6,54)
                 sx,sy,sw,sh,_,_=monster_art(spec,"stand",self.app.game.tick)
                 scale=min(1,44/max(sw,sh))
-                self.atlas("wildlife",sx,sy,sw,sh,x+31-sw*scale/2,y+47-sh*scale,sw*scale,sh*scale)
+                self.atlas(spec.get("image","wildlife"),sx,sy,sw,sh,x+31-sw*scale/2,y+47-sh*scale,sw*scale,sh*scale)
                 self.text(f"Lv.{spec['level']}  {spec['name']}",x+60,y+15,"#5e4736",13,True)
                 self.text(detail or "첫 처치 시 전리품 기록",x+60,y+35,"#715f4c",11,width=w-65)
                 y += 56

@@ -239,6 +239,13 @@ class App:
         game, p = self.game, self.game.p
         self.note(f"남은 SP {game.sp()} · 레벨업마다 1점")
         job = CLASSES[p["job"]]
+        details = {
+            "stab": "앞의 적 하나를 두 번 찔러요.", "kick": "회전하며 주변 적을 최대 여섯 마리 타격해요.",
+            "heal": "HP를 회복하고 주변 언데드를 공격해요.", "arc": "앞쪽 적을 넓게 베어요.",
+            "arrow": "첫 대상에 맞으면 주변에 폭발해요.", "stars": "주변에 별벼락을 내려요.",
+        }
+        if job["shape"] in details:
+            self.note(details[job["shape"]])
         rank = p["skillRanks"]["primary"]
         self.row(f"{job['skill']} · 랭크 {rank}/5", f"X · MP {job['cost']} · 피해 {round(100 * (job['power'] + .25 * (rank - 1)))}%",
                  "강화", lambda: self.execute(lambda: game.raise_skill("primary")),
@@ -305,7 +312,8 @@ class App:
         self.render_panel()
 
     def map_panel(self):
-        self.rows.append(("route", area_at(self.game.p["x"])))
+        self.note("한 길로 이어진 7개 지역 · 방향키로 이동")
+        self.rows.append(("route",))
 
     def bestiary(self):
         discovered = self.game.p["bestiary"]
@@ -366,13 +374,12 @@ class App:
 
     def trainer(self):
         game, p = self.game, self.game.p
-        if p["job"] != "beginner":
-            self.note(f"현재 직업은 {CLASSES[p['job']]['name']}입니다.")
-            return
-        self.note("Lv. 5부터 전직할 수 있어요. 전직하면 전용 무기를 받아요.")
-        for id, support in SUPPORTS.items():
-            self.row(CLASSES[id]["name"], f"X {CLASSES[id]['skill']} · V {support['name']}", "전직",
-                     lambda id=id: self.execute(lambda: game.change_job(id)), p["level"] < 5)
+        self.note(f"현재 직업 · {CLASSES[p['job']]['name']}")
+        self.note("Lv. 5부터 직업을 바꿀 수 있어요. 전용 무기를 받고 기존 장비는 가방에 남아요.")
+        for job, support in SUPPORTS.items():
+            primary = CLASSES[job]
+            self.row(primary["name"], f"X {primary['skill']} · V {support['name']}", "전직",
+                     lambda job=job: self.execute(lambda: game.change_job(job)), p["level"] < 5 or p["job"] == job)
 
     def quest_panel(self, index):
         game = self.game
