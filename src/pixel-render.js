@@ -1,23 +1,178 @@
 'use strict';
-// PNG sprite atlases, fixed pivots, explicit frame durations. No vector actors.
-const pixelImages={},pixelMeta=PIXEL_DATA.meta;let pixelLoaded=0,pixelReady=false,pixelTime=0,swings=0,hitPixels=[],loadingError=false;
-for(const name of ['hero','monsters','background','terrain']){const im=new Image();im.onload=()=>{pixelLoaded++;if(pixelLoaded===4){pixelReady=true;toast('도트 월드 준비 완료 · ↑ 리나와 대화하세요')}};im.onerror=()=>{loadingError=true;toast('이미지를 불러오지 못했어요. 파일을 다시 열어주세요.')};im.src=PIXEL_DATA[name];pixelImages[name]=im;}
-function frameAt(a,elapsed){const total=a.durations.reduce((a,b)=>a+b,0);let ms=a.loop===false?Math.min(elapsed,total-1):elapsed%total;for(let i=0;i<a.frames.length;i++){ms-=a.durations[i]||100;if(ms<0)return a.frames[i]}return a.frames[a.frames.length-1]}
-function atlas(name,frame,x,y,dir=1,opacity=1){const a=pixelMeta[name],im=pixelImages[name];if(!im||!im.complete||!im.naturalWidth)return;let sx=frame%4*a.frameWidth,sy=Math.floor(frame/4)*a.frameHeight;g.save();g.globalAlpha=opacity;g.imageSmoothingEnabled=false;g.translate(Math.round(x),Math.round(y));if(dir<0)g.scale(-1,1);g.drawImage(im,sx,sy,a.frameWidth,a.frameHeight,-a.anchor[0],-a.anchor[1],a.frameWidth,a.frameHeight);g.restore()}
-function pixels(x,y,col,count){for(let i=0;i<count;i++)hitPixels.push({x,y,vx:(Math.random()-.5)*4,vy:-Math.random()*3,life:24,col})}
-const simulationStep=step,simulationAttack=attack;
-attack=function(skill=false){if(!pixelReady)return;const prior=skill?skillCD:cool,states=mobs.map(m=>[m,m.hp,m.dead]);simulationAttack(skill);if((skill?skillCD:cool)>prior){p.swingAt=pixelTime;atk=skill?25:20;swings++;p.lastSkill=skill;for(const [m,h,d]of states)if(h!==m.hp){m.hitUntil=tick+10;m.recoil=p.dir*9;if(!d&&m.dead){m.deathAt=tick;pixels(m.x,m.y-20,m.type===1?'#f4d393':'#bce59d',14)}else pixels(m.x,m.y-20,'#fff8bd',6)}}};
-step=function(){if(!pixelReady)return;const old=p.hp;simulationStep();pixelTime=tick*1000/60;if(p.hp<old)p.hurtUntil=tick+10;for(const m of mobs)m.recoil=(m.recoil||0)*.72;for(const f of hitPixels){f.x+=f.vx;f.y+=f.vy;f.vy+=.1;f.life--}hitPixels=hitPixels.filter(f=>f.life>0)};
-function pixelText(text,x,y,color='#fff5d0',size=11){g.font='bold '+size+'px monospace';g.textAlign='center';g.lineWidth=3;g.strokeStyle='#263d29';g.strokeText(text,Math.round(x),Math.round(y));g.fillStyle=color;g.fillText(text,Math.round(x),Math.round(y));g.textAlign='left'}
-function terrainStrip(x,y,w,h){const im=pixelImages.terrain;if(!im.complete)return;const lip=PIXEL_DATA.terrainLip,period=im.width;
-// Grass and earth are cropped from a pixel image. World-aligned UVs never swim with the camera.
-g.save();g.beginPath();g.rect(x,y-9,w,h+10);g.clip();let first=Math.floor(x/period)*period;for(let xx=first;xx<x+w;xx+=period){g.drawImage(im,0,lip,im.width,Math.min(h,im.height-lip),xx,y+7,im.width,h);g.drawImage(im,0,0,im.width,lip+8,xx,y-9,im.width,lip+8)}g.restore()}
-background=function(){g.imageSmoothingEnabled=false;if(!pixelReady){rect(0,0,960,468,'#183a42');pixelText(loadingError?'이미지 로드 실패':'도트 그래픽 불러오는 중 · '+pixelLoaded+'/4',480,234);return}let bg=pixelImages.background,off=Math.floor(camera*.12)%960;g.drawImage(bg,-off,-172,960,640);g.drawImage(bg,960-off,-172,960,640);let r=region(p.x);if(r>=3)rect(0,0,960,468,r===4?'#303e7930':'#164b2624');g.save();g.translate(-Math.floor(camera),0);
-for(const a of platforms){if(a.x+a.w<camera||a.x>camera+960)continue;if(a.y<ground){let xx=Math.round(a.x+37);for(let yy=a.y;yy<ground;yy+=12){rect(xx,yy,3,12,'#785d36');rect(xx+23,yy,3,12,'#785d36');rect(xx+3,yy+7,20,3,'#b5a16c');rect(xx+3,yy+7,20,1,'#ddc58b')}}let start=Math.max(a.x,Math.floor(camera)),end=Math.min(a.x+a.w,camera+960);terrainStrip(start,a.y,end-start,a.y===ground?70:45)}
-for(const n of npcs){if(n.x<camera-80||n.x>camera+1040)continue;atlas('hero',frameAt(pixelMeta.hero.animations.idle,pixelTime+n.x*3),n.x,ground,n.x%2?1:-1);pixelText(n.name,n.x,ground-80,'#ffe5a2');if(Math.abs(n.x-p.x)<75&&p.y>365)pixelText('↑ 대화',n.x,ground-98,'#fffbd8',12)}
-g.restore()};
-drawPlayer=function(){if(!pixelReady)return;let state=p.hurtUntil>tick?'hurt':atk?'attack':!p.grounded?(p.vy<0?'jumpUp':'jumpDown'):(keys.ArrowLeft||keys.ArrowRight)?'walk':'idle';let elapsed=state==='attack'?Math.max(0,pixelTime-(p.swingAt||0)):pixelTime;let a=pixelMeta.hero.animations[state];let alpha=inv&&tick%6<3?.45:1;atlas('hero',frameAt(a,elapsed),p.x-camera,p.y,p.dir,alpha);pixelText('Lv.'+p.level+' 모험가',p.x-camera,p.y-84,'#fff5cd')};
-drawMob=function(m){if(!pixelReady||m.x<camera-80||m.x>camera+1040)return;let death=m.dead?tick-(m.deathAt||0):0;if(m.dead&&death>22)return;let key=['slime','mushroom','spirit'][m.type],a=pixelMeta.monsters.animations[key];let frame=m.hitUntil>tick?a.hurtFrame:frameAt(a,pixelTime+m.phase*80);let hop=m.type===2?Math.sin(tick*.055+m.phase)*4:0;let alpha=m.dead?Math.max(0,1-death/22):1;atlas('monsters',frame,m.x-camera+(m.recoil||0),m.y-hop-(m.dead?death*.25:0),m.dir,alpha);if(m.hp<m.max&&!m.dead){rect(m.x-camera-18,m.y-64,36,4,'#32452b');rect(m.x-camera-17,m.y-63,34*Math.max(0,m.hp/m.max),2,'#c9e47b')}};
-const originalDraw=draw;draw=function(){originalDraw();if(!pixelReady)return;for(const f of hitPixels){g.globalAlpha=f.life/24;rect(f.x-camera,f.y,2,2,f.col)}g.globalAlpha=1};
-// Keep the ledges shown in the reference, with independently patrolling monsters.
-for(const a of [{x:50,y:282,w:205},{x:460,y:205,w:360},{x:1100,y:285,w:240}]){platforms.push(a);for(let i=0;i<2;i++){const x=a.x+45+i*90;mobs.push({x,y:a.y,home:x,left:a.x+25,right:a.x+a.w-25,dir:i?1:-1,type:1,hp:4,max:4,dead:0,phase:i})}}
+
+const pixelImages = {};
+const pixelMeta = PIXEL_DATA.meta;
+const heroScale = 0.72;
+const monsterScale = 0.74;
+const walkCycle = pixelMeta.hero.animations.walk.durations.reduce((sum, duration) => sum + duration, 0);
+let pixelLoaded = 0;
+let pixelReady = false;
+let loadingError = false;
+
+for (const name of ['hero', 'monsters', 'background', 'terrain']) {
+  const image = new Image();
+  image.onload = () => {
+    if (++pixelLoaded === 4) {
+      pixelReady = true;
+      toast('↑ 리나와 대화해 첫 의뢰를 시작하세요 · M 지도');
+    }
+  };
+  image.onerror = () => {
+    loadingError = true;
+    toast('이미지를 불러오지 못했어요. 파일을 다시 열어주세요.');
+  };
+  pixelImages[name] = image;
+  image.src = PIXEL_DATA[name];
+}
+
+function frameAt(animation, elapsed) {
+  const total = animation.durations.reduce((sum, duration) => sum + duration, 0);
+  let position = animation.loop === false ? Math.min(elapsed, total - 1) : elapsed % total;
+  for (const [index, duration] of animation.durations.entries()) {
+    if (position < duration) return animation.frames[index];
+    position -= duration;
+  }
+  return animation.frames.at(-1);
+}
+
+function atlas(name, frame, x, y, scale, direction = 1, opacity = 1) {
+  const {columns, frameWidth, frameHeight, anchor} = pixelMeta[name];
+  const sourceX = (frame % columns) * frameWidth;
+  const sourceY = Math.floor(frame / columns) * frameHeight;
+  g.save();
+  g.globalAlpha = opacity;
+  g.imageSmoothingEnabled = false;
+  g.translate(Math.round(x), Math.round(y));
+  if (direction < 0) g.scale(-1, 1);
+  g.drawImage(
+    pixelImages[name], sourceX, sourceY, frameWidth, frameHeight,
+    -Math.round(anchor[0] * scale), -Math.round(anchor[1] * scale),
+    Math.round(frameWidth * scale), Math.round(frameHeight * scale)
+  );
+  g.restore();
+}
+
+function pixelText(text, x, y, color = '#fff5d0', size = 11) {
+  g.font = 'bold ' + size + 'px monospace';
+  g.textAlign = 'center';
+  g.lineWidth = 3;
+  g.strokeStyle = '#263d29';
+  g.strokeText(text, Math.round(x), Math.round(y));
+  g.fillStyle = color;
+  g.fillText(text, Math.round(x), Math.round(y));
+  g.textAlign = 'left';
+}
+
+function terrainStrip(platform) {
+  const {x, y, w} = platform;
+  const isGround = y === ground;
+  const height = isGround ? 70 : 27;
+  const image = pixelImages.terrain;
+  const lip = PIXEL_DATA.terrainLip;
+  const firstTile = Math.floor(Math.max(x, camera) / image.width) * image.width;
+  const right = Math.min(x + w, camera + c.width);
+
+  g.save();
+  g.beginPath();
+  if (isGround) {
+    g.rect(x, y - 9, w, height + 9);
+  } else {
+    g.roundRect(x, y - 9, w, height + 9, [3, 3, 7, 7]);
+  }
+  g.clip();
+  for (let tileX = firstTile; tileX < right; tileX += image.width) {
+    g.drawImage(image, 0, lip, image.width, height, tileX, y + 7, image.width, height);
+    g.drawImage(image, 0, 0, image.width, lip + 8, tileX, y - 9, image.width, lip + 8);
+  }
+  if (!isGround) rect(x, y + height - 4, w, 4, '#28301980');
+  g.restore();
+}
+
+function background() {
+  g.imageSmoothingEnabled = false;
+  if (!pixelReady) {
+    rect(0, 0, c.width, c.height, '#183a42');
+    pixelText(loadingError ? '이미지 로드 실패' : '도트 그래픽 불러오는 중 · ' + pixelLoaded + '/4', 480, 234);
+    return;
+  }
+
+  // Mirror the next landscape tile so that neighboring edges share the same pixels.
+  const offset = Math.floor(camera * 0.12);
+  let tile = Math.floor(offset / c.width);
+  for (let x = tile * c.width - offset; x < c.width; x += c.width, tile++) {
+    g.save();
+    g.translate(x + (tile % 2) * c.width, 0);
+    if (tile % 2) g.scale(-1, 1);
+    g.drawImage(pixelImages.background, 0, -172, c.width, 640);
+    g.restore();
+  }
+  const area = region(p.x);
+  if (area >= 3) rect(0, 0, c.width, c.height, area === 4 ? '#303e7930' : '#164b2624');
+
+  g.save();
+  g.translate(-Math.floor(camera), 0);
+  for (const {x, top, bottom} of ladders) {
+    if (x < camera - 12 || x > camera + c.width + 12) continue;
+    rect(x - 10, top, 3, bottom - top, '#785d36');
+    rect(x + 7, top, 3, bottom - top, '#785d36');
+    for (let y = top + 10; y < bottom; y += 10) {
+      rect(x - 8, y, 16, 3, '#b5a16c');
+      rect(x - 8, y, 16, 1, '#ddc58b');
+    }
+  }
+  for (const platform of platforms) {
+    if (platform.x + platform.w > camera && platform.x < camera + c.width) {
+      terrainStrip(platform);
+    }
+  }
+  for (const npc of npcs) {
+    if (npc.x < camera - 45 || npc.x > camera + c.width + 45) continue;
+    const frame = frameAt(pixelMeta.hero.animations.idle, tick * STEP_MS + npc.x * 3);
+    atlas('hero', frame, npc.x, ground, heroScale, p.x > npc.x ? 1 : -1);
+    pixelText(npc.name, npc.x, ground - 56, '#ffe5a2');
+    if (Math.abs(npc.x - p.x) < 75 && p.y > 365) {
+      pixelText('↑ 대화', npc.x, ground - 70, '#fffbd8', 12);
+    }
+  }
+  g.restore();
+}
+
+function drawPlayer() {
+  if (!pixelReady) return;
+  let name = 'idle';
+  let time = tick * STEP_MS;
+  if (p.hurtUntil > tick) {
+    name = 'hurt';
+  } else if (swing) {
+    name = 'attack';
+    time = (tick - swing.startTick) * STEP_MS;
+  } else if (!p.grounded && !climbing) {
+    name = p.vy < 0 ? 'jumpUp' : 'jumpDown';
+  } else if (walking || (climbing && (keys.ArrowUp || keys.ArrowDown))) {
+    name = 'walk';
+    time = (walkDistance % 68) / 68 * walkCycle;
+  }
+
+  const x = p.x - Math.floor(camera);
+  const alpha = inv && p.hurtUntil <= tick && tick % 6 < 3 ? 0.45 : 1;
+  atlas('hero', frameAt(pixelMeta.hero.animations[name], time), x, p.y, heroScale, p.dir, alpha);
+  pixelText('Lv.' + p.level + ' 모험가', x, p.y - 61);
+}
+
+function drawMob(monster) {
+  if (!pixelReady || monster.x < camera - 50 || monster.x > camera + c.width + 50) return;
+  const death = monster.dead ? tick - monster.deathAt : 0;
+  if (death >= 20) return;
+  const name = ['slime', 'mushroom', 'spirit'][monster.type];
+  const animation = pixelMeta.monsters.animations[name];
+  const hurtTicks = Math.max(0, (monster.hitUntil ?? 0) - tick);
+  const elapsed = tick * STEP_MS + monster.phase * 80;
+  const frame = hurtTicks || monster.dead ? animation.hurtFrame : frameAt(animation, elapsed);
+  const float = monster.type === 2 ? Math.sin(tick * 0.055 + monster.phase) * 3 : 0;
+  const x = monster.x - Math.floor(camera) + (monster.hitDirection ?? 0) * hurtTicks * 0.4;
+  atlas('monsters', frame, x, monster.y - float - death * 0.35, monsterScale, monster.dir, 1 - death / 20);
+  if (monster.hp < monster.max && !monster.dead) {
+    rect(x - 13, monster.y - 46, 26, 4, '#32452b');
+    rect(x - 12, monster.y - 45, 24 * Math.max(0, monster.hp / monster.max), 2, '#c9e47b');
+  }
+}

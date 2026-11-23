@@ -1,8 +1,46 @@
 'use strict';
 const $=s=>document.querySelector(s),c=$('canvas'),g=c.getContext('2d');c.width=960;c.height=468;g.imageSmoothingEnabled=false;
 const W=12000,ground=410,regions=[['초록 마을',0,'#bee1e1','#86b77b'],['햇살 초원',1800,'#c8e5dd','#8fbb6b'],['버섯 언덕',4000,'#c6decd','#84aa72'],['깊은 숲',6500,'#a5c5c0','#52856d'],['달빛 유적',9200,'#b2b9d5','#7882a0']];
-let p={x:320,y:ground,vy:0,dir:1,hp:100,level:1,xp:0,gold:0,kills:0,pots:5,quest:0,claimed:0},keys={},mobs=[],fx=[],drops=[],camera=0,tick=0,atk=0,cool=0,skillCD=0,inv=0,paused=false,dialog=false,map=false,sound=false,audio,lastRegion=-1,acc=0,last=0,autosave=0;
-let platforms=[{x:0,y:ground,w:W}];for(let x=1900,i=0;x<W-300;x+=430,i++){platforms.push({x,y:ground-72-(i%3)*38,w:180+i%2*60});if(i%3===1)platforms.push({x:x+170,y:ground-190,w:130})}
+const STEP_MS = 1000 / 60;
+const attackAnimation = PIXEL_DATA.meta.hero.animations.attack;
+const swingDuration = attackAnimation.durations.reduce((total, duration) => total + duration, 0);
+let swing = null;
+let p={x:320,y:ground,vy:0,dir:1,hp:100,level:1,xp:0,gold:0,kills:0,pots:5,quest:0,claimed:0},keys={},mobs=[],fx=[],drops=[],camera=0,tick=0,skillCD=0,inv=0,paused=false,dialog=false,map=false,sound=false,audio,lastRegion=-1,acc=0,last=0,autosave=0;
+// Each region has its own ledge layout. Spans are [offset, height above ground, width, ladder offset].
+const ledgeLayouts = [
+  [[42,116,180,54],[158,208,200,68],[381,82,176,56],[465,166,201,62],[617,250,186,43],[700,115,158,74]],
+  [[65,82,180,67],[160,170,170,54],[284,257,190,36],[337,89,228,70],[482,174,192,48],[655,117,172,57]],
+  [[24,113,163,60],[109,206,205,52],[285,132,232,57],[426,219,207,51],[534,76,171,80],[644,153,171,41]],
+  [[46,151,183,59],[165,74,192,72],[233,239,185,42],[359,155,196,48],[527,211,210,67],[644,110,164,54]],
+  [[34,83,230,74],[190,169,155,61],[304,249,200,41],[379,101,222,68],[549,183,202,55],[684,94,150,51]]
+];
+
+const platforms = [{x: 0, y: ground, w: W}];
+for (const [index, [, startX]] of regions.entries()) {
+  const endX = regions[index + 1]?.[1] ?? W;
+  for (let start = startX, section = 0; start < endX; start += 850, section++) {
+    for (const [offset, height, width, ladderOffset] of ledgeLayouts[index]) {
+      const x = start + offset;
+      if (x + width > endX - 12) continue;
+      const y = ground - height + (section % 2 ? 12 : 0);
+      platforms.push({x, y, w: width, ladderX: x + ladderOffset});
+    }
+  }
+}
+const ladders = platforms.filter(platform => platform.ladderX !== undefined).map(platform => {
+  const x = platform.ladderX;
+  let bottom = ground;
+  for (const lower of platforms) {
+    if (lower.y > platform.y && lower.y < bottom && x > lower.x + 10 && x < lower.x + lower.w - 10) {
+      bottom = lower.y;
+    }
+  }
+  return {x, top: platform.y, bottom};
+});
+let climbing = null;
+let walking = false;
+let walkDistance = 0;
+
 const npcs=[{x:560,name:'리나',role:'숲의 의뢰',hair:'#a75f40',dress:'#bf7d75'},{x:870,name:'토비',role:'물약 상점',hair:'#695b43',dress:'#6a91a0'},{x:1130,name:'루카',role:'세계 안내',hair:'#a59c63',dress:'#788e59'},{x:9550,name:'별지기',role:'유적의 의뢰',hair:'#c3bfd7',dress:'#8779a1'}];
 try{let s=JSON.parse(localStorage.getItem('maple-local-world-v1'));if(s&&Number.isFinite(s.x)&&Number.isFinite(s.level)){for(const k of Object.keys(p))if(Number.isFinite(s[k]))p[k]=s[k];p.x=Math.max(30,Math.min(W-30,p.x));p.y=ground;p.vy=0;p.hp=Math.max(1,Math.min(100,p.hp));p.level=Math.max(1,p.level)}}catch{}
 function save(){try{localStorage.setItem('maple-local-world-v1',JSON.stringify(p));return true}catch{return false}}
@@ -10,48 +48,223 @@ function toast(t){$('#toast').textContent=t;$('#toast').style.opacity=1;clearTim
 function beep(f){if(!sound)return;try{audio=audio||new AudioContext();let o=audio.createOscillator(),v=audio.createGain();o.type='triangle';o.frequency.value=f;v.gain.setValueAtTime(.04,audio.currentTime);v.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.16);o.connect(v);v.connect(audio.destination);o.start();o.stop(audio.currentTime+.16)}catch{}}
 function region(x){for(let i=regions.length-1;i>=0;i--)if(x>=regions[i][1])return i;return 0}
 function ui(){let need=50+p.level*25;$('#lv').textContent='Lv. '+p.level;$('#hp').textContent=p.hp+' / 100';$('#hpbar').style.width=p.hp+'%';$('#xp').textContent=p.xp+' / '+need;$('#xpbar').style.width=Math.min(100,p.xp/need*100)+'%';$('#gold').textContent=p.gold+' 메소';$('#kills').textContent='처치 '+p.kills;$('#pots').textContent=p.pots;$('#quest').textContent=p.quest===0?'리나와 대화하기 · ↑':p.quest===1?'숲의 몬스터 '+Math.min(10,p.kills)+' / 10 · 리나에게 보고':p.quest===2?'유적에서 별지기 만나기 · 9,550m':p.quest===3?'추가 몬스터 '+Math.min(15,p.kills-p.claimed)+' / 15 · 별지기에게 보고':'모든 의뢰 완료! 자유롭게 탐험하세요';}
-function spawn(x,i){let r=region(x);mobs.push({x,y:ground,home:x,left:x-130,right:x+130,dir:i%2?1:-1,type:r>=4?2:r>=2?1:0,hp:4+r*3,max:4+r*3,dead:0,phase:i*1.7})}for(let i=0,x=1950;x<W-200;x+=220,i++)spawn(x,i);
+function spawn(x, index, ledge) {
+  const area = region(x);
+  const type = area >= 4 ? 2 : area >= 2 || ledge ? 1 : 0;
+  const max = 4 + area * 3;
+  mobs.push({
+    x, y: ledge?.y ?? ground, home: x,
+    left: ledge ? ledge.x + 16 : x - 130,
+    right: ledge ? ledge.x + ledge.w - 16 : x + 130,
+    dir: index % 2 ? 1 : -1, type, hp: max, max, dead: 0, phase: index * 1.7
+  });
+}
+for (let i = 0, x = 1950; x < W - 200; x += 220, i++) spawn(x, i);
+for (const [i, ledge] of platforms.slice(1).entries()) {
+  if (i % 3 !== 0) spawn(Math.round(ledge.x + ledge.w * 0.6), i, ledge);
+}
 function textfx(text,x,y,col='#ffdc66'){fx.push({text,x,y,col,life:60})}
 function reward(m){m.dead=400;const r=region(m.home);p.kills++;p.xp+=18+r*10;drops.push({x:m.x,y:m.y-15,gold:8+r*7,life:900});while(p.xp>=50+p.level*25){p.xp-=50+p.level*25;p.level++;p.hp=100;textfx('LEVEL UP!',p.x,p.y-100,'#fff5b0');beep(880);toast('레벨 '+p.level+'! 공격력이 오르고 체력이 회복되었어요.')}ui()}
-function attack(skill=false){if(paused||dialog||map)return;if(skill?skillCD>0:cool>0)return;if(skill){skillCD=210;atk=25;beep(760)}else{cool=23;atk=13;beep(440)}let hits=0;for(const m of mobs){if(m.dead)continue;if(Math.abs(m.x-p.x)<(skill?225:85)&&Math.abs(m.y-p.y)<85&&(skill||(m.x-p.x)*p.dir>-20)){let damage=skill?9+p.level*2:2+p.level+Math.floor(Math.random()*3);m.hp-=damage;textfx(''+damage,m.x,m.y-52);m.x=Math.max(m.left,Math.min(m.right,m.x+p.dir*12));hits++;if(m.hp<=0)reward(m)}}if(skill)fx.push({ring:true,x:p.x,y:p.y-25,col:'#bdf8ff',life:30});}
-function jump(){if(p.grounded&&!paused&&!dialog&&!map){p.vy=-11.2;p.grounded=false;beep(300)}}
+function attack(skill = false) {
+  if (!pixelReady || paused || dialog || map || swing || climbing || p.hurtUntil > tick) return;
+  if (skill && skillCD > 0) return;
+  if (skill) skillCD = 210;
+  swing = {startTick: tick, direction: p.dir, skill, hasHit: false};
+  beep(skill ? 420 : 370);
+}
+
+function advanceAttack() {
+  if (!swing) return;
+  const elapsed = (tick - swing.startTick) * STEP_MS;
+  if (elapsed >= swingDuration) {
+    swing = null;
+    return;
+  }
+  if (swing.hasHit || elapsed < attackAnimation.durations[0]) return;
+  swing.hasHit = true;
+
+  const {skill, direction} = swing;
+  beep(skill ? 760 : 510);
+  for (const monster of mobs) {
+    if (monster.dead) continue;
+    const horizontal = monster.x - p.x;
+    const vertical = Math.abs(monster.y - p.y);
+    const inRange = skill
+      ? Math.abs(horizontal) <= 175 && vertical <= 66
+      : horizontal * direction >= -8 && horizontal * direction <= 54 && vertical <= 29;
+    if (!inRange) continue;
+
+    const impactDirection = skill ? Math.sign(horizontal) || direction : direction;
+    const damage = skill ? 9 + p.level * 2 : 2 + p.level + Math.floor(Math.random() * 3);
+    monster.hp -= damage;
+    monster.x = Math.max(monster.left, Math.min(monster.right, monster.x + impactDirection * 9));
+    monster.hitUntil = tick + 10;
+    monster.hitDirection = impactDirection;
+    textfx(String(damage), monster.x, monster.y - 46);
+    if (monster.hp <= 0) {
+      monster.deathAt = tick;
+      reward(monster);
+    }
+  }
+  if (skill) fx.push({ring: true, x: p.x, y: p.y - 23, col: '#bdf8ff', life: 30});
+}
+
+function jump() {
+  if ((!p.grounded && !climbing) || paused || dialog || map) return;
+  climbing = null;
+  p.vy = -11.2;
+  p.grounded = false;
+  beep(300);
+}
+
+function travelTo(x) {
+  swing = null;
+  climbing = null;
+  p.x = x;
+  p.y = ground;
+  p.vy = 0;
+  p.grounded = true;
+  walking = false;
+  walkDistance = 0;
+}
 function close(){dialog=false;$('#dialog').hidden=true}function talk(n){dialog=true;$('#dialog').hidden=false;let text='',buttons=[];function btn(t,fn){buttons.push([t,fn])}
 if(n.name==='리나'){if(p.quest===0){text='반가워요, 모험가님! 마을 밖 몬스터 10마리를 잡아주실래요? 보상은 150 메소와 물약 5개예요.';btn('의뢰 수락',()=>{p.quest=1;ui();save();close();toast('새 의뢰 · 마을 오른쪽 초원으로 출발하세요!')})}else if(p.quest===1&&p.kills>=10){text='덕분에 숲길이 안전해졌어요! 더 큰 모험을 원한다면 동쪽 달빛 유적에서 별지기를 만나보세요.';btn('보상 받기',()=>{p.gold+=150;p.pots+=5;p.quest=2;ui();save();close();toast('150 메소 + 물약 5개 획득!')})}else text='초원은 마을 오른쪽에 있어요. '+(p.quest===1?'몬스터 '+Math.min(p.kills,10)+' / 10마리 처치했네요.':'유적의 별지기가 당신을 기다려요.');}
 if(n.name==='토비'){text='숲의 약초로 만든 물약이에요. 30 메소에 HP를 50 회복하는 물약 하나! 현재 '+p.gold+' 메소를 가지고 있군요.';btn('물약 구매 · 30 메소',()=>{if(p.gold>=30){p.gold-=30;p.pots++;ui();save();talk(n)}else toast('메소가 부족해요. 몬스터를 사냥해 보세요.')})}
-if(n.name==='루카'){text='이곳은 초록 마을이에요. 동쪽으로 초원, 버섯 언덕, 깊은 숲, 달빛 유적이 이어져요. ↑ 키로 사다리를 오르고, X로 광역 스킬을 쓰세요. M은 지도, R은 마을 귀환이에요.';btn('유적까지 빠른 이동 · 80 메소',()=>{if(p.gold>=80){p.gold-=80;p.x=9400;p.y=ground;p.vy=0;close();ui();save()}else toast('이동에는 80 메소가 필요해요.')})}
+if(n.name==='루카'){text='이곳은 초록 마을이에요. 동쪽으로 초원, 버섯 언덕, 깊은 숲, 달빛 유적이 이어져요. ↑ 키로 사다리를 오르고, X로 광역 스킬을 쓰세요. M은 지도, R은 마을 귀환이에요.';btn('유적까지 빠른 이동 · 80 메소',()=>{if(p.gold>=80){p.gold-=80;travelTo(9400);close();ui();save()}else toast('이동에는 80 메소가 필요해요.')})}
 if(n.name==='별지기'){if(p.quest<2)text='유적에 오신 걸 환영해요. 초록 마을 리나의 의뢰부터 해결해 보세요.';else if(p.quest===2){text='이 오래된 숲에 평화를 되찾아주세요. 몬스터를 15마리 더 잡으면 400 메소와 물약 10개를 드릴게요.';btn('의뢰 수락',()=>{p.quest=3;p.claimed=p.kills;ui();save();close()})}else if(p.quest===3&&p.kills-p.claimed>=15){text='빛이 다시 돌아왔군요. 당신은 이 숲의 훌륭한 모험가예요.';btn('보상 받기',()=>{p.quest=4;p.gold+=400;p.pots+=10;ui();save();close();toast('유적 의뢰 완료! 400 메소 + 물약 10개')})}else text=p.quest===4?'언제든 이 숲을 자유롭게 여행하세요.':'몬스터를 '+(p.kills-p.claimed)+' / 15마리 처치했어요. 기다리고 있을게요.';}
 $('#dialog').replaceChildren();let title=document.createElement('b');title.textContent=n.name+' · '+n.role;let para=document.createElement('p');para.textContent=text;$('#dialog').append(title,para);for(const [t,f]of buttons){let b=document.createElement('button');b.textContent=t;b.onclick=f;$('#dialog').append(b)}let b=document.createElement('button');b.textContent='닫기 · Esc';b.onclick=close;$('#dialog').append(b)}
 function interact(){if(dialog){close();return}const n=npcs.find(n=>Math.abs(n.x-p.x)<75&&p.y>365);if(n)talk(n)}
 function worldmap(){map=!map;$('#worldmap').hidden=!map;if(!map)return;$('#worldmap').innerHTML='<button id="mapclose">닫기 ×</button><b>WORLD MAP · 이어진 하나의 세계</b><p style="color:#7e8d74">현재 위치: '+regions[region(p.x)][0]+' / '+Math.floor(p.x)+'m</p><div class="mapline">'+regions.map((r,i)=>'<div style="'+(region(p.x)===i?'outline:3px solid #de9f65;':'')+'">'+['🏡','🌾','🍄','🌲','🌙'][i]+'<br>'+r[0]+'<br>'+r[1]+'m</div>').join('')+'</div><p>← 서쪽 마을 &nbsp; · &nbsp; 동쪽 유적 →</p><small>R 마을 귀환 · NPC 루카에게서 유적 빠른 이동 가능</small>';$('#mapclose').onclick=worldmap}
 function potion(){if(p.pots&&p.hp<100){p.pots--;p.hp=Math.min(100,p.hp+50);textfx('HP +50',p.x,p.y-80,'#baf3a7');beep(660);ui();save()}else toast(p.pots?'체력이 가득 차 있어요.':'물약이 없어요. 마을의 토비에게 구매하세요.')}
-function key(code){if(code==='Space')jump();if(code==='KeyZ')attack();if(code==='KeyX')attack(true);if(code==='ArrowUp')interact();if(code==='KeyM')worldmap();if(code==='Escape'){if(dialog)close();else if(map)worldmap()}if(code==='KeyK')toast(save()?'모험을 저장했어요.':'저장 공간을 사용할 수 없어요.');if(code==='KeyR'&&!dialog){p.x=320;p.y=ground;p.vy=0;p.hp=100;ui();save();toast('초록 마을로 돌아왔어요.')}}
+function key(code){if(code==='Space')jump();if(code==='KeyZ')attack();if(code==='KeyX')attack(true);if(code==='ArrowUp')interact();if(code==='KeyM')worldmap();if(code==='Escape'){if(dialog)close();else if(map)worldmap()}if(code==='KeyK')toast(save()?'모험을 저장했어요.':'저장 공간을 사용할 수 없어요.');if(code==='KeyR'&&!dialog){travelTo(320);p.hp=100;ui();save();toast('초록 마을로 돌아왔어요.')}}
 window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault();keys[e.code]=true;if(!e.repeat)key(e.code)});window.addEventListener('keyup',e=>keys[e.code]=false);window.addEventListener('blur',()=>{keys={};save()});window.addEventListener('pagehide',save);
 document.querySelectorAll('[data-key]').forEach(b=>{b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);keys[b.dataset.key]=true;key(b.dataset.key)};b.onpointerup=b.onpointercancel=()=>keys[b.dataset.key]=false});$('#potion').onclick=potion;$('#pause').onclick=()=>{paused=!paused;$('#pause').textContent=paused?'▶ 계속하기':'Ⅱ 일시정지'};$('#sound').onclick=()=>{sound=!sound;$('#sound').textContent=sound?'♪ 소리 끄기':'♪ 소리 켜기';beep(600)};
-function rect(x,y,w,h,col){g.fillStyle=col;g.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}function ell(x,y,rx,ry,col){g.fillStyle=col;g.beginPath();g.ellipse(Math.round(x),Math.round(y),rx,ry,0,0,Math.PI*2);g.fill()}
-// All sprites below are original low-resolution drawings, rendered without smoothing.
-function sprite(rows,palette,x,y,s=3,flip=false){g.save();g.translate(Math.round(x),Math.round(y));if(flip)g.scale(-1,1);for(let r=0;r<rows.length;r++)for(let j=0;j<rows[r].length;j++){let col=palette[rows[r][j]];if(col)rect((j-rows[r].length/2)*s,(r-rows.length)*s,s,s,col)}g.restore()}
-const hero=['.....hhhh.....','...hhhhhhhh...','..hHHHHHHHHh..','.hHHHHHHHHHHh.','..bbbbbbbbbb..','..bfffffffbb..','..bffeffeffb..','...fffffff....','....ffmff.....','...ccffccc....','..ccwwwwccc...','..fcwwwwccf...','..ffwwwwfff...','...bbbbbbb....','...dd..dd.....','..ddd..ddd....'];
-const slime=['......aa......','.....abba.....','....abbbba....','...abccbbba...','..abccbbbbba..','.abbbbbbbbbba.','.abbebbbebbba.','abbbbbbbbbbbba','abbpbbmbbpbbba','.abbbbbbbbbba.','..aaaaaaaaaa..'];
-const shroom=['.....aaaa.....','...aaaaaaa....','..aabbbaa aa..'.replace(' ',''),'.aabbbbaaaaaa.','aabbbbaaaabbaa','aaaaaaaabbbbaa','.aaaaaaaaaaaa.','....ccccc.....','...cdcdccc....','...ccccccc....','....ddddd.....'];
-const ghost=['....aaaaa.....','...abbbbba....','..abccbbbba...','.abbbebebba...','.abbbbbbbba...','.abbbbmbbba...','..abbbbbba....','...abbabba....','....aa.aa.....'];
-function tree(x,y,s,r){g.save();g.translate(Math.round(x),y);g.scale(s,s);let dark=r===3?'#476e5c':r===4?'#64748b':'#638d60',mid=r===3?'#60866c':r===4?'#8495a6':'#83aa72',light=r===3?'#80a07a':r===4?'#a6b5b0':'#a9c88c';rect(-12,-148,26,148,'#7d6b50');rect(-6,-145,8,145,'#ad9369');rect(-27,-114,20,10,'#8c7657');for(let j=0;j<4;j++){let yy=-108-j*35,ww=74-j*9;rect(-ww,yy,ww*2,28,dark);rect(-ww+7,yy-16,ww*2-14,31,mid);rect(-ww+15,yy-24,ww*2-30,20,light);for(let q=0;q<7;q++)rect(-ww+q*ww/3,yy+17,9,9,dark)}g.restore()}
-function house(x,y,color,label){rect(x-60,y-102,120,102,'#a18b68');rect(x-55,y-99,110,95,'#f2dfac');rect(x-47,y-95,94,10,'#cdbb8a');for(let j=0;j<5;j++)rect(x-76+j*13,y-111-j*10,152-j*26,13,color);rect(x-48,y-167,18,36,'#ae8d70');rect(x-15,y-45,30,45,'#80654d');rect(x-8,y-40,16,38,'#9c8062');rect(x+6,y-24,3,3,'#e7d79a');for(let xx of [-39,30]){rect(x+xx-4,y-75,27,31,'#a78d62');rect(x+xx,y-71,19,22,'#abd7d5');rect(x+xx+8,y-71,3,22,'#faf1ca');rect(x+xx,y-62,19,3,'#faf1ca')}rect(x-46,y-10,15,10,'#9cac64');rect(x+33,y-8,18,8,'#91a65b');g.font='11px sans-serif';g.textAlign='center';g.fillStyle='#fff8dc';g.fillText(label,x,y-115);g.textAlign='left'}
-function mushroom(x,y,s){g.save();g.translate(x,y);g.scale(s,s);rect(-7,-35,15,35,'#e8dbac');rect(-5,-34,4,30,'#fff0c8');for(let j=0;j<4;j++)rect(-36+j*6,-40-j*7,72-j*12,8,j%2?'#c77c58':'#db9066');rect(-25,-56,11,6,'#ffe9bb');rect(7,-61,9,7,'#ffe9bb');rect(23,-45,7,5,'#ffe9bb');g.restore()}
-function ladder(a){rect(a.x+35,a.y,4,ground-a.y,'#987c54');rect(a.x+59,a.y,4,ground-a.y,'#987c54');for(let y=a.y+9;y<ground;y+=14)rect(a.x+35,y,28,4,'#baa06c')}
-function background(){let r=region(p.x),sky=regions[r][2];rect(0,0,960,468,sky);ell(760,72,31,31,r===4?'#f3f0d7':'#fff5c9');for(let i=0;i<11;i++){let x=((i*170-camera*.12+tick*.035)%1250+1250)%1250-120;rect(x,72+i%3*23,80,12,'#f6f5e1aa');rect(x+13,64+i%3*23,48,10,'#f6f5e1aa')}
-for(let i=-1;i<10;i++){let x=i*160-(camera*.18)%160;ell(x,350,160,155,r===4?'#9bacc0':'#a3c39a');ell(x+70,375,120,125,r===4?'#91a1b3':'#9bbc8b')}
-for(let i=-1;i<9;i++)tree(i*170-(camera*.35)%170,410,.8+(i%3)*.2,r);
-g.save();g.translate(-Math.floor(camera),0);for(let x=Math.floor(camera/180)*180-180;x<camera+1150;x+=180){let rr=region(Math.max(0,x));if(rr>=2&&rr<4)mushroom(x+50,ground,.8+(x%5)*.2);if(rr===4){rect(x,ground-85,26,85,'#7a8090');rect(x-5,ground-88,36,8,'#b0b2ba');rect(x+5,ground-79,5,70,'#a2a5b0');rect(x+55,ground-12,42,12,'#888b97')}}
-if(camera<1600){house(420,ground,'#bc7b59','모험가의 집');house(830,ground,'#79976c','숲의 물약 가게');house(1240,ground,'#ae9060','여행자의 쉼터');for(let x=50;x<1500;x+=100){rect(x,ground-26,6,26,'#cfb990');rect(x+40,ground-26,6,26,'#cfb990');rect(x,ground-19,45,5,'#e8d5ac');rect(x,ground-9,45,5,'#e8d5ac')}}
-for(const a of platforms){if(a.x+a.w<camera||a.x>camera+960)continue;if(a.y!==ground)ladder(a);let start=Math.max(a.x,Math.floor(camera/16)*16),end=Math.min(a.x+a.w,camera+976);rect(start,a.y,end-start,a.y===ground?80:29,'#a58a64');rect(start,a.y,end-start,9,regions[region(Math.max(0,a.x))][3]);for(let x=start;x<end;x+=16){rect(x,a.y+7,10,6,'#8cad62');rect(x+3,a.y+18,6,4,'#c0a27b');if(a.y===ground){rect(x+8,a.y+39,7,5,'#8e785d');rect(x,a.y+60,11,4,'#b69a70')}}}
-for(let x=Math.floor(camera/48)*48;x<camera+960;x+=48){rect(x,ground-6,2,7,'#749958');rect(x-2,ground-8,6,3,x%3===0?'#ebcf93':'#bdd399')}
-for(const n of npcs){if(n.x<camera-80||n.x>camera+1040)continue;sprite(hero,{h:n.hair,H:n.hair,b:'#755745',f:'#f8d2a6',e:'#403b37',m:'#d78c79',c:n.dress,w:n.dress,d:'#665343'},n.x,ground,2);g.textAlign='center';g.font='bold 11px sans-serif';g.strokeStyle='#fff8de';g.lineWidth=3;g.strokeText(n.name,n.x,ground-48);g.fillStyle='#536b43';g.fillText(n.name,n.x,ground-48);if(Math.abs(n.x-p.x)<75){g.fillStyle='#fff8de';g.fillRect(n.x-29,ground-82,58,20);g.fillStyle='#586a44';g.fillText('↑ 대화',n.x,ground-68)}g.textAlign='left'}
-g.restore()}
-function drawMob(m){if(m.dead||m.x<camera-50||m.x>camera+1010)return;let x=m.x-camera,bob=Math.sin(tick*.08+m.phase)*2;ell(x,m.y-1,21,4,'#36453533');if(m.type===0)sprite(slime,{a:'#4a8050',b:'#90c974',c:'#c1e898',e:'#344937',p:'#dbaf91',m:'#61794e'},x,m.y+bob,3);if(m.type===1)sprite(shroom,{a:'#ad694e',b:'#ffe2ac',c:'#ecce98',d:'#554b3b'},x,m.y+bob,3);if(m.type===2)sprite(ghost,{a:'#6b7e9a',b:'#b9cbd7',c:'#e2e9df',e:'#4a536e',m:'#737c95'},x,m.y+bob-4,3);if(m.hp<m.max){rect(x-19,m.y-50,38,4,'#4d5541');rect(x-18,m.y-49,36*Math.max(0,m.hp/m.max),2,'#dfbb68')}}
-function drawPlayer(){let x=p.x-camera;ell(x,p.y-1,18,4,'#36453533');g.save();if(inv>0&&tick%6<3)g.globalAlpha=.45;let rows=hero;if((keys.ArrowLeft||keys.ArrowRight)&&p.grounded&&Math.floor(tick/7)%2)rows=hero.slice(0,-2).concat(['..ddd...dd....','....dd.ddd....']);sprite(rows,{h:'#586a44',H:'#95ac67',b:'#78523b',f:'#ffdbad',e:'#363a34',m:'#d78e77',c:'#6e9c9b',w:'#e7e3c9',d:'#725b48'},x,p.y,3,p.dir<0);
-let xx=x+p.dir*25;rect(xx,p.y-43,4,38,'#839ea2');rect(xx+1,p.y-43,3,30,'#dfe9db');rect(xx-5,p.y-16,15,4,'#c7ae68');rect(xx,p.y-12,4,11,'#86654d');if(atk>0){g.save();g.translate(x,p.y-30);g.scale(p.dir,1);g.strokeStyle=atk>14?'#b8f1fa':'#fff8cb';g.lineWidth=6;g.beginPath();g.arc(5,0,60,-1.3,1.3);g.stroke();g.lineWidth=2;g.beginPath();g.arc(5,0,68,-1.15,1.1);g.stroke();g.restore()}g.restore();g.textAlign='center';g.font='bold 10px sans-serif';g.strokeStyle='#46604d';g.lineWidth=3;g.strokeText('Lv.'+p.level+' 모험가',x,p.y-59);g.fillStyle='#fff9df';g.fillText('Lv.'+p.level+' 모험가',x,p.y-59);g.textAlign='left'}
-function step(){tick++;if(cool)cool--;if(skillCD)skillCD--;if(atk)atk--;if(inv)inv--;if(keys.KeyZ)attack();if(keys.KeyX)attack(true);let dx=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0);p.x=Math.max(24,Math.min(W-24,p.x+dx*4.2));if(dx)p.dir=dx;let onLadder=platforms.find(a=>a.y<ground&&Math.abs(p.x-(a.x+49))<19&&p.y>=a.y&&p.y<=ground+1);if(onLadder&&(keys.ArrowUp||keys.ArrowDown)){p.y+=keys.ArrowUp?-3.2:3.2;p.y=Math.max(onLadder.y,Math.min(ground,p.y));p.vy=0;p.grounded=p.y===onLadder.y||p.y===ground}else{let old=p.y;p.vy+=.5;p.y+=p.vy;p.grounded=false;for(const a of platforms)if(p.vy>=0&&old<=a.y&&p.y>=a.y&&p.x>a.x-6&&p.x<a.x+a.w+6){p.y=a.y;p.vy=0;p.grounded=true;break}}
-for(const m of mobs){if(m.dead){if(--m.dead===0){m.hp=m.max;m.x=m.home}continue}m.x+=m.dir*(m.type===2?.8:.5);if(m.x<m.left||m.x>m.right)m.dir*=-1;if(!inv&&Math.abs(m.x-p.x)<26&&Math.abs(m.y-p.y)<30){p.hp-=5+m.type*3;inv=70;p.vy=-4;textfx('-'+(5+m.type*3),p.x,p.y-65,'#f2a6a0');beep(140);if(p.hp<=0){p.hp=100;p.x=320;p.y=ground;p.vy=0;toast('마을에서 회복했어요. 다시 출발해 볼까요?')}ui()}}
-for(const d of drops){d.life--;if(Math.abs(d.x-p.x)<48&&Math.abs(d.y-p.y)<60){p.gold+=d.gold;d.life=0;textfx('+'+d.gold+' 메소',p.x,p.y-42,'#fff3a2');ui()}}drops=drops.filter(d=>d.life>0);fx=fx.filter(f=>--f.life>0);for(const f of fx)if(!f.ring)f.y-=.55;camera=Math.max(0,Math.min(W-960,p.x-480));let r=region(p.x);if(r!==lastRegion){lastRegion=r;$('#region').textContent=['🏡 ','🌾 ','🍄 ','🌲 ','🌙 '][r]+regions[r][0];if(tick>2)toast(regions[r][0]+'에 도착했어요.')}if(++autosave>600){autosave=0;save()}}
+function rect(x, y, width, height, color) {
+  g.fillStyle = color;
+  g.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
+}
+
+function movePlayer(dx) {
+  const climbDirection = Number(Boolean(keys.ArrowDown)) - Number(Boolean(keys.ArrowUp));
+  if (dx) climbing = null;
+  if (!climbing && !dx && !swing && climbDirection && p.vy >= 0) {
+    climbing = ladders.find(ladder => (
+      Math.abs(p.x - ladder.x) <= 12 &&
+      (climbDirection < 0 ? p.y > ladder.top && p.y <= ladder.bottom :
+        p.y >= ladder.top && p.y < ladder.bottom)
+    )) ?? null;
+  }
+  if (climbing) {
+    p.x = climbing.x;
+    p.y = Math.max(climbing.top, Math.min(climbing.bottom, p.y + climbDirection * 3.2));
+    p.vy = 0;
+    p.grounded = p.y === climbing.top || p.y === climbing.bottom;
+    if (p.grounded) climbing = null;
+    return;
+  }
+
+  p.x = Math.max(24, Math.min(W - 24, p.x + dx * (swing && p.grounded ? 2.4 : 4.2)));
+  const oldY = p.y;
+  p.vy += 0.5;
+  p.y += p.vy;
+  p.grounded = false;
+  if (p.vy < 0) return;
+
+  // Select the first surface crossed when several ledges overlap horizontally.
+  let landing = Infinity;
+  for (const {x, y, w} of platforms) {
+    if (oldY <= y && p.y >= y && p.x >= x - 4 && p.x <= x + w + 4) {
+      landing = Math.min(landing, y);
+    }
+  }
+  if (landing !== Infinity) {
+    p.y = landing;
+    p.vy = 0;
+    p.grounded = true;
+  }
+}
+
+function moveMonsters() {
+  for (const monster of mobs) {
+    if (monster.dead) {
+      if (--monster.dead === 0) {
+        monster.hp = monster.max;
+        monster.x = monster.home;
+      }
+      continue;
+    }
+    const speed = monster.type === 2 ? 0.8 : 0.5;
+    monster.x += monster.dir * speed;
+    if (monster.x <= monster.left || monster.x >= monster.right) {
+      monster.x = Math.max(monster.left, Math.min(monster.right, monster.x));
+      monster.dir *= -1;
+    }
+    if (inv || Math.abs(monster.x - p.x) >= 17 || Math.abs(monster.y - p.y) >= 23) continue;
+
+    const damage = 5 + monster.type * 3;
+    p.hp -= damage;
+    inv = 70;
+    p.hurtUntil = tick + 10;
+    climbing = null;
+    swing = null;
+    p.vy = -4;
+    p.grounded = false;
+    textfx('-' + damage, p.x, p.y - 55, '#f2a6a0');
+    beep(140);
+    if (p.hp <= 0) {
+      p.hp = 100;
+      travelTo(320);
+      toast('마을에서 회복했어요. 다시 출발해 볼까요?');
+    }
+    ui();
+  }
+}
+
+function step() {
+  if (!pixelReady) return;
+  tick++;
+  if (skillCD) skillCD--;
+  if (inv) inv--;
+  const dx = Number(Boolean(keys.ArrowRight)) - Number(Boolean(keys.ArrowLeft));
+  if (dx && !swing) p.dir = dx;
+  if (keys.KeyX) attack(true);
+  if (keys.KeyZ) attack();
+  const oldX = p.x;
+  const oldY = p.y;
+  movePlayer(dx);
+  walking = p.grounded && Math.abs(p.x - oldX) > 0;
+  if (walking || climbing) {
+    walkDistance += Math.abs(p.x - oldX) + Math.abs(p.y - oldY);
+  } else {
+    walkDistance = 0;
+  }
+  advanceAttack();
+  moveMonsters();
+
+  for (const drop of drops) {
+    drop.life--;
+    if (Math.abs(drop.x - p.x) < 33 && Math.abs(drop.y - p.y) < 38) {
+      p.gold += drop.gold;
+      drop.life = 0;
+      textfx('+' + drop.gold + ' 메소', p.x, p.y - 42, '#fff3a2');
+      ui();
+    }
+  }
+  drops = drops.filter(drop => drop.life > 0);
+  fx = fx.filter(effect => --effect.life > 0);
+  for (const effect of fx) if (!effect.ring) effect.y -= 0.55;
+  camera = Math.max(0, Math.min(W - 960, p.x - 480));
+  const area = region(p.x);
+  if (area !== lastRegion) {
+    lastRegion = area;
+    $('#region').textContent = ['🏡 ', '🌾 ', '🍄 ', '🌲 ', '🌙 '][area] + regions[area][0];
+    if (tick > 2) toast(regions[area][0] + '에 도착했어요.');
+  }
+  if (++autosave > 600) {
+    autosave = 0;
+    save();
+  }
+}
+
 function draw(){background();mobs.forEach(drawMob);for(const d of drops)if(d.x>camera-30&&d.x<camera+990){rect(d.x-camera-5,d.y-8+Math.sin(tick*.09)*2,10,9,'#b68c3e');rect(d.x-camera-3,d.y-7+Math.sin(tick*.09)*2,6,6,'#f3d06a')}drawPlayer();for(const f of fx){g.globalAlpha=Math.min(1,f.life/15);if(f.ring){g.strokeStyle=f.col;g.lineWidth=4;g.beginPath();g.ellipse(f.x-camera,f.y,30+(30-f.life)*7,50,0,0,Math.PI*2);g.stroke()}else{g.font='bold 20px sans-serif';g.textAlign='center';g.strokeStyle='#805c42';g.lineWidth=3;g.strokeText(f.text,f.x-camera,f.y);g.fillStyle=f.col;g.fillText(f.text,f.x-camera,f.y)}}g.globalAlpha=1;g.textAlign='left';rect(755,87,185,42,'#f7f4dfcc');g.fillStyle='#647555';g.font='10px sans-serif';g.fillText(Math.floor(p.x)+' m / 12,000 m · '+(skillCD?'스킬 '+(skillCD/60).toFixed(1)+'초':'X 스킬 준비'),765,102);rect(766,113,162,4,'#c5ceae');rect(766+p.x/W*158,110,5,10,'#d49c63');if(paused){rect(0,0,960,468,'#253d4666');g.fillStyle='#fff5dc';g.textAlign='center';g.font='26px sans-serif';g.fillText('잠깐 쉬어가는 중',480,234);g.textAlign='left'}}
-function loop(t){acc+=Math.min(80,t-last);last=t;while(acc>=16.667){if(!paused&&!dialog&&!map)step();acc-=16.667}draw();requestAnimationFrame(loop)}ui();camera=Math.max(0,Math.min(W-960,p.x-480));toast('↑ 리나와 대화해 첫 의뢰를 시작하세요 · M 지도');requestAnimationFrame(loop);
+function loop(t){acc+=Math.min(80,t-last);last=t;while(acc>=STEP_MS){if(!paused&&!dialog&&!map)step();acc-=STEP_MS}draw();requestAnimationFrame(loop)}ui();camera=Math.max(0,Math.min(W-960,p.x-480));toast('↑ 리나와 대화해 첫 의뢰를 시작하세요 · M 지도');requestAnimationFrame(loop);
