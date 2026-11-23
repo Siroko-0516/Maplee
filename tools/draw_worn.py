@@ -1,10 +1,10 @@
 """Paint 80×80 equipment overlays in the adventurer's pose coordinate system.
 
-Rows are in WORN_ORDER. Columns follow the 28 base adventurer poses.
-The attack atlas has four sword rows and one column per simulation tick.
+Worn rows follow WORN_ORDER, then four far-hand sword rows, across 28 poses.
+The attack atlas packs four sword rows per direction and two arm cutouts.
 Both atlases stay on the native dot grid, with the same 74-pixel sole line.
 """
-from math import cos, radians, sin
+from math import cos, hypot, radians, sin, sqrt
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter
@@ -26,15 +26,25 @@ PALMS = (
     (26,52), (45,54), (21,38), (47,56), (48,52), (48,54), (46,57), (48,54),
     (58,48), (58,48), (58,48), (47,56), (57,40), (55,46), (54,50), (47,56),
 )
-# Body cel, forward palm, and blade headings (clockwise in screen space).
-# The opposite fist in swingO1.2 moves behind the character's head. The
-# lower hand remains at the front throughout the sweep and on impact.
-SWORD_STROKE = (
-    (8,  (44, 56), (-52, -93, -125, -143)),
-    (9,  (45, 54), (-145, -127, -94, -51)),
-    (10, (47, 54), (-10, 12, 30, 41, 49, 55)),
-    (11, (47, 56), (59, 61, 58, 51, 39, 24, 7, -10, -24, -33)),
+# Native right-facing coordinates. On a three-quarter front view the right
+# shoulder is near when facing right and far when facing left.
+NEAR_PALMS = (
+    (30,60), (29,60), (28,60), (29,60), (28,57), (36,61), (28,57), (26,56),
+    (26,52), (45,54), (22,38), (35,60), (31,47), (31,49), (35,59), (35,59),
+    (36,47), (26,47), (26,47), (35,60), (57,41), (55,46), (20,58), (35,60),
 )
+FAR_PALMS = PALMS[:8] + ((44,56),(25,53),(47,54),(47,56)) + PALMS[12:20] + (
+    (48,56),(49,53),(51,50),(47,56),
+)
+SWORD_ANGLES = (-52,-93,-125,-143,-145,-127,-94,-51,-10,12,30,41,
+                49,55,59,61,58,51,39,24,7,-10,-24,-33)
+# (wrist x, wrist y) from lift through extension and return, in native dots.
+NEAR_WRISTS = ((31,57),(28,54),(25,51),(24,48),(25,45),(30,42),
+               (37,42),(44,46),(51,50),(52,52),(52,54),(51,55),
+               (49,57),(47,58),(44,59),(41,60),(38,60),(36,60))
+FAR_WRISTS = ((46,55),(49,53),(53,50),(56,48),(58,47),(59,46),
+              (58,46),(56,47),(55,50),(55,52),(54,54),(53,56),
+              (52,57),(51,58),(50,58),(49,58),(48,57),(47,56))
 
 STRING_HAND = {16: (42,45), 17: (29,44)}
 TORSO = (
@@ -354,15 +364,16 @@ def hold_in_hand(image, base, grip):
     image.putalpha(ImageChops.subtract(image.getchannel("A"),hand))
 
 
-def overlay(kind,pose,base):
+def overlay(kind,pose,base, far=False):
     image=Image.new("RGBA",(80,80))
     if kind in CLOTH:
         armor(image,kind,pose,base)
     elif kind=="cap":
         cap(image,pose,base)
-    elif pose < 24 and (kind!="twig" or 8 <= pose <= 11):
+    elif pose < 24:
         grip = PALMS[pose]
-        if kind in ("twig","bronze","blade","sunblade"):
+        if kind in WORN_ORDER[:4]:
+            grip = (FAR_PALMS if far else NEAR_PALMS)[pose]
             angle = {8:-139, 9:-11, 10:-113, 11:-52, 12:-32, 13:-48, 14:-25}.get(pose,-33)
             blade(image,kind,grip,angle)
         elif kind in ("bow","nightbow"):
@@ -404,23 +415,71 @@ def cutting_trail(image, kind, palm, heading, previous, tick):
     draw.line(outer[samples//3:], fill=light)
 
 
+def lunge_body(hero, far):
+    """Remove only the striking arm from swingO1.0, up to its shirt seam."""
+    body = hero.crop((0, 160, 80, 240))
+    draw = ImageDraw.Draw(body)
+    if far:
+        # Left edge of the far arm, following the outline of the shirt.
+        for y, x in enumerate((38,38,38,38,39,41,43,43), 51):
+            draw.line((x,y, 41 if y==51 else 48,y), fill=(0,0,0,0))
+    else:
+        for y, x in enumerate((33,32,31,31,30,29,28), 48):
+            draw.line((20,y,x,y), fill=(0,0,0,0))
+    return body
+
+
+def sword_arm(grip, far):
+    # Two jointed segments connect the shoulder to the moving grip.
+    shoulder = (39,52) if far else (34,50)
+    dx,dy = grip[0]-shoulder[0], grip[1]-shoulder[1]
+    length = hypot(dx,dy) or 1
+    bend = sqrt(max(0, 9.5**2 - (length/2)**2))
+    elbow = (round((shoulder[0]+grip[0])/2 - dy/length*bend),
+             round((shoulder[1]+grip[1])/2 + dx/length*bend))
+    arm = Image.new("RGBA",(80,80))
+    d = ImageDraw.Draw(arm)
+    for radius, color in ((3,"#080808"),(2,"#ffcb86")):
+        d.line((shoulder,elbow,grip),fill=color,width=radius*2+1)
+        for x,y in (elbow,shoulder):
+            d.ellipse((x-radius,y-radius,x+radius,y+radius),fill=color)
+    d.line((elbow,grip), fill="#ffe5b9",width=2)
+    return arm
+
+
 def swing_weapons(hero):
-    atlas = Image.new("RGBA", (24 * 80, 4 * 80))
-    tick = 0
-    previous = SWORD_STROKE[0][2][0]
-    for pose, grip, headings in SWORD_STROKE:
-        x, y = pose % 4 * 80, pose // 4 * 80
-        body = hero.crop((x, y, x + 80, y + 80))
-        for heading in headings:
-            for row, kind in enumerate(WORN_ORDER[:4]):
-                cel = Image.new("RGBA", (80, 80))
-                cutting_trail(cel, kind, grip, heading, previous, tick)
-                blade(cel, kind, grip, heading)
-                hold_in_hand(cel, body, grip)
-                atlas.paste(cel, (tick * 80, row * 80))
-            previous = heading
-            tick += 1
-    atlas.save(ASSETS / "swing-weapons.png", optimize=True)
+    # Rows 0–3 face right, 4–7 face left. Row 8 stores the two matching
+    # body cutouts, so the original arm cannot remain under the moving one.
+    atlas = Image.new("RGBA", (24 * 80, 9 * 80))
+    # The closed fist comes from the actual raised-hand cel.
+    fist = hero.crop((2*80+17,2*80+33,2*80+28,2*80+44))
+    outline = Image.new("L",fist.size)
+    ImageDraw.Draw(outline).polygon([(4,0),(6,0),(9,2),(10,4),(10,7),(7,10),
+                                     (3,10),(1,8),(0,6),(0,3)],fill=255)
+    fist.putalpha(ImageChops.multiply(fist.getchannel("A"),outline))
+    ready = hero.crop((240,160,320,240))
+    knuckles = fist.resize((8,8),Image.Resampling.NEAREST)
+    for far, wrists in enumerate((NEAR_WRISTS,FAR_WRISTS)):
+        body = lunge_body(hero,far)
+        atlas.paste(body,(far*80,8*80))
+        # On the far shoulder the wind-up arcs around the outside of the cheek.
+        headings = (-45,-60,-76,-89,-96,-88,-72,-44) + SWORD_ANGLES[8:] if far else SWORD_ANGLES
+        for tick,heading in enumerate(headings):
+            moving = tick < len(wrists)
+            grip = wrists[tick] if moving else (FAR_PALMS if far else NEAR_PALMS)[11]
+            for row,kind in enumerate(WORN_ORDER[:4]):
+                cel = sword_arm(grip,far) if moving else Image.new("RGBA",(80,80))
+                cutting_trail(cel,kind,grip,heading,headings[max(0,tick-1)],tick)
+                blade(cel,kind,grip,heading)
+                if moving:
+                    # A compact knuckle patch leaves the pommel and guard exposed.
+                    cel.alpha_composite(knuckles,(grip[0]-4,grip[1]-4))
+                    if far:
+                        cel.putalpha(ImageChops.subtract(cel.getchannel("A"),body.getchannel("A")))
+                else:
+                    hold_in_hand(cel,ready,grip)
+                atlas.paste(cel,(tick*80,(4*far+row)*80))
+    atlas.save(ASSETS/"swing-weapons.png",optimize=True)
 
 
 def run():
@@ -428,12 +487,14 @@ def run():
         hero = source.convert("RGBA")
     if hero.size != (320,560):
         raise ValueError("Expected a 4×7 adventurer atlas with 80px cells")
-    atlas = Image.new("RGBA",(28*80,len(WORN_ORDER)*80))
+    atlas = Image.new("RGBA",(28*80,(len(WORN_ORDER)+4)*80))
     for pose in range(28):
         x,y = pose%4*80, pose//4*80
         base = hero.crop((x,y,x+80,y+80))
         for row,kind in enumerate(WORN_ORDER):
             atlas.paste(overlay(kind,pose,base),(pose*80,row*80))
+        for row, kind in enumerate(WORN_ORDER[:4],len(WORN_ORDER)):
+            atlas.paste(overlay(kind,pose,base,far=True),(pose*80,row*80))
     atlas.save(OUT,optimize=True)
     swing_weapons(hero)
 

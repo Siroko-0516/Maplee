@@ -1,7 +1,7 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
 from math import sin, pi
 from browser import window
-from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, MELEE_POSES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ROWS
+from .content import AREAS, CLASSES, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_POSES, NPC_ROWS, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -109,14 +109,26 @@ class Renderer:
         ctx.translate(round(x), round(y))
         ctx.scale(facing, 1)
         left, top = -round(38 * size / 80), -round(75 * size / 80)
-        ctx.drawImage(self.images["hero"], frame % 4 * 80, frame // 4 * 80, 80, 80,
+        sword = weapon in WORN_ITEMS[:4]
+        far_hand = facing < 0
+        body_sheet, column, row = "hero", frame % 4, frame // 4
+        if sword and swing_tick is not None:
+            if swing_tick < 18:
+                frame = 8
+                body_sheet, column, row = "swing_weapons", int(far_hand), 8
+            else:
+                frame, column, row = 11, 3, 2
+        ctx.drawImage(self.images[body_sheet], column * 80, row * 80, 80, 80,
                       left, top, size, size)
         for item in (equipment.get("armor"), equipment.get("head"), weapon):
             if item in WORN_ROWS:
                 moving_blade = item == weapon and swing_tick is not None
                 sheet = "swing_weapons" if moving_blade else "worn"
                 column = swing_tick if moving_blade else frame
-                ctx.drawImage(self.images[sheet], column * 80, WORN_ROWS[item] * 80, 80, 80,
+                row = WORN_ROWS[item]
+                if item == weapon and sword and far_hand:
+                    row += 4 if moving_blade else len(WORN_ITEMS)
+                ctx.drawImage(self.images[sheet], column * 80, row * 80, 80, 80,
                               left, top, size, size)
         ctx.restore()
 
@@ -358,6 +370,13 @@ class Renderer:
         if game.swing and game.swing["melee"] and tick >= game.hurt_until:
             swing_tick = tick - game.swing["start"]
             lean = MELEE_LEAN[swing_tick] * facing
+        elif game.swing and weapon in WORN_ITEMS[:4] and tick >= game.hurt_until:
+            # Align the same right-hand stroke with the skill's own impact tick.
+            age = tick - game.swing["start"]
+            impact = game.swing["impact"]
+            duration = game.swing["duration"]
+            swing_tick = (age * MELEE_IMPACT // impact if age < impact else
+                          MELEE_IMPACT + (age-impact) * (len(MELEE_POSES)-MELEE_IMPACT) // (duration-impact))
         self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity, swing_tick)
         if tick < game.support_until:
             self.rect(x - 12, y - 2, 24, 2, "#b8f6b980")
