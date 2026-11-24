@@ -70,7 +70,8 @@ class WorldTests(unittest.TestCase):
                 if overlap > 0:
                     self.assertGreaterEqual(abs(ledge["y"]-other["y"]),LEDGE_DEPTH,(ledge,other))
         x = map_x(5500)
-        self.assertEqual(Game({"level":8,"x":x,"worldLayout":3}).p["x"],x)
+        for layout in (3, 4):
+            self.assertEqual(Game({"level": 8, "x": x, "worldLayout": layout}).p["x"], x)
 
     def test_ladder_reaches_floating_ledge_and_returns_to_ground(self):
         x, top, bottom = LADDERS[0]
@@ -123,6 +124,10 @@ class WorldTests(unittest.TestCase):
 
     def test_canopy_stairs_connect_ground_to_the_top_platform(self):
         self.assert_climb_route((26205, 26520, 26700, 27000))
+
+    def test_terraces_and_seed_forest_can_be_climbed_from_ground(self):
+        self.assert_climb_route((34954, 35125, 35510, 36110))
+        self.assert_climb_route((38690, 39020, 39550, 39885))
 
     def test_bellflower_routes_reach_high_ledges(self):
         self.assert_climb_route((3450, 3680, 4135), from_ledge=True)

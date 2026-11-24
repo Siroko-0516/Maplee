@@ -4,7 +4,7 @@ from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
-WORLD_LAYOUT = 4
+WORLD_LAYOUT = 5
 PANORAMA_Y = 144
 LEDGE_DEPTH = 32
 BELLFLOWER_START, BELLFLOWER_END = 2450, 9100
@@ -18,14 +18,14 @@ def map_x(value):
 
 
 def saved_x(value, layout):
-    if layout in (3, WORLD_LAYOUT):
+    if layout in (3, 4, WORLD_LAYOUT):
         return int(value)
     if layout == 2:
         value /= WORLD_SCALE
     return map_x(value)
 
 
-WORLD_WIDTH = 34000
+WORLD_WIDTH = 41000
 
 AREAS = [
     dict(name="솔방울 마을", start=0, end=BELLFLOWER_START, icon="🍄", material="stone", image="daylight", view=0),
@@ -36,7 +36,10 @@ AREAS = [
     dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain", image="ember_grove", view=0),
     dict(name="안개등 부두", start=21400, end=24700, icon="⚓", material="stone", image="lantern_quay", view=0),
     dict(name="바람뿌리 거목", start=24700, end=29300, icon="🌳", material="terrain", image="windroot", view=0),
-    dict(name="노을알 분지", start=29300, end=WORLD_WIDTH, icon="🥚", material="stone", image="sunegg", view=170),
+    dict(name="노을알 분지", start=29300, end=34000, icon="🥚", material="stone", image="sunegg", view=170),
+    dict(name="구리층 계단", start=34000, end=37100, icon="🔶", material="copper_ground", image="terrace_sky", view=90),
+    dict(name="물빛 씨앗숲", start=37100, end=WORLD_WIDTH, icon="🌱", material="seed_ground", image="seed_sky",
+         mid_image="seed_canopy", view=140),
 ]
 
 GROUND = [[0, 390],
@@ -100,6 +103,9 @@ GROUND.extend((
     (27200,399),(27800,399),(28200,359),(28700,359),(29300,383),
     (29640,383),(29980,345),(30500,345),(30820,398),(31250,398),
     (31700,342),(32140,342),(32600,387),(33000,387),(33510,346),(34000,346),
+    (34300,346),(34800,388),(35150,388),(35630,334),(36240,334),(36700,384),(37100,384),
+    (37480,384),(37920,334),(38250,334),(38580,395),(39110,395),(39600,352),
+    (40280,352),(40780,382),(41000,382),
 ))
 
 LEDGES = [{'x': 260, 'y': 248, 'w': 240, 'ladderX': 372},
@@ -248,6 +254,23 @@ LEDGES.extend(
         (29690,237,400,29800),(29980,134,545,30056),(30290,30,475,30358),
         (30880,277,695,31120),(31260,153,670,31430),(31670,30,650,31825),(32030,-83,485,32155),
         (32410,268,540,32610),(32740,168,550,32800),(33150,83,525,33200),(33580,243,275,33715),
+        (34290,245,450,34477),(34350,160,210,34458),(34760,243,540,34954),
+        (35000,138,830,35125),(35380,24,805,35510),(35950,-95,457,36110),
+        (36455,164,420,36610),(36585,56,285,36680),
+        (37420,249,380,37560),(37760,152,560,37788),(38060,43,480,38200),
+        (38460,255,635,38690),(38910,143,710,39020),(39390,27,600,39550),(39800,-104,660,39885),
+        (40320,220,485,40550),(40560,110,300,40700),
+    )
+)
+PROPS.extend(
+    (x,frame,width,floor,"terrace_props")
+    for x,frame,width,floor in (
+        (34415,0,117,245),(34676,1,134,None),(34900,0,170,243),(35180,1,140,138),
+        (35460,0,198,None),(35731,0,175,24),(36070,1,190,-95),(36447,0,145,None),
+        (36715,1,150,164),(36923,0,145,None),
+        (37509,1,150,249),(37730,3,347,None),(38018,2,233,152),(38300,1,148,43),
+        (38705,2,274,None),(38937,3,415,None),(39142,2,220,143),(39570,1,205,27),
+        (39994,2,200,-104),(40163,3,382,None),(40596,2,231,220),(40734,1,136,110),
     )
 )
 PROPS.extend(
@@ -604,6 +627,28 @@ SPECIES.extend((
 for _species in SPECIES[-2:]:
     _species.update(image="canopy_mobs", framebooks=CANOPY_FRAMEBOOKS)
 
+TERRACE_FRAMEBOOKS = {
+    "stand": (0, (10,20,30,40)), "move": (4, (5,10,15,20,25,30,35,40)),
+    "attack1": (12, (5,11,16,21,26,32,40)), "hit1": (19, (3,6,10)),
+    "die1": (22, (5,10,15,20,25,32)),
+}
+SPECIES.extend((
+    dict(name="물수정 방울", level=18, sprite=0, hp=388, attack=50, xp=217, gold=104,
+         speed=1.42, body_size=(48,40), aggro=144, reach=38, windup_ticks=20,
+         loot="jelly", rare="prism", equipmentDrops=("chimewand","glasscoat")),
+    dict(name="황동갓 등불지기", level=20, sprite=1, hp=515, attack=59, xp=275, gold=133,
+         speed=1.18, body_size=(48,54), aggro=157, reach=56, windup_ticks=25,
+         loot="quartz", rare="stormknuckle", equipmentDrops=("stormknuckle","hwarang")),
+    dict(name="꿀수정 방울", level=21, sprite=2, hp=620, attack=63, xp=322, gold=151,
+         speed=1.53, body_size=(48,40), aggro=168, reach=42, windup_ticks=19,
+         loot="jelly", rare="shimmer", equipmentDrops=("dawnwand","glasscoat")),
+    dict(name="별갓 등불지기", level=23, sprite=3, hp=1480, attack=77, xp=1080, gold=460,
+         speed=1.25, body_size=(48,54), aggro=191, reach=76, windup_ticks=32, elite=True,
+         loot="nightcore", rare="moonseal", equipmentDrops=("moonseal","hwarang","dawnwand")),
+))
+for _species in SPECIES[-4:]:
+    _species.update(image="terrace_mobs", framebooks=TERRACE_FRAMEBOOKS)
+
 
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
@@ -613,7 +658,7 @@ def monster_art(species, action, ticks=0, fraction=None):
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
     frame = first + bisect_right(ends, position)
-    if species.get("image") == "canopy_mobs":
+    if species.get("image") in ("canopy_mobs","terrace_mobs"):
         return frame * 80, species["sprite"] * 80, 80, 80, -40, -72
     return MOB_FRAMES[frame]
 
@@ -768,6 +813,7 @@ SPRITES = {'hero': {'file': 'hero-adventurer.png',
            [128, 160, 126, 114],
            [256, 160, 108, 155]]}
 SPRITES["canopy_props"] = [(0,0,224,352),(224,0,172,128),(396,0,172,224),(568,0,224,146)]
+SPRITES["terrace_props"] = [(0,0,150,110),(150,0,148,151),(298,0,182,167),(480,0,214,255)]
 
 # GMS v83 NPC display height and original idle frame durations in milliseconds.
 NPC_IDLE = (
@@ -795,6 +841,9 @@ IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tal
 IMAGES["bellflower"] = "bellflower-forest.png"
 IMAGES.update(windroot="windroot.png", sunegg="sunegg.png", canopy_props="canopy-scenery.png",
               canopy_mobs="canopy-monsters.png")
+IMAGES.update(copper_ground="copper-ground.png", seed_ground="seed-ground.png", terrace_sky="terrace-sky.png",
+              seed_sky="seed-sky.png", seed_canopy="seed-canopy.png", terrace_props="terrace-props.png",
+              terrace_mobs="terrace-monsters.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",

@@ -4,6 +4,7 @@ from .content import map_x
 
 SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, MOSS, ANCHOR = range(13)
 BEETLE, BELLBIRD = range(13, 15)
+WATER_GEM, BRASS_KEEPER, HONEY_GEM, STAR_KEEPER = range(15, 19)
 
 
 def hunting_spot(label, ground=(), ledges=()):
@@ -113,6 +114,26 @@ HUNT_ZONES = (
                      ground=((32608,GOLEM),(32910,BELLBIRD),(33395,MUSHMOM),(33670,GOLEM)),
                      ledges=((32410,GOLEM),(32740,BELLBIRD),(33150,GOLEM),(33580,BELLBIRD))),
     ), boss_waves=5),
+    hunting_zone("구리 절벽 사냥터", (18, 20), 255, 190, (
+        hunting_spot("구리 바닥",
+                     ground=((34540,WATER_GEM),(34880,WATER_GEM),(35200,BRASS_KEEPER)),
+                     ledges=((34290,WATER_GEM),(34350,WATER_GEM),(34760,BRASS_KEEPER))),
+        hunting_spot("세 칸 절벽",
+                     ground=((35710,WATER_GEM),(36150,BRASS_KEEPER),(36640,WATER_GEM)),
+                     ledges=((35000,WATER_GEM),(35380,BRASS_KEEPER),(35950,BRASS_KEEPER),
+                             (36455,WATER_GEM),(36585,BRASS_KEEPER))),
+    )),
+    hunting_zone("푸른 수관 사냥터", (20, 23), 280, 220, (
+        hunting_spot("물비늘 여울",
+                     ground=((37510,HONEY_GEM),(37870,BRASS_KEEPER),(38230,HONEY_GEM)),
+                     ledges=((37420,HONEY_GEM),(37760,BRASS_KEEPER),(38060,HONEY_GEM))),
+        hunting_spot("유리씨 나무",
+                     ground=((38560,BRASS_KEEPER),(38960,HONEY_GEM),(39330,HONEY_GEM),(39660,BRASS_KEEPER)),
+                     ledges=((38460,HONEY_GEM),(38910,BRASS_KEEPER),(39390,HONEY_GEM),(39800,STAR_KEEPER))),
+        hunting_spot("별갓 전망대",
+                     ground=((40060,HONEY_GEM),(40472,STAR_KEEPER),(40745,BRASS_KEEPER)),
+                     ledges=((40320,HONEY_GEM),(40560,BRASS_KEEPER))),
+    ), boss_waves=6),
 )
 
 

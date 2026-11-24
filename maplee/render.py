@@ -177,19 +177,24 @@ class Renderer:
         self.ctx.drawImage(self.images[sheet], index % 8 * 32, index // 8 * 32, 32, 32,
                            round(x - size / 2), round(y - size / 2), size, size)
 
-    def backdrop(self, area, left, camera_y):
-        key = area["image"]
+    def panorama_layer(self, key, offset, camera_y, vertical_scroll):
         width, height = self.sizes[key]
-        scroll = round(max(0,left-area["start"])*.33)
-        source = (area["view"] + scroll)%width
+        source = offset%width
         rows = min(self.view_height,height)
-        top = limit(PANORAMA_Y+round(camera_y*.5),0,height-rows)
+        top = limit(PANORAMA_Y+round(camera_y*vertical_scroll),0,height-rows)
         x = 0
         while x < self.view_width:
             span = min(self.view_width-x,width-source)
             self.ctx.drawImage(self.images[key],source,top,span,rows,x,0,span,rows)
             x += span
             source = 0
+
+    def backdrop(self, area, left, camera_y):
+        distance = max(0,left-area["start"])
+        view = area["view"]
+        self.panorama_layer(area["image"],view+round(distance*.33),camera_y,.5)
+        if area.get("mid_image"):
+            self.panorama_layer(area["mid_image"],view+round(distance*.56),camera_y,.7)
 
     def ladder(self, x, top, bottom):
         # Paint over the leading edge of both ledges. Rungs and rails stay on
@@ -402,7 +407,7 @@ class Renderer:
             phase_tick = elapsed
         elif game.tick < m["hurt"]:
             action = "hit1"
-            if species.get("image") == "canopy_mobs":
+            if species.get("image") in ("canopy_mobs","terrace_mobs"):
                 phase = 1 - (m["hurt"] - game.tick) / 10
         elif m["windup"] or after_strike < 10:
             # Body-attack monsters use their leap or movement cels. Casters
