@@ -309,11 +309,14 @@ class GameInterface:
         self.text("M",x+w-9,y+13,CREAM,10,True,"right")
         self.box(x+5,y+27,w-10,35,"#26323bbf")
         start, end = area["start"], area["end"]
+        pts = [(start, ground_at(start))] + [(a,b) for a,b in GROUND if start<a<end] + [(end,ground_at(end))]
+        ledges = [ledge for ledge in LEDGES if start <= ledge["x"] < end]
+        top = min(0, min(ledge["y"] for ledge in ledges) - 38)
+        bottom = max(floor for _, floor in pts) + 42
         def sx(world):
             return round(x+9 + (w-18)*(world-start)/(end-start))
         def sy(world):
-            return y+27+round(world/16)
-        pts = [(start, ground_at(start))] + [(a,b) for a,b in GROUND if start<a<end] + [(end,ground_at(end))]
+            return y+30+round(30*limit((world-top)/(bottom-top),0,1))
         ctx = self.ctx
         ctx.beginPath()
         ctx.moveTo(sx(start), y+62)
@@ -322,9 +325,8 @@ class GameInterface:
         ctx.lineTo(sx(end), y+62)
         ctx.fillStyle = "#56926f"
         ctx.fill()
-        for ledge in LEDGES:
-            if start <= ledge["x"] < end:
-                self.box(sx(ledge["x"]), sy(ledge["y"]), max(2,sx(ledge["x"]+ledge["w"])-sx(ledge["x"])), 2, "#b6dba0")
+        for ledge in ledges:
+            self.box(sx(ledge["x"]), sy(ledge["y"]), max(2,sx(ledge["x"]+ledge["w"])-sx(ledge["x"])), 2, "#b6dba0")
         for a, _, _ in PORTALS:
             if start<=a<end:
                 self.box(sx(a)-1, sy(ground_at(a))-4, 3, 5, "#78dfff")

@@ -16,6 +16,7 @@ SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
 GROUND_XS = [x for x, _ in GROUND]
 AREA_ENDS = [area["end"] for area in AREAS]
 LOWEST_GROUND = max(y for _, y in GROUND)
+CAMERA_TOP = min(-216, min(ledge["y"] for ledge in LEDGES) - 104)
 
 
 def limit(value, low, high):
@@ -391,7 +392,7 @@ class Game:
 
     def camera_vertical_target(self):
         anchor = self.view_height*.71
-        return limit(self.p["y"]-anchor,-216,max(0,LOWEST_GROUND-anchor))
+        return limit(self.p["y"]-anchor,CAMERA_TOP,max(0,LOWEST_GROUND-anchor))
 
     def travel(self, x):
         if area_at(x) != area_at(self.p["x"]):
@@ -640,7 +641,8 @@ class Game:
                 monster.update(dead=None, hp=spec["hp"], state="patrol", next=tick + 40)
                 self.move_monster(monster, monster["home"], 500)
             return
-        if area_at(monster["home"]) != area_at(p["x"]) or abs(monster["home"]-p["x"]) > WIDTH or self.support_value("stealth"):
+        active_distance = max(WIDTH, self.view_width / 2 + 120)
+        if area_at(monster["home"]) != area_at(p["x"]) or abs(monster["home"]-p["x"]) > active_distance or self.support_value("stealth"):
             if monster["state"] != "patrol" or monster["windup"]:
                 monster.update(state="patrol", windup=0)
                 self.move_monster(monster, monster["home"], 500)
@@ -649,7 +651,7 @@ class Game:
         same_height = abs(monster["y"] - p["y"]) < 37
         elite = spec.get("elite")
         enraged = elite and monster["hp"] <= spec["hp"] / 2
-        reach = 90 if enraged else 60 if elite else 25
+        reach = 90 if enraged else spec.get("reach", 60 if elite else 25)
         if monster["windup"]:
             if tick < monster["windup"]:
                 return
@@ -669,7 +671,9 @@ class Game:
         if monster["state"] == "patrol" and aggro and same_height and near_home and abs(offset) <= aggro:
             monster["state"] = "pursuit"
         if monster["state"] != "return" and same_height and abs(offset) <= reach and tick >= monster["next"]:
-            monster.update(dir=direction(offset, monster["dir"]), range=reach, windup=tick + (24 if enraged else 34 if elite else 17))
+            duration = 24 if enraged else spec.get("windup_ticks", 34 if elite else 17)
+            monster.update(dir=direction(offset, monster["dir"]), range=reach,
+                           windup=tick + duration, windup_duration=duration)
         elif monster["state"] == "return":
             self.move_monster(monster, monster["home"], spec["speed"] * 1.6)
             if monster["x"] == monster["home"]:

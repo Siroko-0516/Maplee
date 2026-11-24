@@ -3,6 +3,7 @@
 from .content import map_x
 
 SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, MOSS, ANCHOR = range(13)
+BEETLE, BELLBIRD, EGGSHELL, GUARDIAN = range(13, 17)
 
 
 def hunting_spot(label, ground=(), ledges=()):
@@ -86,6 +87,28 @@ HUNT_ZONES = (
                      ground=((23750, ANCHOR), (23950, ANCHOR), (24160, ANCHOR), (24360, CLANG)),
                      ledges=((23900, ANCHOR), (24330, ANCHOR))),
     )),
+    hunting_zone("거목의 뿌리와 수관", (18, 19), 260, 205, (
+        hunting_spot("등불 뿌리밭",
+                     ground=((25230,BEETLE),(25472,BEETLE),(25700,BEETLE),(25921,BELLBIRD)),
+                     ledges=((25170,BEETLE),(25570,BEETLE),(25770,BELLBIRD))),
+        hunting_spot("구름까지 닿는 거목",
+                     ground=((26340,BEETLE),(26640,BELLBIRD),(26910,BEETLE)),
+                     ledges=((25980,BEETLE),(26260,BELLBIRD),(26510,BEETLE),(26720,BELLBIRD))),
+        hunting_spot("덩굴 공중길",
+                     ground=((27390,BEETLE),(27720,BELLBIRD),(28100,BEETLE),(28680,BELLBIRD)),
+                     ledges=((27210,BEETLE),(27530,BELLBIRD),(27950,BELLBIRD),(28430,BEETLE),(28740,BELLBIRD))),
+    )),
+    hunting_zone("해질녘 둥지", (19, 23), 275, 215, (
+        hunting_spot("첫 번째 알터",
+                     ground=((29770,EGGSHELL),(29995,BELLBIRD),(30280,EGGSHELL),(30520,EGGSHELL)),
+                     ledges=((29690,BELLBIRD),(29980,EGGSHELL),(30290,BELLBIRD))),
+        hunting_spot("황금잎 계단",
+                     ground=((30975,EGGSHELL),(31230,EGGSHELL),(31640,BELLBIRD),(32020,EGGSHELL)),
+                     ledges=((30880,EGGSHELL),(31260,BELLBIRD),(31670,EGGSHELL),(32030,BELLBIRD))),
+        hunting_spot("노을 수호자의 둥지",
+                     ground=((32608,EGGSHELL),(32910,BELLBIRD),(33395,GUARDIAN),(33670,EGGSHELL)),
+                     ledges=((32410,EGGSHELL),(32740,BELLBIRD),(33150,EGGSHELL),(33580,BELLBIRD))),
+    ), boss_waves=5),
 )
 
 

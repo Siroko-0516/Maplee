@@ -13,7 +13,7 @@ def map_x(value):
     return round(value*1.25)
 
 
-WORLD_WIDTH = 24700
+WORLD_WIDTH = 34000
 
 AREAS = [
     dict(name="솔방울 마을", start=0, end=2450, icon="🍄", material="stone", image="daylight", view=0),
@@ -22,7 +22,9 @@ AREAS = [
     dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="stone", image="cavern", view=0),
     dict(name="달바람 고원", start=14900, end=18300, icon="🌙", material="terrain", image="highland", view=0),
     dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain", image="ember_grove", view=0),
-    dict(name="안개등 부두", start=21400, end=WORLD_WIDTH, icon="⚓", material="stone", image="lantern_quay", view=0),
+    dict(name="안개등 부두", start=21400, end=24700, icon="⚓", material="stone", image="lantern_quay", view=0),
+    dict(name="바람뿌리 거목", start=24700, end=29300, icon="🌳", material="terrain", image="windroot", view=0),
+    dict(name="노을알 분지", start=29300, end=WORLD_WIDTH, icon="🥚", material="stone", image="sunegg", view=170),
 ]
 
 GROUND = [[0, 390],
@@ -81,6 +83,12 @@ GROUND = [[0, 390],
 GROUND.extend(((18540,358),(18920,390),(19360,390),(19740,332),(20200,332),
                (20520,378),(20860,378),(21400,355),(21740,355),(22140,402),
                (22500,402),(22980,327),(23340,327),(23740,371),(24060,371),(24700,356)))
+GROUND.extend((
+    (25010,356),(25440,390),(25800,390),(26150,344),(26800,344),
+    (27200,399),(27800,399),(28200,359),(28700,359),(29300,383),
+    (29640,383),(29980,345),(30500,345),(30820,398),(31250,398),
+    (31700,342),(32140,342),(32600,387),(33000,387),(33510,346),(34000,346),
+))
 
 LEDGES = [{'x': 260, 'y': 248, 'w': 240, 'ladderX': 372},
  {'x': 533, 'y': 195, 'w': 240, 'ladderX': 711},
@@ -215,6 +223,30 @@ PROPS.extend((
     (20670,4,165),(21150,4,142),(21670,3,149),(22130,1,118),(22550,5,160),
     (23080,3,148),(23560,5,130),(23960,1,123),(24440,3,167),
 ))
+LEDGES.extend(
+    dict(x=x,y=y,w=w,ladderX=ladder)
+    for x,y,w,ladder in (
+        (25170,254,320,25312),(25570,248,415,25772),(25770,144,420,25850),
+        (25980,247,610,26205),(26260,122,810,26520),(26510,-4,680,26700),(26720,-132,510,27000),
+        (27210,286,390,27400),(27530,185,540,27562),(27950,86,510,28006),
+        (28430,228,490,28640),(28740,138,380,28852),
+        (29690,237,400,29800),(29980,134,545,30056),(30290,30,475,30358),
+        (30880,277,695,31120),(31260,153,670,31430),(31670,30,650,31825),(32030,-83,485,32155),
+        (32410,268,540,32610),(32740,168,550,32800),(33150,83,525,33200),(33580,243,275,33715),
+    )
+)
+PROPS.extend(
+    (x,frame,width,floor,"canopy_props")
+    for x,frame,width,floor in (
+        (25235,2,179,254),(25512,0,380,None),(25806,3,196,248),(26430,0,420,None),
+        (26375,3,245,122),(26885,2,210,-132),(27255,0,425,None),(27690,3,214,185),
+        (28095,2,180,86),(28555,0,369,None),(28940,3,205,138),
+        (29793,1,250,None),(30101,3,226,134),(30441,1,168,30),(30696,0,387,None),
+        (31095,1,290,277),(31517,2,227,153),(31841,1,247,30),(32175,3,220,-83),
+        (32270,0,378,None),(32590,1,264,268),(32950,2,187,168),(33240,1,310,None),
+        (33395,3,236,83),(33722,2,191,243),
+    )
+)
 
 CLASSES = {'beginner': {'name': '모험가',
               'skill': '별빛 파동',
@@ -537,6 +569,28 @@ for name, level, row, loot, equipment in (
                         aggro=147,undead=True,body_size=(46,48),image="expansion_mobs",
                         **({"float": True} if row else {})))
 
+CANOPY_FRAMEBOOKS = {
+    "stand": (0, (14,28,42,56)), "move": (4, (6,12,18,24,30,36)),
+    "attack1": (10, (9,16,22,28,34,40)), "hit1": (16, (4,8)),
+    "die1": (18, (6,12,18,24,30)),
+}
+SPECIES.extend((
+    dict(name="등불딱정벌레", level=18, sprite=0, hp=425, attack=55, xp=232, gold=115,
+         speed=1.55, loot="ash", rare="glasscoat", aggro=156, reach=36, windup_ticks=19,
+         body_size=(48,31), equipmentDrops=("glasscoat","stormknuckle")),
+    dict(name="솜깃 방울새", level=19, sprite=1, hp=460, attack=57, xp=250, gold=124,
+         speed=1.75, loot="plume", rare="nightbow", aggro=160, reach=54, windup_ticks=23,
+         body_size=(45,49), float=True, equipmentDrops=("nightbow","dawnwand")),
+    dict(name="알껍질 파수꾼", level=21, sprite=2, hp=620, attack=65, xp=330, gold=156,
+         speed=1.2, loot="quartz", rare="moonseal", aggro=142, reach=47, windup_ticks=24,
+         body_size=(50,49), equipmentDrops=("glasscoat","hwarang")),
+    dict(name="노을뿔 수호수", level=23, sprite=3, hp=1450, attack=79, xp=1120, gold=485,
+         speed=1.5, loot="nightcore", rare="moonseal", aggro=187, reach=77, windup_ticks=33,
+         body_size=(59,61), elite=True, equipmentDrops=("moonseal","stormknuckle","dawnwand")),
+))
+for _species in SPECIES[-4:]:
+    _species.update(image="canopy_mobs", framebooks=CANOPY_FRAMEBOOKS)
+
 
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
@@ -545,7 +599,10 @@ def monster_art(species, action, ticks=0, fraction=None):
         return frame*64, species["sprite"]*64, 64, 64, -32, -60
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
-    return MOB_FRAMES[first + bisect_right(ends, position)]
+    frame = first + bisect_right(ends, position)
+    if species.get("image") == "canopy_mobs":
+        return frame * 80, species["sprite"] * 80, 80, 80, -40, -72
+    return MOB_FRAMES[frame]
 
 
 for species, pool in zip(SPECIES, (
@@ -697,6 +754,7 @@ SPRITES = {'hero': {'file': 'hero-adventurer.png',
            [0, 160, 126, 138],
            [128, 160, 126, 114],
            [256, 160, 108, 155]]}
+SPRITES["canopy_props"] = [(0,0,224,352),(224,0,172,128),(396,0,172,224),(568,0,224,146)]
 
 # GMS v83 NPC display height and original idle frame durations in milliseconds.
 NPC_IDLE = (
@@ -722,6 +780,8 @@ IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tal
               daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
               highland="highland-panorama-tall.png", ladder="ladder.png")
 IMAGES["bellflower"] = "bellflower-forest.png"
+IMAGES.update(windroot="windroot.png", sunegg="sunegg.png", canopy_props="canopy-scenery.png",
+              canopy_mobs="canopy-monsters.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",

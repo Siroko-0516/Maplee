@@ -9,6 +9,7 @@ WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
 WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
 IDLE = SPRITES["hero"]["animations"]["idle"]
 IDLE_LENGTH = sum(IDLE["durations"])
+FIELD_ZOOM = 1.25
 # Native-pixel weight shift, anchored at the feet and mirrored with the swing.
 MELEE_LEAN = (0, -1, -2, -2, -2, -1, 0, 2, 4, 5, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0)
 
@@ -61,7 +62,7 @@ class Renderer:
         css_height = number(bounds.height) or HEIGHT
         # Match the actual field ratio. Tall screens show a narrower part of
         # the map, and ultrawide screens show a slightly shorter field.
-        fit = max(css_width/1440,css_height/HEIGHT)
+        fit = max(css_width/1440,css_height/HEIGHT) / FIELD_ZOOM
         self.view_width = round(css_width/fit)
         self.view_height = round(css_height/fit)
         multiplier = limit(fit*number(window.devicePixelRatio or 1),1,3)
@@ -252,12 +253,13 @@ class Renderer:
         material = area["material"]
         for prop in PROPS:
             x, id, width = prop[:3]
-            if not area["start"] <= x < area["end"] or not left - 175 < x < right + 175:
+            if not area["start"] <= x < area["end"] or x + width/2 <= left or x - width/2 >= right:
                 continue
-            sx, sy, sw, sh = SPRITES["props"][id]
+            atlas = prop[4] if len(prop) > 4 else "props"
+            sx, sy, sw, sh = SPRITES[atlas][id]
             height = round(width * sh / sw)
-            floor = prop[3] if len(prop) > 3 else ground_at(x)
-            ctx.drawImage(self.images["props"], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
+            floor = prop[3] if len(prop) > 3 and prop[3] is not None else ground_at(x)
+            ctx.drawImage(self.images[atlas], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
         self.ground(material,max(left,area["start"]),min(right,area["end"]),material=="stone",bottom)
         for ledge in LEDGES:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
@@ -346,12 +348,14 @@ class Renderer:
             phase_tick = elapsed
         elif game.tick < m["hurt"]:
             action = "hit1"
+            if species.get("image") == "canopy_mobs":
+                phase = 1 - (m["hurt"] - game.tick) / 10
         elif m["windup"] or after_strike < 10:
             # Body-attack monsters use their leap or movement cels. Casters
             # play their longer source attack in step with the damage tick.
             action = next((name for name in ("attack1", "skill1", "jump", "move") if name in books), "stand")
             if m["windup"]:
-                duration = 24 if m["range"] == 90 else 34 if species.get("elite") else 17
+                duration = m["windup_duration"]
                 phase = 0.55 * (1 - (m["windup"] - game.tick) / duration)
             else:
                 phase = 0.55 + 0.45 * after_strike / 9

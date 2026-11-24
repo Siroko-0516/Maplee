@@ -21,6 +21,16 @@ class IntrinsicImage:
 
 
 class ImageDimensionTest(unittest.TestCase):
+    def test_field_view_spans_more_world_at_the_same_screen_size(self):
+        with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
+            from maplee.render import Renderer
+        renderer = Renderer.__new__(Renderer)
+        renderer.canvas = Mock(attrs={"height": "", "width": ""})
+        renderer.canvas.getBoundingClientRect.return_value = SimpleNamespace(width=1280, height=720)
+        with patch("maplee.render.window", SimpleNamespace(devicePixelRatio=1)):
+            renderer.resize()
+        self.assertEqual((renderer.view_width, renderer.view_height), (1040, 585))
+
     def test_backdrops_and_tiles_use_decoded_pixels(self):
         with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
             from maplee.render import Renderer

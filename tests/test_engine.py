@@ -83,6 +83,24 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(game.camera,game.camera_target())
         self.assertEqual(game.camera_y,game.camera_vertical_target())
 
+    def test_canopy_stairs_connect_ground_to_the_top_platform(self):
+        route = [next(ladder for ladder in LADDERS if ladder[0] == map_x(x))
+                 for x in (26205, 26520, 26700, 27000)]
+        game = self.sandbox(route[0][0])
+        game.set_camera_view(1040, 585)
+        for x, top, bottom in route:
+            for _ in range(280):
+                if abs(game.p["x"] - x) <= 8:
+                    break
+                key = "ArrowRight" if game.p["x"] < x else "ArrowLeft"
+                self.step(game, 1, key)
+            self.assertLessEqual(abs(game.p["x"] - x), 8)
+            self.assertAlmostEqual(game.p["y"], bottom, delta=3)
+            self.step(game, 50, "ArrowUp")
+            self.assertEqual(game.p["y"], top)
+        self.assertLess(route[-1][1], 0)
+        self.assertGreater(game.p["y"] - game.camera_y, 80)
+
     def test_reclass_from_existing_save_retains_items_and_health(self):
         game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,
                                    "bag":{"blade":1},"equipment":{"weapon":"blade"}})
