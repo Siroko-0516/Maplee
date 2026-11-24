@@ -7,22 +7,6 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 #toast { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
 #toast.failure { clip-path: none; inset: 45% 8% auto; width: auto; height: auto; padding: 12px; background: #182a37; color: white; text-align: center; font: 16px sans-serif; }
 @media (max-width: 740px) { #game-canvas { height: calc(100% - 108px); } }
-@media (pointer: coarse) {
-  .game {
-    --top: env(safe-area-inset-top, 0px);
-    --bottom: env(safe-area-inset-bottom, 0px);
-    --left: env(safe-area-inset-left, 0px);
-    --right: env(safe-area-inset-right, 0px);
-  }
-  #interface, #game-canvas {
-    inset: var(--top) auto auto var(--left);
-    width: calc(100% - var(--left) - var(--right));
-  }
-  #interface { height: calc(100% - var(--top) - var(--bottom)); }
-  #game-canvas { height: calc(100% - var(--top) - var(--bottom) - 64px); }
-  #lobby { margin: var(--top) var(--right) var(--bottom) var(--left); }
-  .game #lobby input, .game #lobby select, .game #lobby button { min-height: 44px; }
-}
 
 #lobby[hidden], #lobby [hidden] { display: none !important; }
 #lobby {

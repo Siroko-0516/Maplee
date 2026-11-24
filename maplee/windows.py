@@ -1,5 +1,4 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
-from math import ceil
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
 from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, PANORAMA_Y, SLOTS, SPECIES, SUPPORTS, monster_art
@@ -8,7 +7,7 @@ from .engine import HEIGHT, PORTALS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
 
-TITLES = {"mobile_menu": "게임 메뉴", "character": "CHARACTER STAT", "inventory": "EQUIPMENT", "skills": "SKILL BOOK",
+TITLES = {"character": "CHARACTER STAT", "inventory": "EQUIPMENT", "skills": "SKILL BOOK",
           "journal": "QUEST LOG", "map": "WORLD MAP", "bestiary": "MONSTER BOOK",
           "account": "ACCOUNT", "hotkeys": "KEY SETTINGS", "shop": "ITEM SHOP",
           "trainer": "JOB ADVANCEMENT", "forge": "WORKSHOP"}
@@ -17,7 +16,6 @@ STAT_CODES = ("STR", "VIT", "SPI", "AGI")
 INK = "#263547"
 CREAM = "#ffdc78"
 WHITE = "#f6fafb"
-MOBILE_DIRECTIONS = ("ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown")
 
 
 class GameInterface:
@@ -26,12 +24,11 @@ class GameInterface:
         self.ctx = canvas.getContext("2d")
         self.hits = []
         self.pointer = {}
-        self.scrolled = set()
-        self.body_box = None
         self.clip = None
         self.hover = self.focus = None
         self.scroll = self.maximum = 0
         self.position = None
+        self.frame_box = None
         self.detail = False
         self.last_draw = -1000
         self.coarse = bool(window.matchMedia("(pointer: coarse)").matches) if hasattr(window, "matchMedia") else False
@@ -49,14 +46,9 @@ class GameInterface:
         width, height = max(1, number(bounds.width)), max(1, number(bounds.height))
         scale = max(.75, min(1.35, width / 820, height / 490))
         self.w, self.h = round(width / scale), round(height / scale)
-        self.tap = ceil(44 / scale)
-        self.mobile_dock_height = ceil(64 / scale)
-        self.tap_slop = ceil(10 / scale) if self.coarse else 8
         dpr = max(1, min(3, number(window.devicePixelRatio or 1)))
         for key, n in (("width", width), ("height", height)):
             self.canvas.attrs[key] = str(round(n * dpr))
-        if self.coarse:
-            self.reset_pointers(None)
         self.refresh()
 
     def refresh(self):
@@ -65,7 +57,6 @@ class GameInterface:
     def change_page(self):
         self.scroll = self.maximum = 0
         self.focus = self.hover = None
-        self.body_box = None
         self.hits.clear()
         self.refresh()
 
@@ -97,7 +88,6 @@ class GameInterface:
         if not target:
             return
         pid = int(number(e.pointerId))
-        self.scrolled.discard(pid)
         self.canvas.setPointerCapture(e.pointerId)
         self.pointer[pid] = (target, x, y, self.position, self.scroll)
         if target[6] == "hold" and not self.app.paused:
@@ -107,25 +97,14 @@ class GameInterface:
 
     def move(self, e):
         x, y = self.pos(e)
-        pid = int(number(e.pointerId))
-        active = self.pointer.get(pid)
-        current = self.at(x, y)
+        active = self.pointer.get(int(number(e.pointerId)))
         if active:
             target, sx, sy, initial, scroll = active
-            if target[6] == "hold":
-                if target[4] in MOBILE_DIRECTIONS and not self.app.paused:
-                    allowed = current and current[6] == "hold" and current[4] in MOBILE_DIRECTIONS
-                    if not allowed:
-                        self.app.pointers.pop(pid,None)
-                    elif self.app.pointers.get(pid) != current[4]:
-                        self.app.pointers[pid] = current[4]
-                        self.app.action(current[4])
-            elif target[6] == "drag" and initial:
+            if target[6] == "drag" and initial:
                 self.position = (initial[0] + x-sx, initial[1] + y-sy)
-            elif self.inside_body(sx, sy) and (pid in self.scrolled or abs(y-sy) >= self.tap_slop):
-                self.scrolled.add(pid)
+            elif self.frame_box and self.inside_body(sx, sy) and abs(y-sy) > 5:
                 self.scroll = limit(scroll + sy-y, 0, self.maximum)
-        target = current
+        target = self.at(x, y)
         self.hover = target[4] if target else None
         self.canvas.style.cursor = "move" if target and target[6] == "drag" else "pointer" if target and target[5] else "default"
         self.refresh()
@@ -134,33 +113,30 @@ class GameInterface:
         pid = int(number(e.pointerId))
         active = self.pointer.pop(pid, None)
         self.app.pointers.pop(pid, None)
-        if active and pid not in self.scrolled:
+        if active:
             target, sx, sy, _, _ = active
             x, y = self.pos(e)
             current = self.at(x, y)
-            if current and current[4] == target[4] and abs(sx-x) < self.tap_slop and abs(sy-y) < self.tap_slop and current[5] and current[6] == "action":
+            if current and current[4] == target[4] and abs(sx-x) < 8 and abs(sy-y) < 8 and current[5] and current[6] == "action":
                 current[5]()
-        self.scrolled.discard(pid)
         self.refresh()
 
     def cancel(self, e):
         pid = int(number(e.pointerId))
         self.pointer.pop(pid, None)
         self.app.pointers.pop(pid, None)
-        self.scrolled.discard(pid)
         self.refresh()
 
     def reset_pointers(self, _):
         self.pointer.clear()
-        self.scrolled.clear()
         self.app.pointers.clear()
         self.refresh()
 
     def inside_body(self, x, y):
-        if not self.body_box:
+        if not self.frame_box:
             return False
-        a, b, w, h = self.body_box
-        return a <= x < a+w and b <= y < b+h
+        a, b, w, h = self.frame_box
+        return a <= x < a+w and b+24 <= y < b+h
 
     def wheel(self, e):
         if self.inside_body(*self.pos(e)):
@@ -244,15 +220,12 @@ class GameInterface:
         self.bezel("button" if callback else "tab_off", x, y, w, h, (4,4,5,4))
         if selected or self.hover == name:
             self.box(x+4,y+h-3,w-9,1,"#fff8af")
-        font = self.tap//3 if self.coarse else 12
-        self.text(label, x+w/2+1, y+h/2+1, "#496017" if callback else "#69767c", font, True, "center", w-5)
-        self.text(label, x+w/2, y+h/2, "#fbffef" if callback else "#eef2f0", font, True, "center", w-5)
+        self.text(label, x+w/2+1, y+h/2+1, "#496017" if callback else "#69767c", 12, True, "center", w-5)
+        self.text(label, x+w/2, y+h/2, "#fbffef" if callback else "#eef2f0", 12, True, "center", w-5)
         if callback:
             self.hit(x, y, w, h, name, callback)
 
     def dock(self):
-        if self.coarse:
-            return self.mobile_dock()
         game, p = self.app.game, self.app.game.p
         stats = game.stats()
         compact = self.w < 730
@@ -322,35 +295,6 @@ class GameInterface:
         self.text(f"EXP   {p['xp']} / {game.xp_needed()}",self.w//2,self.h-5,WHITE,9,True,"center")
         return y
 
-    def mobile_dock(self):
-        game, p = self.app.game, self.app.game.p
-        stats = game.stats()
-        y = self.h-self.mobile_dock_height
-        self.bezel("chrome",0,y,self.w,self.mobile_dock_height,(5,7,5,5))
-        gap, size = 6, self.tap
-        left = self.w-3*(size+gap)
-        by = y + (self.mobile_dock_height-size)//2
-        width = min(285,left-18)
-        self.text(f"Lv.{p['level']}  {CLASSES[p['job']]['name']}",9,y+15,WHITE,14,True,width=width)
-        for stat, color, bar_y in (("hp","#d45260",y+27),("mp","#508eca",y+46)):
-            ratio = limit(p[stat]/max(1,stats[stat]),0,1)
-            self.box(9,bar_y,width,16,"#1b2636")
-            self.box(10,bar_y+1,round((width-2)*ratio),14,color)
-            self.text(f"{stat.upper()} {p[stat]}/{stats[stat]}",9+width/2,bar_y+8,WHITE,12,True,"center",width-4)
-        for i,(mana,item,count,label) in enumerate(((False,"potion",p["pots"],"HP 물약"),(True,"tonic",p["tonics"],"MP 물약"))):
-            x = left + i*(size+gap)
-            self.bezel("chrome",x,by,size,size,(5,7,5,5))
-            self.icon("icons",item_icon(item),x+(size-26)//2,by+6,26)
-            self.text(label,x+size/2,by+size-10,WHITE,12,True,"center",size-5)
-            self.text(count,x+size-7,by+9,CREAM,12,True,"right")
-            self.hit(x,by,size,size,label,lambda mana=mana:self.app.use_potion(mana))
-        self.button(left+2*(size+gap),by,size,size,"메뉴",lambda:self.app.show_panel("mobile_menu"))
-        exp = limit(p["xp"]/max(1,game.xp_needed()),0,1)
-        self.box(1,self.h-5,self.w-2,4,"#212a36")
-        if exp:
-            self.classic("exp_strip",1,self.h-5,round((self.w-2)*exp),4)
-        return y
-
     def minimap(self):
         game, p = self.app.game, self.app.game.p
         area = AREAS[area_at(p["x"])]
@@ -362,8 +306,7 @@ class GameInterface:
                 name = (("nw","n","ne"),("w","c","e"),("sw","s","se"))[r][c]
                 self.classic("mini_"+name,cx,cy,cw,ch)
         self.text(area["name"],x+8,y+19,WHITE,12,True,width=w-30)
-        if not self.coarse:
-            self.text("M",x+w-9,y+13,CREAM,10,True,"right")
+        self.text("M",x+w-9,y+13,CREAM,10,True,"right")
         self.box(x+5,y+27,w-10,35,"#26323bbf")
         start, end = area["start"], area["end"]
         pts = [(start, ground_at(start))] + [(a,b) for a,b in GROUND if start<a<end] + [(end,ground_at(end))]
@@ -400,35 +343,15 @@ class GameInterface:
         self.hit(self.w-qw-10, y, qw, 50, "퀘스트 알림", lambda: self.app.show_panel("journal"))
 
     def touch(self, bottom):
-        if not self.coarse or self.app.panel:
-            return bottom
-        gap, edge = 6, 11
-        size = min(self.tap, (self.w-2*edge-4*gap)//5)
-        step = size + gap
-        bottom_row = bottom-size-edge
-        upper_row = bottom_row-step
-        right = self.w-edge-step-size
-        nearby = self.app.game.nearby()[0]
-        interaction = "이동" if nearby == "portal" else "대화" if nearby == "npc" else "↑"
-        if upper_row < 86 and self.w >= 2*edge+8*step:
-            upper_row = bottom_row
-            actions = ((edge,(("←","ArrowLeft"),("↓","ArrowDown"),(interaction,"ArrowUp"),("→","ArrowRight"))),
-                       (right-2*step,(("보조","KeyV"),("스킬","KeyX"),("공격","KeyZ"),("점프","Space"))))
-            keys = tuple((x+i*step,bottom_row,label,key) for x,group in actions for i,(label,key) in enumerate(group))
-        else:
-            keys = ((edge+step,upper_row,interaction,"ArrowUp"),(edge,bottom_row,"←","ArrowLeft"),
-                    (edge+step,bottom_row,"↓","ArrowDown"),(edge+2*step,bottom_row,"→","ArrowRight"),
-                    (right,upper_row,"보조","KeyV"),(right+step,upper_row,"스킬","KeyX"),
-                    (right,bottom_row,"공격","KeyZ"),(right+step,bottom_row,"점프","Space"))
-        pressed = self.app.pointers.values()
-        for x, y, label, key in keys:
-            self.bezel("chrome",x,y,size,size,(6,8,6,6))
-            if key in pressed:
-                self.shine(x+4,y+5,size-8,size-10,"#557e87","#314e5b","#74949d")
-            tone = CREAM if key in ("KeyZ","Space") or key in pressed else WHITE
-            self.text(label,x+size/2,y+size/2,tone,max(14,size//3),True,"center",size-8)
-            self.hit(x,y,size,size,key,None,"hold")
-        return upper_row
+        if not self.coarse:
+            return
+        keys = (("◀","ArrowLeft"),("▶","ArrowRight"),("↓","ArrowDown"),("점프","Space"),
+                ("공격","KeyZ"),("스킬","KeyX"),("대화","ArrowUp"))
+        for i, (label, key) in enumerate(keys):
+            x = 6+i*38 if i<3 else self.w-6-(7-i)*38
+            self.bezel("chrome",x,bottom-41,36,38,(5,7,5,5))
+            self.text(label,x+18,bottom-22,CREAM if key in self.app.pointers.values() else WHITE,13,True,"center")
+            self.hit(x,bottom-41,36,38,key,None,"hold")
 
     def stat_pair(self, x, y, w, label, value, action=None, attr=False):
         # Stretch the white value field only. The lime label keeps its original
@@ -444,12 +367,7 @@ class GameInterface:
             self.text(label,x+4,y+10,"#fcffdf",12,True)
         self.text(value,x+67,y+10,INK,12,width=w-74-(18 if attr else 0))
         if attr:
-            if self.coarse:
-                self.classic("up" if action else "up_off",x+w-26,y-1,22,22)
-                if action:
-                    self.hit(x+w-self.tap,y-(self.tap-20)//2,self.tap,self.tap,label+" 배분",action)
-            else:
-                self.picture_button("up" if action else "up_off",x+w-18,y+3,14,14,label+" 배분",action)
+            self.picture_button("up" if action else "up_off",x+w-18,y+3,14,14,label+" 배분",action)
 
     def stats(self, x, y, w):
         game, p = self.app.game, self.app.game.p
@@ -465,16 +383,11 @@ class GameInterface:
         y += 51
         for code,(key,attr) in zip(STAT_CODES,ATTRIBUTES.items()):
             action=(lambda key=key:self.app.execute(lambda:game.add_attribute(key))) if game.ap() else None
-            height = self.tap+2 if self.coarse else 21
-            self.stat_pair(x,y+(height-20)//2,w,f"{code}  {attr['name']}",p["attributes"][key],action,True)
-            y += height
+            self.stat_pair(x,y,w,f"{code}  {attr['name']}",p["attributes"][key],action,True)
+            y += 21
         caption="접기" if self.detail else "자세히 보기"
-        if self.coarse:
-            self.button(x+w-120,y+4,120,self.tap,caption,self.toggle_detail)
-            y += self.tap+8
-        else:
-            self.picture_button("detail_close" if self.detail else "detail_open",x+w-79,y+5,78,19,caption,self.toggle_detail)
-            y += 28
+        self.picture_button("detail_close" if self.detail else "detail_open",x+w-79,y+5,78,19,caption,self.toggle_detail)
+        y += 28
         if self.detail:
             for label,value in (("방어력",stats["defense"]),("이동 속도",f"{stats['speed']:.2f}"),("처치 수",p["kills"])):
                 self.stat_pair(x,y,w,label,value)
@@ -509,7 +422,7 @@ class GameInterface:
         return y+149
 
     def item_grid(self,x,y,w,items,selected):
-        cell=self.tap+1 if self.coarse else 36
+        cell=36
         columns=max(1,w//cell)
         rows=max(2,(len(items)+columns-1)//columns)
         p=self.app.game.p
@@ -519,11 +432,9 @@ class GameInterface:
             self.box(left,top,cell-1,cell-1,"#dea528" if item and item==selected else "#a3abb0")
             self.classic("cell",left+1,top+1,cell-3,cell-3)
             if item:
-                icon = min(36,cell-4)
-                inset = (cell-icon)//2 if self.coarse else 1
-                self.icon("icons",item_icon(item),left+inset,top+inset,icon)
+                self.icon("icons",item_icon(item),left+1,top+1,32)
                 if p["bag"][item]>1:
-                    self.text(p["bag"][item],left+cell-4,top+cell-8,INK,10,True,"right")
+                    self.text(p["bag"][item],left+32,top+28,INK,10,True,"right")
                 self.hit(left,top,cell-1,cell-1,ITEMS[item]["name"],lambda item=item:self.app.select_item(item))
         return y+rows*cell+3
 
@@ -532,28 +443,18 @@ class GameInterface:
             kind = entry[0]
             if kind == "stats":
                 y = self.stats(x,y,w)
-            elif kind == "mobile_actions":
-                entries = entry[1]
-                columns = 3 if w >= 285 else 2
-                step = w//columns
-                for i,(label, callback) in enumerate(entries):
-                    self.button(x+(i%columns)*step,y+(i//columns)*(self.tap+9),
-                                step-6,self.tap,label,callback)
-                y += ((len(entries)+columns-1)//columns)*(self.tap+9)
             elif kind == "tabs":
                 _, group, labels, active = entry
                 tw = w//len(labels)
-                height = self.tap if self.coarse else 23
-                font = self.tap//3 if self.coarse else 12
                 for i,(key,label) in enumerate(labels):
                     left=x+i*tw
                     current=key==active
-                    self.bezel("tab_on" if current else "tab_off",left,y+(0 if current else 2),tw-1,height if current else height-2,(4,4,3,3))
-                    self.text(label,left+tw/2+1,y+height/2+1,"#83582c" if current else "#58606b",font,True,"center",tw-5)
-                    self.text(label,left+tw/2,y+height/2,WHITE,font,True,"center",tw-5)
-                    self.hit(left,y,tw-1,height,group+" "+label,lambda key=key,group=group:self.app.set_tab(group,key))
-                self.box(x,y+height,w,2,"#eb8d31")
-                y += height+4
+                    self.bezel("tab_on" if current else "tab_off",left,y+(0 if current else 2),tw-1,23 if current else 21,(4,4,3,3))
+                    self.text(label,left+tw/2+1,y+13,"#83582c" if current else "#58606b",12,True,"center")
+                    self.text(label,left+tw/2,y+12,WHITE,12,True,"center")
+                    self.hit(left,y,tw-1,23,group+" "+label,lambda key=key,group=group:self.app.set_tab(group,key))
+                self.box(x,y+23,w,2,"#eb8d31")
+                y += 27
             elif kind == "route":
                 player = self.app.game.p["x"]
                 current = area_at(player)
@@ -594,29 +495,26 @@ class GameInterface:
             else:
                 _, title, detail, action, callback, disabled, item = entry
                 offset = 39 if item else 7
-                button_h = self.tap if self.coarse else 23
-                title_size, detail_size = (self.tap//3,max(13,self.tap//4)) if self.coarse else (13,11)
-                line_h, title_y, detail_y = (20,19,41) if self.coarse else (15,13,30)
-                button_w = max(button_h, len(action or "")*(title_size-2)+12) if action else 0
+                button_w = max(51, len(action or "")*11+9) if action else 0
                 area_w = w-offset-button_w-14
-                lines = self.lines(detail,area_w,detail_size) if detail else []
-                h = max(button_h+10 if self.coarse else 41, detail_y-4+line_h*len(lines))
+                lines = self.lines(detail,area_w) if detail else []
+                h = max(41, 26+15*len(lines))
                 if item:
                     self.classic("panel_card",x,y,37,h,crop=(0,0,37,35))
                     self.classic("panel_card",x+37,y,w-37,h,crop=(37,0,103,35))
                     self.icon("icons",item_icon(item),x+2,y+(h-32)//2,32)
                 else:
                     self.bezel("paper",x,y,w,h,(3,3,3,3))
-                self.text(title,x+offset,y+title_y,INK,title_size,True,width=area_w)
+                self.text(title,x+offset,y+13,INK,13,True,width=area_w)
                 for j,line in enumerate(lines):
-                    self.text(line,x+offset,y+detail_y+j*line_h,"#516071",detail_size,width=area_w)
+                    self.text(line,x+offset,y+30+j*15,"#516071",11)
                 if action:
-                    self.button(x+w-button_w-4,y+(h-button_h)//2,button_w,button_h,action,None if disabled else callback,title+" "+action)
+                    self.button(x+w-button_w-4,y+(h-23)//2,button_w,23,action,None if disabled else callback,title+" "+action)
                 y += h+3
         return y
 
-    def lines(self, value, width, font=12):
-        self.ctx.font = f"{font}px Gulim, Dotum, Arial, sans-serif"
+    def lines(self, value, width):
+        self.ctx.font = "12px Gulim, Dotum, Arial, sans-serif"
         lines, line = [], ""
         for word in value.split():
             candidate = (line+" "+word).strip()
@@ -631,42 +529,30 @@ class GameInterface:
 
     def panel_view(self, bottom):
         key, npc = self.app.panel
-        if self.coarse:
-            header = self.tap
-            w = min(520,self.w-14)
-            h = min(575,bottom-14)
-            x,y = (self.w-w)//2,7
-        else:
-            header = 24
-            w=min(249 if key=="character" else 352,self.w-14)
-            h=min((398 if self.detail else 337) if key=="character" else 379,max(115,bottom-12))
-            x,y=self.position or (self.w-w-12,min(83,bottom-h-6))
-            x=int(limit(x,4,self.w-w-4))
-            y=int(limit(y,4,max(4,bottom-h-4)))
-            self.position=(x,y)
+        w=min(249 if key=="character" else 352,self.w-14)
+        h=min((398 if self.detail else 337) if key=="character" else 379,
+              max(115,bottom-12-(41 if self.coarse else 0)))
+        x,y=self.position or (self.w-w-12,min(83,bottom-h-6))
+        x=int(limit(x,4,self.w-w-4))
+        y=int(limit(y,4,max(4,bottom-h-(41 if self.coarse else 4))))
+        self.position=(x,y)
+        self.frame_box=(x,y,w,h)
         self.box(x+3,y+4,w-2,h-1,"#18202a77")
         self.bezel("chrome",x,y,w,h,(8,23,8,8))
-        self.bezel("paper",x+6,y+header-2,w-12,h-header-4,(5,5,5,8))
+        self.bezel("paper",x+6,y+22,w-12,h-28,(5,5,5,8))
         title_key=key+"_title"
-        self.hit(x,y,w,h,"창",kind="surface")
-        if self.coarse:
-            name = npc["name"]+" · "+npc["role"] if npc else self.menus.get(key,TITLES.get(key,"대화"))
-            self.text(name,x+16,y+header/2,CREAM,header//3,True,width=w-header-22)
-            icon = 26
-            self.classic("close",x+w-(header+icon)//2,y+(header-icon)//2,icon,icon)
-            self.hit(x+w-header,y,header,header,"닫기",self.app.close_panel)
-        elif title_key in CLASSIC_REGIONS and not npc:
+        if title_key in CLASSIC_REGIONS and not npc:
             self.classic(title_key,x+(w-128)//2,y+3,128,20)
         else:
             name=npc["name"]+" · "+npc["role"] if npc else TITLES.get(key,self.menus.get(key,"NPC TALK"))
             self.text(name,x+w//2+1,y+13,"#3a2e1b",11,True,"center")
             self.text(name,x+w//2,y+12,CREAM,11,True,"center")
-        if not self.coarse:
-            self.hit(x+3,y+2,w-32,24,"창 이동",kind="drag")
-            self.picture_button("close",x+w-23,y+5,16,16,"닫기",self.app.close_panel)
-        left,top=x+11,y+header+4
-        inner_h,inner_w=h-header-14,w-34
-        self.body_box = self.clip = (left,top,inner_w,inner_h)
+        self.hit(x,y,w,h,"창",kind="surface")
+        self.hit(x+3,y+2,w-32,24,"창 이동",kind="drag")
+        self.picture_button("close",x+w-23,y+5,16,16,"닫기",self.app.close_panel)
+        left,top=x+11,y+28
+        inner_h,inner_w=h-38,w-34
+        self.clip = (left,top,inner_w,inner_h)
         ctx=self.ctx
         ctx.save()
         ctx.beginPath()
@@ -682,15 +568,12 @@ class GameInterface:
             self.refresh()
         if self.maximum:
             rx = x+w-20
-            if self.coarse:
-                track_y, track = top,inner_h
-            else:
-                self.picture_button("prev",rx,top,15,16,"위로 스크롤",lambda:self.scroll_by(-68))
-                self.picture_button("next",rx,top+inner_h-16,15,16,"아래로 스크롤",lambda:self.scroll_by(68))
-                track_y, track = top+17,inner_h-35
-            self.box(rx+4,track_y,7,track,"#b3b2b0")
+            self.picture_button("prev",rx,top,15,16,"위로 스크롤",lambda:self.scroll_by(-68))
+            self.picture_button("next",rx,top+inner_h-16,15,16,"아래로 스크롤",lambda:self.scroll_by(68))
+            self.box(rx+4,top+17,7,inner_h-34,"#b3b2b0")
+            track=inner_h-35
             thumb=max(16,round(track*inner_h/(inner_h+self.maximum)))
-            self.classic("thumb",rx,track_y+(track-thumb)*self.scroll/self.maximum,15,thumb)
+            self.classic("thumb",rx,top+17+(track-thumb)*self.scroll/self.maximum,15,thumb)
 
 
     def draw(self, now):
@@ -703,10 +586,10 @@ class GameInterface:
         if not self.app.renderer.ready:
             return
         self.hits=[]
-        self.body_box=None
+        self.frame_box=None
         self.minimap()
         bottom=self.dock()
-        message_anchor=self.touch(bottom)
+        self.touch(bottom)
         now=number(window.performance.now())
         game=self.app.game
         messages=[]
@@ -718,7 +601,7 @@ class GameInterface:
             messages.append(SUPPORTS[game.p["job"]]["name"]+f"  {(game.support_until-game.tick+59)//60}초")
         for i,msg in enumerate(messages):
             w=min(self.w-20,max(165,len(msg)*11+24))
-            y=message_anchor-26-i*24
+            y=bottom-26-i*24-(42 if self.coarse else 0)
             self.box((self.w-w)//2,y,w,21,"#172c3ee8")
             self.text(msg,self.w//2,y+11,WHITE,12,True,"center",w-8)
         if self.app.panel:

@@ -76,9 +76,26 @@ class ImageDimensionTest(unittest.TestCase):
         renderer.sprite = Mock()
         renderer.label = Mock()
         renderer.rect = Mock()
-        renderer.scenery(Game(),AREAS[0],0,WIDTH,HEIGHT)
+        renderer.static_scenery(0,0,WIDTH,HEIGHT)
         stages = [call[0] for call in order.mock_calls]
         self.assertIn("terrain",stages)
         self.assertIn("ladder",stages)
         terrain_end = max(i for i,stage in enumerate(stages) if stage=="terrain")
         self.assertLess(terrain_end,stages.index("ladder"))
+
+    def test_overlapping_viewports_reuse_terrain_and_bound_memory(self):
+        with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
+            from maplee.render import Renderer, TERRAIN_CACHE_SIZE
+        renderer = Renderer.__new__(Renderer)
+        renderer.ctx = Mock()
+        renderer.terrain_cache = {}
+        renderer.static_scenery = Mock()
+        document = SimpleNamespace(createElement=lambda _: Mock(attrs={}))
+        with patch("maplee.render.window",SimpleNamespace(document=document)):
+            renderer.terrain(0,0,WIDTH)
+            renderer.terrain(0,30,WIDTH+30)
+            self.assertEqual(renderer.static_scenery.call_count,2)
+            self.assertEqual(renderer.ctx.drawImage.call_count,4)
+            for region,area in enumerate(AREAS):
+                renderer.terrain(region,area["start"],area["start"]+WIDTH)
+        self.assertEqual(len(renderer.terrain_cache),TERRAIN_CACHE_SIZE)

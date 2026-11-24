@@ -1,15 +1,19 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
-from math import ceil, cos, sin, pi
+from math import ceil, cos, sin, pi, sqrt
 from browser import window
 from .combat_art import COMBAT_ART
 from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, LEDGE_DEPTH, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
-from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
+from .engine import AREA_LADDERS, AREA_LEDGES, CAMERA_TOP, HEIGHT, LOWEST_GROUND, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
 WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
 IDLE = SPRITES["hero"]["animations"]["idle"]
 IDLE_LENGTH = sum(IDLE["durations"])
 FIELD_ZOOM = 1.25
+TERRAIN_TILE_WIDTH = 512
+TERRAIN_TOP = CAMERA_TOP - 8
+TERRAIN_BOTTOM = max(LOWEST_GROUND, ceil(HEIGHT * FIELD_ZOOM)) + 12
+TERRAIN_CACHE_SIZE = 8
 # Native-pixel weight shift, anchored at the feet and mirrored with the swing.
 MELEE_LEAN = (0, -1, -2, -2, -2, -1, 0, 2, 4, 5, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 0, 0)
 
@@ -39,6 +43,7 @@ class Renderer:
         self.sizes = {}
         self.loaded = set()
         self.failed = set()
+        self.terrain_cache = {}
         for name, path in IMAGES.items():
             img = window.Image.new()
             img.onload = lambda *events, name=name, img=img: self.image_loaded(name, img)
@@ -65,9 +70,12 @@ class Renderer:
         fit = max(css_width/1440,css_height/HEIGHT) / FIELD_ZOOM
         self.view_width = round(css_width/fit)
         self.view_height = round(css_height/fit)
-        multiplier = limit(fit*number(window.devicePixelRatio or 1),1,3)
+        budget = 1_250_000 if css_width < 800 else 2_300_000
+        multiplier = min(limit(fit*number(window.devicePixelRatio or 1),1,3),
+                         sqrt(budget/(self.view_width*self.view_height)))
         width = round(self.view_width*multiplier)
         height = round(self.view_height*multiplier)
+        self.scale_x, self.scale_y = width/self.view_width,height/self.view_height
         if self.canvas.attrs["width"] != str(width) or self.canvas.attrs["height"] != str(height):
             self.canvas.attrs["width"] = str(width)
             self.canvas.attrs["height"] = str(height)
@@ -248,8 +256,9 @@ class Renderer:
             ctx.restore()
         ctx.restore()
 
-    def scenery(self, game, area, left, right, bottom):
+    def static_scenery(self, region, left, right, bottom):
         ctx = self.ctx
+        area = AREAS[region]
         material = area["material"]
         for prop in PROPS:
             x, id, width = prop[:3]
@@ -261,7 +270,7 @@ class Renderer:
             floor = prop[3] if len(prop) > 3 and prop[3] is not None else ground_at(x)
             ctx.drawImage(self.images[atlas], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
         self.ground(material,max(left,area["start"]),min(right,area["end"]),material=="stone",bottom)
-        for ledge in LEDGES:
+        for ledge in AREA_LEDGES[region]:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
             if x < area["start"] or x + w > area["end"] or x + w <= left or x >= right:
                 continue
@@ -273,9 +282,51 @@ class Renderer:
             self.tile_band(material, x, x + w)
             self.rect(x, LEDGE_DEPTH-4, w, 4, "#233121aa")
             ctx.restore()
-        for x, top, bottom in LADDERS:
-            if area["start"] <= x < area["end"] and left-14 < x < right+14:
+        for x, top, bottom in AREA_LADDERS[region]:
+            if left-14 < x < right+14:
                 self.ladder(x,top,bottom)
+
+    def terrain_tile(self, region, index):
+        key = (region,index)
+        if key in self.terrain_cache:
+            tile = self.terrain_cache.pop(key)
+            self.terrain_cache[key] = tile
+            return tile
+        area = AREAS[region]
+        left = area["start"] + index*TERRAIN_TILE_WIDTH
+        right = min(area["end"],left+TERRAIN_TILE_WIDTH)
+        # Add a small margin so slopes and props join cleanly across tile edges.
+        padded_left = max(area["start"],left-2)
+        padded_right = min(area["end"],right+2)
+        image = window.document.createElement("canvas")
+        image.attrs["width"] = str(padded_right-padded_left)
+        image.attrs["height"] = str(TERRAIN_BOTTOM-TERRAIN_TOP)
+        original = self.ctx
+        self.ctx = image.getContext("2d")
+        try:
+            self.ctx.imageSmoothingEnabled = False
+            self.ctx.translate(-padded_left,-TERRAIN_TOP)
+            self.static_scenery(region,padded_left,padded_right,TERRAIN_BOTTOM)
+        finally:
+            self.ctx = original
+        tile = image,left-padded_left,right-left
+        self.terrain_cache[key] = tile
+        if len(self.terrain_cache) > TERRAIN_CACHE_SIZE:
+            del self.terrain_cache[next(iter(self.terrain_cache))]
+        return tile
+
+    def terrain(self, region, left, right):
+        area = AREAS[region]
+        origin = area["start"]
+        first = max(0,(left-origin)//TERRAIN_TILE_WIDTH)
+        last = (min(right,area["end"])-origin-1)//TERRAIN_TILE_WIDTH
+        height = TERRAIN_BOTTOM-TERRAIN_TOP
+        for index in range(first,last+1):
+            image,sx,width = self.terrain_tile(region,index)
+            x = origin+index*TERRAIN_TILE_WIDTH
+            self.ctx.drawImage(image,sx,0,width,height,x,TERRAIN_TOP,width,height)
+
+    def scenery(self, game, area, left, right):
         for x, _, target in PORTALS:
             if area["start"] <= x < area["end"] and left - 60 < x < right + 60:
                 y = ground_at(x)
@@ -283,6 +334,7 @@ class Renderer:
                 for i in range(6):
                     self.rect(x - 8 + 3 * i, y - ((game.tick + i * 11) % 37), 2, 5, "#cdfbff")
                 self.label("↑ " + AREAS[target]["name"], x, y - 50, "#baf6ff")
+        nearby = None
         for row, npc in enumerate(NPCS):
             x = npc["x"]
             if not area["start"] <= x < area["end"] or not left - 50 < x < right + 50:
@@ -302,7 +354,9 @@ class Renderer:
                 progress = game.p["quests"][index]
                 if not progress["state"] or progress["state"] == 1 and progress["count"] >= QUESTS[index]["target"]:
                     self.label("◆", x, label_y - 15, "#ffd981", 13)
-            if game.nearby()[1] == npc:
+            if nearby is None:
+                nearby = game.nearby()
+            if nearby[1] == npc:
                 self.label("↑ 대화", x, label_y - 29, "#d7ffed")
 
     def player_pose(self, game):
@@ -482,7 +536,7 @@ class Renderer:
 
     def draw(self, game, paused, profile=None, portal_fade=0, peers=()):
         width,height = self.view_width,self.view_height
-        self.ctx.setTransform(int(self.canvas.attrs["width"])/width,0,0,int(self.canvas.attrs["height"])/height,0,0)
+        self.ctx.setTransform(self.scale_x,0,0,self.scale_y,0,0)
         self.ctx.imageSmoothingEnabled = False
         if not self.ready:
             self.rect(0,0,width,height,"#183744")
@@ -493,20 +547,22 @@ class Renderer:
         x, y, tick = game.p["x"], game.p["y"], game.tick
         left,top = round(game.camera),round(game.camera_y)
         right = left+width
-        area = AREAS[area_at(x)]
+        region = area_at(x)
+        area = AREAS[region]
         self.backdrop(area,left,top)
         ctx.save()
         ctx.translate(-left,-top)
-        self.scenery(game,area,left,right,top+height)
-        for m in game.monsters:
-            if left - 100 < m["x"] < right + 100:
+        self.terrain(region,left,right)
+        self.scenery(game,area,left,right)
+        for m in game.monsters_in_area(region):
+            if left - 100 < m["x"] < right + 100 and top-100 < m["y"] < top+height+140:
                 self.monster(game, m)
         for drop in game.drops:
             if left <= drop["x"] <= right:
                 elapsed = tick - drop["start"]
-                height = 28 * sin(min(1, elapsed / 24) * pi)
+                bounce = 28 * sin(min(1, elapsed / 24) * pi)
                 for index, id in enumerate([None] + drop["items"]):
-                    self.icon(7 if id is None else item_icon(id), drop["x"] + index * 13 - 11, drop["y"] - 10 - height, 18)
+                    self.icon(7 if id is None else item_icon(id), drop["x"] + index * 13 - 11, drop["y"] - 10 - bounce, 18)
         for player, px, py in peers:
             if left-80 < px < right+80 and top-20 < py < top+height+90:
                 equipment = player["equipment"]

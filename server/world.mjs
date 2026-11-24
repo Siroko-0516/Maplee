@@ -114,6 +114,16 @@ function worldHits(input, pose) {
   return regions;
 }
 
+function worldViewQueries(db, pose, actor, now) {
+  return [
+    db.prepare("SELECT actor, name, pose FROM world_presence WHERE region = ? AND seen > ? AND actor != ? ORDER BY seen DESC LIMIT 40")
+      .bind(pose.region, now - WORLD_PRESENCE_MS, actor),
+    db.prepare("SELECT state FROM world_combat WHERE region = ?").bind(pose.region),
+    db.prepare("SELECT event, monster, x FROM world_rewards WHERE actor = ? AND issued >= ? ORDER BY issued LIMIT 60")
+      .bind(actor, now - WORLD_REWARD_MS)
+  ];
+}
+
 async function sharedWorld(request, store, db, session, action) {
   if (request.method !== "POST") return fail(405, "요청 방식을 확인해주세요.");
   if (!db) return fail(503, "공용 월드 저장소에 연결할 수 없어요.");
@@ -130,31 +140,40 @@ async function sharedWorld(request, store, db, session, action) {
   const pose = worldPose(data.pose);
   if (!pose) return fail(400, "캐릭터 위치를 확인할 수 없어요.");
   let actor = data.actor;
+  let view;
   if (action === "join") {
     if (![0, 1, 2, 3].includes(data.slot)) return fail(400, "캐릭터 슬롯을 선택해주세요.");
     const slot = await record(store, "slots/" + session.id + "/" + data.slot);
     if (!slot) return fail(404, "선택한 캐릭터를 찾을 수 없어요.");
     actor = random(14);
-    await db.batch([
+    const result = await db.batch([
       db.prepare(
         `INSERT INTO world_presence (account, actor, name, region, seen, pose) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(account) DO UPDATE SET actor = excluded.actor, name = excluded.name,
            region = excluded.region, seen = excluded.seen, pose = excluded.pose`
       ).bind(session.id, actor, slot.value.profile.name, pose.region, now, JSON.stringify(pose)),
       db.prepare("DELETE FROM world_presence WHERE seen < ?").bind(now - WORLD_PRESENCE_MS * 4),
-      db.prepare("DELETE FROM world_rewards WHERE issued < ?").bind(now - WORLD_REWARD_MS)
+      db.prepare("DELETE FROM world_rewards WHERE issued < ?").bind(now - WORLD_REWARD_MS),
+      ...worldViewQueries(db, pose, actor, now)
     ]);
+    view = result.slice(3);
   } else if (action === "sync") {
     if (!/^[0-9a-f]{28}$/.test(actor) || !Number.isSafeInteger(data.seq) || data.seq < 1 ||
         !Array.isArray(data.hits) || !Array.isArray(data.ack)) return fail(400, "월드 동기화 요청을 확인해주세요.");
-    const changed = await db.prepare(
+    const update = db.prepare(
       "UPDATE world_presence SET region = ?, seen = ?, pose = ? WHERE account = ? AND actor = ? AND seen <= ?"
-    ).bind(pose.region, now, JSON.stringify(pose), session.id, actor, now - 100).run();
+    ).bind(pose.region, now, JSON.stringify(pose), session.id, actor, now - 100);
+    const idle = !data.hits.length && !data.ack.length;
+    // Movement-only updates can write the pose and read the field in one round trip.
+    const [changed, ...snapshot] = idle
+      ? await db.batch([update, ...worldViewQueries(db, pose, actor, now)])
+      : [await update.run()];
     if (!changed.meta.changes) {
       const row = await db.prepare("SELECT actor FROM world_presence WHERE account = ?").bind(session.id).first();
       if (!row) return fail(410, "월드에 다시 접속해야 해요.");
       return row.actor === actor ? fail(429, "잠시 후 다시 연결해요.") : fail(409, "다른 창에서 이 계정이 월드에 접속했어요.");
     }
+    if (idle) view = snapshot;
     for (const [region, hits] of worldHits(data.hits, pose)) {
       if (!await updateWorldCombat(db, session.id, actor, region, data.seq, hits, now))
         return fail(503, "월드 동기화를 다시 시도해요.");
@@ -167,13 +186,7 @@ async function sharedWorld(request, store, db, session, action) {
     return fail(404, "월드 주소를 확인해주세요.");
   }
 
-  const [nearby, hunting, rewards] = await db.batch([
-    db.prepare("SELECT actor, name, pose FROM world_presence WHERE region = ? AND seen > ? AND actor != ? ORDER BY seen DESC LIMIT 40")
-      .bind(pose.region, now - WORLD_PRESENCE_MS, actor),
-    db.prepare("SELECT state FROM world_combat WHERE region = ?").bind(pose.region),
-    db.prepare("SELECT event, monster, x FROM world_rewards WHERE actor = ? AND issued >= ? ORDER BY issued LIMIT 60")
-      .bind(actor, now - WORLD_REWARD_MS)
-  ]);
+  const [nearby, hunting, rewards] = view ?? await db.batch(worldViewQueries(db, pose, actor, now));
   const players = nearby.results.map(row => ({ id: row.actor, name: row.name, ...JSON.parse(row.pose) }));
   const state = hunting.results[0]?.state;
   return reply({

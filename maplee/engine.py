@@ -87,6 +87,11 @@ def ladder_for(ledge):
 
 
 LADDERS = [ladder_for(ledge) for ledge in LEDGES]
+AREA_LEDGES = [[] for _ in AREAS]
+AREA_LADDERS = [[] for _ in AREAS]
+for _ledge, _ladder in zip(LEDGES,LADDERS):
+    AREA_LEDGES[area_at(_ledge["x"])].append(_ledge)
+    AREA_LADDERS[area_at(_ladder[0])].append(_ladder)
 
 
 def item_icon(item):
@@ -118,6 +123,7 @@ class Game:
         self.inv_until = self.hurt_until = self.support_until = 0
         self.skill_cd = self.support_cd = 0
         self.drops, self.effects, self.monsters = [], [], []
+        self._monster_count = -1
         self.shared_hit = self.solo_monsters = None
         self.shared_clock = 0.0
         self.notice, self.loot, self.sound = "", None, None
@@ -414,8 +420,11 @@ class Game:
         return limit(self.p["y"]-anchor,CAMERA_TOP,max(0,LOWEST_GROUND-anchor))
 
     def travel(self, x):
-        if area_at(x) != area_at(self.p["x"]):
+        origin = area_at(self.p["x"])
+        if area_at(x) != origin:
             self.effects.clear()
+            for monster in self.monsters_in_area(origin):
+                self.deactivate_monster(monster)
         self.p["x"], self.p["y"] = x, ground_at(x)
         self.camera = self.camera_target()
         self.camera_y = self.camera_vertical_target()
@@ -548,7 +557,7 @@ class Game:
             if target is not None and target["dead"] is None and overlaps(box, monster_bounds(target,self.tick)):
                 self.hit(target, power, facing, "stab_hit")
             return
-        targets = [m for m in self.monsters if m["dead"] is None and area_at(m["home"]) == area_at(p["x"])
+        targets = [m for m in self.monsters_in_area(area_at(p["x"])) if m["dead"] is None
                    and (shape != "heal" or m["spec"].get("undead"))
                    and id(m) not in self.swing["struck"] and overlaps(box, monster_bounds(m,self.tick))]
         if skill:
@@ -564,16 +573,26 @@ class Game:
 
     def spawn(self, x, kind, index, ledge=None):
         spec = SPECIES[kind]
-        area = AREAS[area_at(x)]
+        region = area_at(x)
+        area = AREAS[region]
         stride = 134 if spec.get("elite") else 86
         low = ledge["x"] + 16 if ledge else max(area["start"] + 24, x - stride)
         high = ledge["x"] + ledge["w"] - 16 if ledge else min(area["end"] - 24, x + stride)
         monster = {"x": x, "y": ledge["y"] if ledge else ground_at(x), "home": x, "kind": kind, "spec": spec,
                    "left": low, "right": high, "dir": 1 if index % 2 else -1, "hp": spec["hp"], "dead": None,
                    "state": "patrol", "hurt": 0, "windup": 0, "strike": -100, "next": 0, "ledge": ledge, "phase": index * 31,
-                   "id": len(self.monsters), "life": 0, "shared_until": 0}
+                   "id": len(self.monsters), "region": region, "life": 0, "shared_until": 0}
         self.monsters.append(monster)
+        self._monster_count = -1
         return monster
+
+    def monsters_in_area(self, region):
+        if self._monster_count != len(self.monsters):
+            self._monsters_by_area = [[] for _ in AREAS]
+            for monster in self.monsters:
+                self._monsters_by_area[monster["region"]].append(monster)
+            self._monster_count = len(self.monsters)
+        return self._monsters_by_area[region]
 
     def populate(self):
         ledges = {ledge["x"]: ledge for ledge in LEDGES}
@@ -598,6 +617,7 @@ class Game:
             return
         self.shared_hit = None
         self.monsters, self.solo_monsters = self.solo_monsters, None
+        self._monster_count = -1
         self.effects.clear()
         self.swing = None
 
@@ -610,11 +630,8 @@ class Game:
                 monster.update(dead=None, windup=0, next=self.tick+30)
             monster.update(hp=hp, life=life, shared_until=until)
 
-    def shared_monster_step(self):
-        region = area_at(self.p["x"])
-        for monster in self.monsters:
-            if area_at(monster["home"]) != region:
-                continue
+    def shared_monster_step(self, monsters):
+        for monster in monsters:
             until = monster["shared_until"]
             if until and self.shared_clock >= until:
                 monster.update(hp=monster["spec"]["hp"], dead=None, shared_until=0,
@@ -711,6 +728,12 @@ class Game:
         if not monster["ledge"]:
             monster["y"] = ground_at(monster["x"])
 
+    def deactivate_monster(self, monster):
+        if monster["dead"] is None and (monster["state"] != "patrol" or monster["windup"]):
+            monster.update(state="patrol",windup=0)
+            if self.shared_hit is None:
+                self.move_monster(monster,monster["home"],500)
+
     def monster_step(self, monster):
         tick, p, spec = self.tick, self.p, monster["spec"]
         if monster["dead"] is not None:
@@ -719,11 +742,8 @@ class Game:
                 self.move_monster(monster, monster["home"], 500)
             return
         active_distance = max(WIDTH, self.view_width / 2 + 120)
-        if area_at(monster["home"]) != area_at(p["x"]) or abs(monster["home"]-p["x"]) > active_distance or self.support_value("stealth"):
-            if monster["state"] != "patrol" or monster["windup"]:
-                monster.update(state="patrol", windup=0)
-                if self.shared_hit is None:
-                    self.move_monster(monster, monster["home"], 500)
+        if monster["region"] != area_at(p["x"]) or abs(monster["home"]-p["x"]) > active_distance or self.support_value("stealth"):
+            self.deactivate_monster(monster)
             return
         offset = p["x"] - monster["x"]
         same_height = abs(monster["y"] - p["y"]) < 37
@@ -807,8 +827,9 @@ class Game:
                 previous = x + facing * 15 * max(0, age - 1)
                 path = (min(previous, arrow_x)-3, y-4, max(previous, arrow_x)+3, y+4)
                 targets = []
-                for m in self.monsters:
-                    if m["dead"] is None and area_at(m["home"]) == area_at(x):
+                monsters = self.monsters_in_area(area_at(x))
+                for m in monsters:
+                    if m["dead"] is None:
                         bounds = monster_bounds(m, self.tick)
                         if overlaps(path, bounds):
                             entry = bounds[0] if facing > 0 else -bounds[2]
@@ -818,7 +839,7 @@ class Game:
                     victims = [monster]
                     if len(data) > 2 and data[2] == "bomb":
                         splash = (monster["x"]-75, y-48, monster["x"]+75, y+48)
-                        others = [m for m in self.monsters if m is not monster and m["dead"] is None
+                        others = [m for m in monsters if m is not monster and m["dead"] is None
                                   and overlaps(splash, monster_bounds(m,self.tick))]
                         victims.extend(sorted(others,key=lambda m: abs(m["x"]-monster["x"]))[:5])
                     for victim in victims:
@@ -832,10 +853,11 @@ class Game:
 
     def move_player(self, dx, dy):
         p = self.p
+        region = area_at(p["x"])
         if dx:
             self.ladder = None
         if not self.ladder and not dx and not self.swing and dy and self.vy >= 0:
-            self.ladder = next((ladder for ladder in LADDERS if abs(p["x"] - ladder[0]) <= 11 and (
+            self.ladder = next((ladder for ladder in AREA_LADDERS[region] if abs(p["x"] - ladder[0]) <= 11 and (
                 ladder[1] < p["y"] <= ladder[2] + 2 if dy < 0 else ladder[1] - 1 <= p["y"] < ladder[2] - 1)), None)
         if self.ladder:
             x, top, bottom = self.ladder
@@ -846,7 +868,7 @@ class Game:
             return
         old_x, old_y, previous_surface = p["x"], p["y"], self.surface
         speed = self.stats()["speed"] + self.support_value("speed")
-        area = AREAS[area_at(old_x)]
+        area = AREAS[region]
         p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1),
                        area["start"]+24, area["end"]-24)
         floor = ground_at(p["x"])
@@ -859,7 +881,7 @@ class Game:
             if self.vy >= 0:
                 landing = floor if p["y"] >= floor else float("inf")
                 selected = "ground"
-                for ledge in LEDGES:
+                for ledge in AREA_LEDGES[region]:
                     if old_y <= ledge["y"] <= p["y"] and ledge["y"] < landing and ledge["x"] - 3 <= p["x"] <= ledge["x"] + ledge["w"] + 3:
                         landing, selected = ledge["y"], ledge
                 if landing < float("inf"):
@@ -886,11 +908,12 @@ class Game:
         if queued or "KeyZ" in keys:
             self.start_attack()
         self.move_player(dx, dy)
+        monsters = self.monsters_in_area(area_at(self.p["x"]))
         if self.shared_hit is not None:
-            self.shared_monster_step()
+            self.shared_monster_step(monsters)
         self.update_attack()
         self.effect_step()
-        for monster in self.monsters:
+        for monster in monsters:
             self.monster_step(monster)
         self.collect()
         if self.tick % 90 == 0 and self.p["mp"] < self.stats()["mp"]:

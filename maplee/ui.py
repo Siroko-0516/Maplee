@@ -46,6 +46,7 @@ class App:
         self.paused = False
         self.previous = None
         self.accumulator = 0
+        self.field_draw_due = 0
         self.sound = False
         self.audio = None
         self.notice_text = ""
@@ -80,6 +81,7 @@ class App:
         self.paused = False
         self.previous = None
         self.accumulator = 0
+        self.field_draw_due = 0
         self.screen.canvas.focus()
         self.toast("방향키 이동 · Space 점프 · Z 공격 · ↑ 포털·대화")
         self.save()
@@ -114,6 +116,7 @@ class App:
         self.renderer.resize()
         self.game.set_camera_view(self.renderer.view_width,self.renderer.view_height)
         self.screen.resize()
+        self.field_draw_due = 0
 
     def visibility_changed(self, _):
         if document.hidden:
@@ -192,17 +195,14 @@ class App:
             return
         action = self.game.p["hotbar"][i]
         if action in ("hp", "mp"):
-            self.use_potion(action == "mp")
+            if self.game.heal(action == "mp"):
+                self.save()
         elif action == "skill":
             self.game.start_attack(True)
         elif action == "support":
             self.game.support()
         elif action == "home":
             self.home()
-
-    def use_potion(self, mana):
-        if not self.paused and self.renderer.ready and self.game.heal(mana):
-            self.save()
 
     def toggle_pause(self):
         if self.world.actor:
@@ -220,8 +220,6 @@ class App:
         if toggle and self.panel == (id, npc):
             self.close_panel()
             return
-        if self.screen.coarse:
-            self.screen.reset_pointers(None)
         self.panel = (id, npc)
         if id == "shop":
             self.category["shop"] = "buy"
@@ -270,12 +268,6 @@ class App:
             self.account()
         elif id == "hotkeys":
             self.settings()
-        elif id == "mobile_menu":
-            entries = [(label,lambda key=key:self.show_panel(key)) for key,label in MENUS.items()]
-            entries.append(("마을 귀환",self.return_from_menu))
-            if not self.world.actor:
-                entries.append(("게임 계속" if self.paused else "일시정지",self.pause_from_menu))
-            self.rows.append(("mobile_actions", entries))
         elif id == "shop":
             self.shop(npc)
         elif id == "trainer":
@@ -287,14 +279,6 @@ class App:
         else:
             self.note("출구에서 ↑를 누르면 다음 지역으로 이동해요. 적의 공격 표시를 보고 뒤로 물러나거나 점프하세요.")
         self.screen.refresh()
-
-    def return_from_menu(self):
-        self.close_panel()
-        self.home()
-
-    def pause_from_menu(self):
-        self.close_panel()
-        self.toggle_pause()
 
     def character(self):
         self.rows.append(("stats",))
@@ -524,23 +508,26 @@ class App:
         if self.previous is not None:
             self.accumulator += min(68, now - self.previous)
         self.previous = now
-        self.lobby.flush_preview()
         if not self.active:
+            self.lobby.flush_preview()
             self.accumulator = 0
             window.requestAnimationFrame(self.frame)
             return
         game = self.game
         self.world.tick(now)
+        keys = self.keys | set(self.pointers.values()) if self.pointers else self.keys
         while self.accumulator >= STEP:
             if self.renderer.ready and not self.paused:
-                game.step(self.keys | set(self.pointers.values()))
+                game.step(keys)
                 if game.tick % 300 == 0:
                     self.save()
             self.accumulator -= STEP
         if game.dirty:
             self.hud()
         self.messages()
-        self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320),
-                           self.world.visible_players(now))
+        if now+.5 >= self.field_draw_due:
+            self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320),
+                               self.world.visible_players(now))
+            self.field_draw_due = max(now,self.field_draw_due+STEP)
         self.screen.draw(now)
         window.requestAnimationFrame(self.frame)
