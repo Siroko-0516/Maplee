@@ -6,7 +6,7 @@ import draw_native_avatars as base
 FROST = (
     "263148", "43536e", "67748f", "8c99b1", "b1bed3", "d4ddec", "eef7ff",
     "233f56", "376784", "569ab5", "8ad5e3", "b8eff1",
-    "4c2c3e", "773345", "a33c50", "d85c68", "ffad9e",
+    "4c2c3e", "764154", "a45269", "d37d87", "f3b7ad",
     "a97745", "f4c979", "fff0c0",
 )
 DARK, SLATE, DUSK, STEEL, OPAL, SILVER, SNOW = range(49,56)
@@ -15,7 +15,7 @@ WINE, RUBY_SHADOW, RUBY, EMBER, BLUSH, BRASS, GOLD, PEARL = range(61,69)
 
 
 def frost_head(pose, back):
-    im = base.new((52,61))
+    im = base.new((54,68))
     draw = ImageDraw.Draw(im)
     bob = (0,1,0,1)[pose%4] if pose < 8 else 0
     sway = (-3,0,3,0)[pose%4] if 4<=pose<=7 else 3 if pose in (9,12,13) else 0
@@ -37,16 +37,35 @@ def frost_head(pose, back):
     line([(31,10),(35,7),(38,3)],SNOW)
     line([(28,16),(32,13),(35,11)],FIN_SHADOW)
 
+    # Splayed secondary blades give each fin a distinct notch at native scale.
+    poly([(11,22),(8,17),(6,10),(7,4),(10,8),(12,8),(12,3),(15,1),
+          (16,7),(14,13),(16,17)], FIN_BLUE,DARK)
+    poly([(8,7),(10,10),(11,15),(9,13)],FIN_LIGHT)
+    line([(12,11),(14,6),(15,3)],SNOW)
+    poly([(34,18),(37,10),(42,6),(45,2),(46,3),(45,9),(42,13),
+          (46,11),(44,15),(37,20)],FIN_BLUE,DARK)
+    poly([(36,17),(39,11),(42,9),(44,5),(43,10),(40,14)],FIN_EDGE)
+    line([(40,11),(42,9),(44,5)],SNOW)
+    line([(38,17),(42,15)],FIN_LIGHT)
+
     # Wind shifts the long gathered tail by a few pixels as the wearer runs.
     tail = [(12,20),(8,25),(7,36),(8,42),(5+sway,47),(5+sway,51),
             (8+sway,55+bob),(13+sway,56+bob),(16+sway,53),
             (12+sway,52),(14+sway,49),(19+sway,44),(19,34),(24,25)]
-    poly(tail,SLATE,DARK)
+    # The lower locks hang past the belt; three staggered tips form the silhouette.
+    poly([(9,35),(14,39),(14+sway,48),(10+sway,53),(9+sway,58),
+          (13+sway,61),(10+sway,62),(12+sway,65),(7+sway,64),
+          (4+sway,60),(2+sway,61),(3+sway,56),(2+sway,54),
+          (5+sway,47),(4,41)],STEEL,DARK)
+    poly([(7,40),(11,43),(11+sway,48),(7+sway,53),(6+sway,59),
+          (8+sway,62),(5+sway,60),(4+sway,55)],SILVER)
+    line([(6+sway,53),(5+sway,57),(6+sway,59)],SNOW)
+    poly(tail,STEEL,DARK)
     poly([(11,26),(10,34),(12,40),(9+sway,47),(8+sway,51),
-          (11+sway,52),(15+sway,47),(16+sway,41),(15,34),(19,25)],STEEL)
+          (11+sway,52),(15+sway,47),(16+sway,41),(15,34),(19,25)],OPAL)
     line([(11,29),(11,36),(13,42),(10+sway,48)],SILVER,2)
     line([(14+sway,49),(15+sway,45),(16,40)],OPAL)
-    line([(7+sway,50),(9+sway,54),(12+sway,54)],FIN_BLUE,2)
+    line([(7+sway,50),(9+sway,54),(12+sway,54)],SILVER,2)
     poly([(9,36),(12,33),(15,36),(13,40),(10,40)],FIN_BLUE,DARK)
     draw.point((12,35),fill=FIN_LIGHT)
 
@@ -55,14 +74,14 @@ def frost_head(pose, back):
           (44,21),(45,31),(42,39),(38,43),(30,43),(25,47),(17,46),
           (11,42),(8,36)],DUSK,DARK)
     if not back:
-        poly([(14,27),(22,23),(31,22),(39,25),(42,29),(41,39),(37,43),
-              (31,46),(23,46),(18,43),(13,42),(11,38),(11,33)],4,DARK)
-        poly([(16,30),(23,26),(30,25),(37,28),(40,31),(39,39),(36,43),
-              (29,45),(24,44),(19,41),(16,38)],5)
+        poly([(13,26),(22,22),(32,21),(40,24),(44,29),(44,36),(42,41),(38,44),
+              (31,47),(23,47),(17,44),(12,43),(9,39),(9,32)],4,DARK)
+        poly([(14,30),(23,25),(30,24),(38,27),(42,30),(42,38),(38,42),
+              (30,46),(23,45),(17,42),(14,38)],5)
         line([(20,43),(25,45),(31,45),(35,43)],3)
         line([(14,35),(15,34),(16,35),(15,38)],3)
         draw.point((12,39),fill=GOLD)
-        for x,y,w in ((20,34,7),(35,33,5)):
+        for x,y,w in ((19,34,8),(35,33,6)):
             line([(x,y-2),(x+3,y-3),(x+w-1,y-2)],STEEL)
             if pose in (3,14):
                 line([(x,y+2),(x+2,y+1),(x+w-1,y+2)],WINE)
@@ -72,6 +91,7 @@ def frost_head(pose, back):
             poly([(x+2,y),(x+w-1,y),(x+w-1,y+4),(x+2,y+4)],RUBY_SHADOW)
             line([(x+2,y+3),(x+w-2,y+3)],EMBER)
             draw.point((x+2,y+1),fill=SNOW)
+            draw.point((x+w-2,y+4),fill=BLUSH)
             line([(x,y+1),(x+1,y-1),(x+w-1,y-1),(x+w,y)],WINE)
         line([(26,43),(29,43)],BRASS)
         draw.point((33,39),fill=4)
@@ -107,17 +127,57 @@ def frost_head(pose, back):
 
 
 def outfit(pose):
-    frame = base.actor(0,1,pose,head_factory=frost_head)
-    draw = ImageDraw.Draw(frame)
     cel = 8 if pose >= 28 else pose
-    if not 24 <= cel <= 27:
-        # Decorative clasps sit on the centre of the tunic, clear of the arms.
-        dx = {8:3,9:-2,10:4,16:-3,17:-3,18:-3,22:2}.get(cel,0)
-        dy = {8:2,9:-1,10:2,12:-4,13:-2,16:-1,17:-1,18:-1,22:1}.get(cel,0)
-        y = 56 + dy + (cel % 2 if cel < 8 else 0)
-        x = 39 + dx
-        draw.polygon([(x-2,y),(x,y-2),(x+2,y),(x,y+2)],fill=GOLD,outline=BRASS)
-        draw.point((x,y-1),fill=PEARL)
+    back = 24 <= cel <= 27
+    frame = base.actor(0,1,pose,head_factory=lambda *_: base.new((1,1)))
+    bare = frame.copy()
+    draw = ImageDraw.Draw(frame)
+    dx,dy = {8:(3,2),9:(-2,-1),10:(4,2),16:(-3,-1),17:(-3,-1),
+             18:(-3,-1),22:(2,1)}.get(cel,(0,0))
+    shift = (-4 if cel==12 else -2 if cel==13 else 0) + (cel%2 if cel<8 else 0)
+    nx,ny = 38+dx,45+dy+shift
+    waist,hem = 38+dx//2,64+shift
+    # The calf guard joins the articulated foot rather than extending the leg.
+    feet = ((34,73),(44,73))
+    if 4 <= cel <= 7:
+        feet = (((28,72),(47,72)),((39,69),(44,73)),((44,73),(30,71)),((48,69),(35,73)))[cel-4]
+    elif cel in (8,10,22):
+        feet = ((22,73),(44,73))
+    elif cel==9:
+        feet = ((30,68),(38,73))
+    elif cel in (12,13):
+        feet = ((27,64+shift),(52,62+shift))
+    elif back:
+        feet = ((33,70-(cel%2)*3),(44,67+(cel%2)*4))
+    for x,y in feet:
+        inner = 2 if x < waist-8 else -2 if x > waist+8 else 0
+        draw.polygon([(x-3+inner,y-8),(x+2+inner,y-8),(x+2,y-3),(x+5,y-2),
+                      (x+6,y),(x+5,y+1),(x-3,y+1),(x-3,y-3)],fill=SLATE,outline=DARK)
+        draw.line([(x-2+inner,y-7),(x+1+inner,y-7)],fill=SNOW)
+        draw.line([(x-1+inner,y-5),(x-1,y-2),(x+1,y-1)],fill=OPAL)
+        draw.line([(x+2,y),(x+4,y)],fill=FIN_EDGE)
+    draw.polygon([(nx-6,ny+1),(nx-3,ny-1),(nx+4,ny),(nx+7,ny+3),
+                  (waist+5,hem-9),(waist+9,hem-2),(waist+8,hem),
+                  (waist+2,hem+2),(waist-4,hem+1),(waist-10,hem-1),
+                  (waist-7,hem-8)],fill=OPAL,outline=DARK)
+    draw.polygon([(nx-3,ny+2),(nx+3,ny+1),(nx+5,ny+4),(waist+2,hem-9),
+                  (waist+5,hem-2),(waist+1,hem),(waist-5,hem-1),
+                  (waist-3,hem-8)],fill=SILVER)
+    draw.line([(waist-8,hem-2),(waist-3,hem),(waist+2,hem+1),(waist+7,hem-1)],fill=FIN_SHADOW)
+    draw.line([(nx,ny+3),(waist+1,hem-9),(waist+1,hem-5)],fill=SNOW)
+    draw.line([(waist-6,hem-8),(waist+5,hem-7)],fill=SLATE,width=2)
+    draw.polygon([(waist-2,hem-8),(waist,hem-10),(waist+2,hem-8),(waist,hem-6)],fill=GOLD,outline=BRASS)
+    draw.point((waist,hem-9),fill=PEARL)
+    # Keep hand/skin and the one-pixel outer knuckle contour over the coat.
+    for y in range(ny+2,min(hem+1,80)):
+        for x in range(18,62):
+            v=bare.getpixel((x,y))
+            if 2<=v<=6 and y<hem-1:
+                frame.putpixel((x,y),v)
+            elif v==1 and y<hem-1 and any(2<=bare.getpixel((x+i,y+j))<=6
+                                          for i,j in ((-1,0),(1,0),(0,-1),(0,1))):
+                frame.putpixel((x,y),v)
+    base.attach(frame,frost_head(cel,back),(nx-22,ny-38))
     return frame
 
 

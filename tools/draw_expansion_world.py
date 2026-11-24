@@ -9,7 +9,7 @@ ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
 
 def skyline(key, colors, grove):
-    width, height = 576, 168
+    width, height = 576, 156
     im = Image.new("RGB", (width,height))
     d = ImageDraw.Draw(im)
     rng = Random(561 if grove else 812)
@@ -46,7 +46,19 @@ def skyline(key, colors, grove):
     for x in range(0,width,13):
         y=142+rng.randrange(-8,12)
         d.line((x,y,x+7,y-1),fill=mid,width=1)
-    im.resize((1728,504),Image.Resampling.NEAREST).save(ASSETS/(key+".png"),optimize=True)
+    # Match the far and near silhouettes over a short interval inside the
+    # repeated strip. The browser uses this at its baked size.
+    overlap = 72
+    period = width-overlap
+    strip = im.crop((0,0,period,height))
+    for x in range(overlap):
+        alpha = x/(overlap-1)
+        alpha = alpha*alpha*(3-2*alpha)
+        column = Image.blend(im.crop((x+period,0,x+period+1,height)),
+                             im.crop((x,0,x+1,height)),alpha)
+        strip.paste(column,(x,0))
+    strip.paste(strip.crop((0,0,1,height)),(period-1,0))
+    strip.resize((period*3,468),Image.Resampling.NEAREST).save(ASSETS/(key+".png"),optimize=True)
 
 
 def monsters():

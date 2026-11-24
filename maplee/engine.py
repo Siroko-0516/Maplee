@@ -5,12 +5,12 @@ from random import random
 from .hunting import HUNT_ZONES, next_hunting_wave
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_WIDTH,
+    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, WORLD_WIDTH, map_x,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
 SAVE_KEY = "maple-local-world-v1"
-START_X = 310
+START_X = map_x(310)
 # Ranged attacks and class skills keep their original 60 Hz timings.
 SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
 GROUND_XS = [x for x, _ in GROUND]
@@ -52,9 +52,9 @@ def ground_at(x):
 PORTALS = []
 for i, area in enumerate(AREAS):
     if i:
-        PORTALS.append((area["start"] + 65, AREAS[i - 1]["end"] - 155, i - 1))
+        PORTALS.append((area["start"] + map_x(65), AREAS[i - 1]["end"] - map_x(155), i - 1))
     if i + 1 < len(AREAS):
-        PORTALS.append((area["end"] - 65, AREAS[i + 1]["start"] + 155, i + 1))
+        PORTALS.append((area["end"] - map_x(65), AREAS[i + 1]["start"] + map_x(155), i + 1))
 
 
 def ladder_for(ledge):
@@ -79,7 +79,7 @@ def item_icon(item):
 class Game:
     def __init__(self, saved=None):
         self.p = {
-            "x": START_X, "y": ground_at(START_X), "hp": 100, "mp": 35, "level": 1, "xp": 0,
+            "worldLayout": WORLD_LAYOUT, "x": START_X, "y": ground_at(START_X), "hp": 100, "mp": 35, "level": 1, "xp": 0,
             "gold": 0, "kills": 0, "pots": 5, "tonics": 1, "job": "beginner", "bag": {"twig": 1},
             "equipment": dict.fromkeys(SLOTS) | {"weapon": "twig"},
             "quests": [{"state": 0, "count": 0} for _ in QUESTS],
@@ -113,7 +113,7 @@ class Game:
         for key in ("x", "hp", "mp", "level", "xp", "gold", "kills", "pots", "tonics"):
             value = saved.get(key)
             if isinstance(value, (int, float)) and 0 <= value <= 10**9:
-                p[key] = int(value)
+                p[key] = map_x(value) if key == "x" and saved.get("worldLayout") != WORLD_LAYOUT else int(value)
         p["level"] = limit(p["level"], 1, 200)
         p["x"] = limit(p["x"], 24, WORLD_WIDTH - 24)
         area = AREAS[area_at(p["x"])]

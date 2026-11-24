@@ -458,10 +458,10 @@ class GameInterface:
                 current = area_at(player)
                 for i,area in enumerate(AREAS):
                     self.bezel("paper",x,y,w,48)
-                    image=area.get("image","background")
+                    image=area["image"]
                     iw,ih=self.app.renderer.sizes[image]
-                    sx=round(iw*area["backdrop"][0])
-                    self.atlas(image,sx,ih//4,max(1,iw//7),ih//2,x+4,y+4,70,40)
+                    sx=min(area["view"],iw-iw//5)
+                    self.atlas(image,sx,ih//4,max(1,iw//5),ih//2,x+4,y+4,70,40)
                     self.box(x+80,y+3,2,42,"#839a99")
                     self.box(x+77,y+19,8,8, "#a8ce33" if i==current else "#68899d")
                     self.text(area["name"],x+94,y+15,INK,14,True)

@@ -1,10 +1,13 @@
 """Hand-placed hunting routes. Platform positions refer to the ledge's left edge."""
 
+from .content import map_x
+
 SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, MOSS, ANCHOR = range(13)
 
 
 def hunting_spot(label, ground=(), ledges=()):
-    return {"label": label, "ground": ground, "ledges": ledges}
+    return {"label":label, "ground":tuple((map_x(x),kind) for x,kind in ground),
+            "ledges":tuple((map_x(x),kind) for x,kind in ledges)}
 
 
 def hunting_zone(label, levels, wave, recovery, spots, boss_waves=0):

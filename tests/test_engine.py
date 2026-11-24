@@ -1,7 +1,7 @@
 import json
 import unittest
-from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES, WORLD_WIDTH
-from maplee.engine import PORTALS, SWING_WINDUP, Game, area_at, ground_at
+from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
+from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, Game, area_at, ground_at
 
 
 class WorldTests(unittest.TestCase):
@@ -47,6 +47,25 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(area_at(game.p["x"]),index)
             self.assertEqual(game.p["y"],ground_at(game.p["x"]))
         self.assertEqual(len(PORTALS),2*(len(AREAS)-1))
+
+    def test_legacy_position_migrates_once(self):
+        game = Game({"level":8,"x":9120,"gold":470})
+        self.assertEqual(game.p["x"],map_x(9120))
+        self.assertEqual(game.p["worldLayout"],WORLD_LAYOUT)
+        self.assertEqual(game.p["gold"],470)
+        self.assertEqual(Game(game.p).p["x"],game.p["x"])
+
+    def test_ladder_reaches_floating_ledge_and_returns_to_ground(self):
+        x, top, bottom = LADDERS[0]
+        game = self.sandbox(x)
+        self.assertEqual(game.p["y"],bottom)
+        self.step(game,1,"ArrowUp")
+        self.assertTrue(game.ladder)
+        self.step(game,100,"ArrowUp")
+        self.assertEqual(game.p["y"],top)
+        self.step(game,100,"ArrowDown")
+        self.assertIsNone(game.ladder)
+        self.assertEqual(game.p["y"],bottom)
 
     def test_reclass_from_existing_save_retains_items_and_health(self):
         game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,

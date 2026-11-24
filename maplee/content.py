@@ -4,34 +4,25 @@ from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
+WORLD_LAYOUT = 2
+
+
+def map_x(value):
+    """Convert coordinates authored against the original layout."""
+    return round(value*1.25)
+
+
 WORLD_WIDTH = 24700
 
-AREAS = [{'name': '솔방울 마을', 'start': 0, 'end': 2450, 'icon': '🍄', 'material': 'stone', 'backdrop': [0.01, 0.14]},
- {'name': '종꽃 숲길', 'start': 2450, 'end': 9100, 'icon': '🌿', 'material': 'terrain', 'backdrop': [0.19, 0.49]},
- {'name': '푸른돛 항구', 'start': 9100, 'end': 12000, 'icon': '⚓', 'material': 'stone', 'backdrop': [0.56, 0.63]},
- {'name': '유리빛 광산',
-  'start': 12000,
-  'end': 14900,
-  'icon': '💎',
-  'material': 'stone',
-  'image': 'depths',
-  'backdrop': [0.02, 0.13],
-  'tint': '#271d5455'},
- {'name': '달바람 고원',
-  'start': 14900,
-  'end': 18300,
-  'icon': '🌙',
-  'material': 'terrain',
-  'image': 'depths',
-  'backdrop': [0.51, 0.63],
-  'tint': '#44275933'}]
-
-AREAS.extend((
-    dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain",
-         image="ember_grove", backdrop=(.02,.59), landmark="잿불 나무 · 이끼 망령"),
-    dict(name="안개등 부두", start=21400, end=WORLD_WIDTH, icon="⚓", material="stone",
-         image="lantern_quay", backdrop=(.02,.59), landmark="침수된 선착장 · 닻불 망령"),
-))
+AREAS = [
+    dict(name="솔방울 마을", start=0, end=2450, icon="🍄", material="stone", image="daylight", view=0),
+    dict(name="종꽃 숲길", start=2450, end=9100, icon="🌿", material="terrain", image="daylight", view=270),
+    dict(name="푸른돛 항구", start=9100, end=12000, icon="⚓", material="stone", image="daylight", view=870),
+    dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="stone", image="cavern", view=0),
+    dict(name="달바람 고원", start=14900, end=18300, icon="🌙", material="terrain", image="highland", view=0),
+    dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain", image="ember_grove", view=0),
+    dict(name="안개등 부두", start=21400, end=WORLD_WIDTH, icon="⚓", material="stone", image="lantern_quay", view=0),
+]
 
 GROUND = [[0, 390],
  [400, 390],
@@ -721,12 +712,14 @@ MELEE_POSES = tuple(pose for pose, ticks in zip(MELEE_ANIMATION["frames"], MELEE
 MELEE_IMPACT = MELEE_POSES.index(10)
 WEAPON_ATTACKS = {"bow": "arrow", "nightbow": "arrow", "wand": "bolt", "tidewand": "bolt", "chimewand": "bolt", "dawnwand": "bolt"}
 
-IMAGES = {'classic_ui': 'classic-ui.png', 'damage': 'damage.png', 'swing_weapons': 'swing-weapons.png', 'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'background': 'landscape.jpg', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'depths': 'depths.jpg', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
+IMAGES = {'classic_ui': 'classic-ui.png', 'damage': 'damage.png', 'swing_weapons': 'swing-weapons.png', 'worn': 'worn-equipment.png', 'combat': 'combat-fx.png', 'interface': 'interface.png', 'hero': SPRITES['hero']['file'], 'villager': 'townsfolk.png', 'wildlife': 'wildlife.png', 'terrain': 'terrain.png', 'stone': 'stone.png', 'props': 'scenery.png', 'icons': 'equipment.png', 'frame': 'pixel-frame.png'}
 JOB_LOOKS = {job: "hero_" + job for job in ("guardian", "ranger", "mage")}
 IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
 
 IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
-IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png")
+IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png",
+              daylight="daylight-panorama.png", cavern="cavern-panorama.png",
+              highland="highland-panorama.png", ladder="ladder.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 IMAGES.update(custom_avatar="maplee-avatars.png", frost_avatar="hero-frost-lancer.png")
@@ -750,3 +743,15 @@ def character_starter(profile):
     if avatar_style(profile) == "frost" and job in ("beginner","guardian"):
         return "frostspear"
     return STARTER_WEAPONS[job]
+
+
+WORLD_WIDTH = map_x(WORLD_WIDTH)
+for _area in AREAS:
+    _area.update(start=map_x(_area["start"]),end=map_x(_area["end"]))
+GROUND = [(map_x(x),y) for x,y in GROUND]
+for _ledge in LEDGES:
+    _start = map_x(_ledge["x"])
+    _ledge.update(x=_start, w=map_x(_ledge["x"]+_ledge["w"])-_start, ladderX=map_x(_ledge["ladderX"]))
+PROPS = [(map_x(prop[0]), *prop[1:]) for prop in PROPS]
+for _npc in NPCS:
+    _npc["x"] = map_x(_npc["x"])

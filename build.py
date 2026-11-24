@@ -71,10 +71,10 @@ def build(output, cache):
         shutil.copyfile(ROOT / "assets" / name, assets / name)
     (output / "index.html").write_text(page, encoding="utf-8")
     bundle = {}
-    for source in [output/"index.html", *assets.iterdir(), *vendor.iterdir()]:
+    web_files = [output/"index.html", *(assets/name for name in IMAGES.values()),
+                 *(vendor/name for name in (*RUNTIME,"Brython-LICENSE.txt"))]
+    for source in web_files:
         path = '/' + source.relative_to(output).as_posix()
-        if not source.is_file():
-            continue
         raw = source.read_bytes()
         kind = mimetypes.guess_type(source.name)[0] or "application/octet-stream"
         compressed = kind.startswith("text/") or source.suffix == ".js"

@@ -181,14 +181,31 @@ class Renderer:
                            round(x - size / 2), round(y - size / 2), size, size)
 
     def backdrop(self, area, left):
-        key = area.get("image", "background")
-        image = self.images[key]
+        key = area["image"]
         width, height = self.sizes[key]
-        start, end = area["backdrop"]
-        progress = limit((left - area["start"]) / (area["end"] - area["start"] - WIDTH), 0, 1)
-        sy = 0 if area.get("image") else min(123,height//5)
-        self.ctx.drawImage(image, round(width * (start + (end - start) * progress)), sy,
-                           int(.36 * width), min(505,height-sy) if sy else height, 0, 0, WIDTH, HEIGHT)
+        scroll = round(max(0,left-area["start"])*.33)
+        source = (area["view"] + scroll)%width
+        top = max(0,(height-HEIGHT)//2)
+        rows = min(HEIGHT,height)
+        x = 0
+        while x < WIDTH:
+            span = min(WIDTH-x,width-source)
+            self.ctx.drawImage(self.images[key],source,top,span,rows,x,0,span,rows)
+            x += span
+            source = 0
+
+    def ladder(self, x, top, bottom):
+        # Paint over the leading edge of both ledges. Rungs and rails stay on
+        # whole pixels even on slopes and on ladders with a partial last tile.
+        width, _ = self.sizes["ladder"]
+        image = self.images["ladder"]
+        left = round(x)-width//2
+        y, end = round(top), round(bottom)
+        self.ctx.drawImage(image,0,0,width,8,left,y-7,width,8)
+        for rung in range(y+1,end,14):
+            height = min(14,end-rung)
+            self.ctx.drawImage(image,0,8,width,height,left,rung,width,height)
+        self.ctx.drawImage(image,0,22,width,5,left,end-2,width,5)
 
     def tile_band(self, material, left, right, deep=False):
         ctx = self.ctx
@@ -247,12 +264,6 @@ class Renderer:
             height = round(width * sh / sw)
             floor = prop[3] if len(prop) > 3 else ground_at(x)
             ctx.drawImage(self.images["props"], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
-        for x, top, bottom in LADDERS:
-            if area["start"] <= x < area["end"] and left - 12 < x < right + 12:
-                self.rect(x - 10, top, 4, bottom - top, "#956b48")
-                self.rect(x + 6, top, 4, bottom - top, "#956b48")
-                for y in range(top + 8, ceil_height(bottom), 10):
-                    self.rect(x - 7, y, 15, 2, "#d1af75")
         self.ground(material, max(left,area["start"]), min(right,area["end"]), area["material"] == "stone")
         for ledge in LEDGES:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
@@ -266,6 +277,9 @@ class Renderer:
             self.tile_band(material, x, x + w)
             self.rect(x, 28, w, 4, "#233121aa")
             ctx.restore()
+        for x, top, bottom in LADDERS:
+            if area["start"] <= x < area["end"] and left-14 < x < right+14:
+                self.ladder(x,top,bottom)
         for x, _, target in PORTALS:
             if area["start"] <= x < area["end"] and left - 60 < x < right + 60:
                 y = ground_at(x)
@@ -480,18 +494,11 @@ class Renderer:
         x, y, tick = game.p["x"], game.p["y"], game.tick
         left = int(game.camera)
         right = left + WIDTH
-        visible = [area for area in AREAS if area["end"] > left and area["start"] < right]
-        self.backdrop(visible[0], left)
-        for area in visible[1:]:
-            ctx.save()
-            blend = limit((right-area["start"])/WIDTH,0,1)
-            ctx.globalAlpha = blend*blend*(3-2*blend)
-            self.backdrop(area,left)
-            ctx.restore()
+        area = AREAS[area_at(x)]
+        self.backdrop(area,left)
         ctx.save()
-        ctx.translate(-left, 0)
-        for area in visible:
-            self.scenery(game, area, left, right)
+        ctx.translate(-left,0)
+        self.scenery(game,area,left,right)
         for m in game.monsters:
             if left - 100 < m["x"] < right + 100:
                 self.monster(game, m)
@@ -554,7 +561,3 @@ class Renderer:
         if paused:
             self.rect(0, 0, WIDTH, HEIGHT, "#11283888")
             self.label("일시정지", WIDTH / 2, HEIGHT / 2, size=22)
-
-
-def ceil_height(value):
-    return int(value) + 1
