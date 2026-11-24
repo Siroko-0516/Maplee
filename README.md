@@ -50,6 +50,8 @@ node server/local.mjs
 
 ## 소스와 검사
 
+- [Maplee 게임 시스템 설계](docs/game-system-design.md)에서 성장·전투·장비·경제·멀티플레이의 구조와 단계별 구현 기준을 확인할 수 있습니다.
+
 - `maplee/engine.py`는 물리, 전투, 몬스터 AI, 진행을 담당합니다.
 - `maplee/render.py`는 필드를, `maplee/windows.py`는 HUD와 게임 창을 별도 캔버스에 그립니다. `maplee/ui.py`에서 입력을 게임 동작에 연결합니다.
 - `tools/draw_hero.py`는 재생성할 때만 공개 렌더러에 접속합니다. 이 파일을 실행한 뒤 `tools/draw_worn.py`를 실행하면 캐릭터와 장착 장비 시트를 재생성합니다. `tools/draw_townsfolk.py`와 `tools/draw_combat.py`는 마을 NPC와 전투 효과를 그립니다. 도트 생성 스크립트는 Pillow를 사용합니다.
