@@ -2,6 +2,12 @@
 const FIELD_POLL = 320;
 const FIELD_LINGER = 18_000;
 const CREDIT_WINDOW = 25_000;
+const POSE_INTERVAL_LIMIT = 6500;
+const POSE_X_TOLERANCE = 45;
+const POSE_Y_TOLERANCE = 65;
+const POSE_X_SPEED = .64;
+const POSE_RISE_SPEED = 1.08;
+const POSE_FALL_SPEED = 1.85;
 
 function fieldRegion(x) {
   return rules().ends.findIndex(end => x < end);
@@ -62,13 +68,15 @@ function intersects(a, b) {
 }
 
 function fieldBounds(input, previous, elapsed) {
-  const pace = 45 + Math.min(1200, elapsed) * .64;
-  const region = fieldRegion(previous.x);
-  const maxY = fieldFloor(input.x) + 4;
-  if (fieldRegion(input.x) !== region || Math.abs(input.x - previous.x) > pace ||
-      Math.abs(input.y - previous.y) > 65 + Math.min(1200, elapsed) * .87 || input.y > maxY)
+  if (fieldRegion(input.x) !== fieldRegion(previous.x))
     return { ...previous, facing:input.facing };
-  return input;
+  const interval = Math.min(POSE_INTERVAL_LIMIT, elapsed);
+  const x = Math.abs(input.x - previous.x) <= POSE_X_TOLERANCE + interval * POSE_X_SPEED ? input.x : previous.x;
+  const deltaY = input.y - previous.y;
+  const vertical = POSE_Y_TOLERANCE + interval * (deltaY > 0 ? POSE_FALL_SPEED : POSE_RISE_SPEED);
+  const y = Math.abs(deltaY) <= vertical && input.y <= fieldFloor(x) + 4
+    ? input.y : Math.min(previous.y, fieldFloor(x));
+  return { ...input, x, y };
 }
 
 function updatePosition(input, previous, elapsed, move) {
@@ -262,15 +270,44 @@ function applyFieldOps(context, ops, pose, previous, elapsed) {
   }
 }
 
-async function fieldActor(db, account) {
-  return db.prepare(`SELECT f.*, c.state AS character_state, c.revision AS character_revision
-    FROM field_sessions f JOIN characters c ON f.character_id = c.id WHERE f.account = ?`).bind(account).first();
+async function fieldActor(db, account, checksCombat = false) {
+  const combat = checksCombat ? ", e.state AS encounter_state, e.revision AS encounter_revision" : "";
+  const join = checksCombat ? "LEFT JOIN field_encounters e ON e.area = f.area" : "";
+  return db.prepare(`SELECT f.*, c.state AS character_state, c.revision AS character_revision ${combat}
+    FROM field_sessions f JOIN characters c ON f.character_id = c.id ${join} WHERE f.account = ?`)
+    .bind(account).first();
+}
+
+async function syncMovement(db, account, data, input, now) {
+  const { actor, seq } = data;
+  const change = random(12);
+  const response = { sample:[input.x,input.y] };
+  // A within-bounds movement sample and its snapshot need one D1 round trip.
+  // Rebases, mana ticks and gameplay commands use the full sync transaction.
+  const update = db.prepare(`UPDATE field_sessions SET seen = ?, sequence = ?, response = ?, change_id = ?,
+      pose = json_set(pose, '$.x', ?, '$.y', ?, '$.facing', ?, '$.frame', ?, '$.swing', ?)
+    WHERE account = ? AND actor = ? AND sequence = ? AND seen > 0 AND ? - seen >= 90
+      AND ? - json_extract(runtime, '$.manaAt') < 1500
+      AND area = (CASE mode WHEN 'solo' THEN character_id ELSE 'public' END) || '/' || ?
+      AND abs(? - json_extract(pose, '$.x')) <= ? + MIN(?, ? - seen) * ?
+      AND ? - json_extract(pose, '$.y') BETWEEN -(? + MIN(?, ? - seen) * ?) AND ? + MIN(?, ? - seen) * ?
+    RETURNING actor, area, pose, character_id`).bind(now,seq,JSON.stringify(response),change,
+      input.x,input.y,input.facing,input.frame,input.swing,account,actor,seq-1,now,now,rules().mapIds[fieldRegion(input.x)],
+      input.x,POSE_X_TOLERANCE,POSE_INTERVAL_LIMIT,now,POSE_X_SPEED,input.y,
+      POSE_Y_TOLERANCE,POSE_INTERVAL_LIMIT,now,POSE_RISE_SPEED,POSE_Y_TOLERANCE,POSE_INTERVAL_LIMIT,now,POSE_FALL_SPEED);
+  const [moved, ...snapshot] = await db.batch([update, ...fieldViewQueries(db, actor, now, change)]);
+  return moved.results[0] ? fieldView(db,moved.results[0],response,now,data.stateVersion,snapshot) : null;
 }
 
 async function syncField(db, session, data, input, now) {
   const { seq, ops, move } = data;
+  if (!ops.length && move == null && input.y <= fieldFloor(input.x)+4) {
+    const moved = await syncMovement(db,session.id,data,input,now);
+    if (moved) return moved;
+  }
+  const checksCombat = ops.some(op => Array.isArray(op) && ["attack","hurt"].includes(op[0]));
   for (let attempt = 0; attempt < 5; attempt++) {
-    const actor = await fieldActor(db, session.id);
+    const actor = await fieldActor(db,session.id,checksCombat);
     if (!actor) return fail(410, "월드에 다시 접속해야 해요.");
     if (actor.actor !== data.actor) return fail(409, "다른 창에서 이 계정이 월드에 접속했어요.");
     if (!actor.seen) return fail(410, "월드에 다시 접속해야 해요.");
@@ -282,12 +319,10 @@ async function syncField(db, session, data, input, now) {
     const old = JSON.parse(actor.pose), elapsed = now - actor.seen;
     let { pose, warp } = updatePosition(input, old, elapsed, move);
     const actionPose = fieldBounds(input, old, elapsed);
-    const checksCombat = ops.some(op => Array.isArray(op) && ["attack","hurt"].includes(op[0]));
-    const combat = checksCombat
-      ? await db.prepare("SELECT state, revision FROM field_encounters WHERE area = ?").bind(actor.area).first() : null;
     const state = JSON.parse(actor.character_state);
     const runtime = JSON.parse(actor.runtime);
-    const context = { encounter:combat ? JSON.parse(combat.state) : {}, area:actor.area, state, runtime,
+    const combatRevision = actor.encounter_revision ?? 0;
+    const context = { encounter:JSON.parse(actor.encounter_state ?? "{}"), area:actor.area, state, runtime,
       owner:actor.character_id, hits:[], rewards:[], results:[], now, changed:false, combatChanged:false };
     applyFieldOps(context, ops, actionPose, old, elapsed);
     if (context.died) {
@@ -296,7 +331,7 @@ async function syncField(db, session, data, input, now) {
     }
     const appearance = fieldAppearance(pose, state);
     const area = arenaKey(actor.mode, actor.character_id, appearance.region);
-    const response = { hits:context.hits, results:context.results, warp };
+    const response = { sample:[input.x,input.y], hits:context.hits, results:context.results, warp };
     const change = random(12);
     const commands = [db.prepare(`UPDATE field_sessions SET area = ?, pose = ?, seen = ?, sequence = ?,
       runtime = ?, response = ?, change_id = ?
@@ -305,7 +340,7 @@ async function syncField(db, session, data, input, now) {
         AND (? = 0 OR COALESCE((SELECT revision FROM field_encounters WHERE area = ?), 0) = ?)`).bind(
       area, JSON.stringify(appearance), now, seq, JSON.stringify(runtime), JSON.stringify(response), change,
       session.id, actor.actor, actor.sequence, actor.character_id, actor.character_revision,
-      Number(checksCombat), actor.area, combat?.revision ?? 0)];
+      Number(checksCombat), actor.area, combatRevision)];
     if (context.changed || warp) {
       state.x = pose.x;
       state.y = pose.y;
@@ -316,40 +351,46 @@ async function syncField(db, session, data, input, now) {
     if (context.combatChanged) commands.push(db.prepare(`INSERT INTO field_encounters (area, state, revision)
       SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM field_sessions WHERE actor = ? AND change_id = ?)
       ON CONFLICT(area) DO UPDATE SET state = excluded.state, revision = excluded.revision`)
-      .bind(actor.area, JSON.stringify(context.encounter), (combat?.revision ?? 0)+1, actor.actor, change));
+      .bind(actor.area, JSON.stringify(context.encounter), combatRevision+1, actor.actor, change));
     if (context.rewards.length) commands.push(db.prepare(`INSERT OR IGNORE INTO character_rewards (character_id, source, reward)
       SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]')
       FROM json_each(?) WHERE EXISTS (SELECT 1 FROM field_sessions WHERE actor = ? AND change_id = ?)`)
       .bind(JSON.stringify(context.rewards), actor.actor, change));
     const current = { ...actor, area, pose:JSON.stringify(appearance) };
-    const [written, ...snapshot] = await db.batch([...commands, ...fieldViewQueries(db, current, now)]);
+    const [written, ...snapshot] = await db.batch([...commands, ...fieldViewQueries(db,actor.actor,now,change)]);
     if (written.meta.changes)
       return fieldView(db, current, response, now, data.stateVersion, snapshot.slice(commands.length-1));
   }
   return fail(503, "월드 동기화를 다시 시도해요.");
 }
 
-function fieldViewQueries(db, actor, now) {
+function fieldViewQueries(db, actor, now, change = null) {
+  const focus = `WITH own AS (SELECT actor, area, character_id FROM field_sessions WHERE actor = ?
+    ${change ? "AND change_id = ?" : ""}) `;
+  const key = change ? [actor,change] : [actor];
   return [
-    db.prepare(`SELECT f.actor, f.pose, c.profile FROM field_sessions f JOIN characters c ON c.id = f.character_id
-      WHERE f.area = ? AND f.seen >= ? AND f.actor <> ? LIMIT 40`)
-      .bind(actor.area, now - FIELD_LINGER, actor.actor),
-    db.prepare("SELECT state FROM field_encounters WHERE area = ?").bind(actor.area),
-    db.prepare("SELECT * FROM characters WHERE id = ?").bind(actor.character_id),
-    pendingRewards(db, actor.character_id),
+    db.prepare(focus + `SELECT f.actor, f.pose, c.profile FROM own JOIN field_sessions f ON f.area = own.area
+      JOIN characters c ON c.id = f.character_id WHERE f.seen >= ? AND f.actor <> own.actor LIMIT 40`)
+      .bind(...key,now-FIELD_LINGER),
+    db.prepare(focus + "SELECT e.state FROM own JOIN field_encounters e ON e.area = own.area").bind(...key),
+    db.prepare(focus + "SELECT c.* FROM own JOIN characters c ON c.id = own.character_id").bind(...key),
+    db.prepare(focus + `SELECT r.source, r.reward FROM own JOIN character_rewards r ON r.character_id = own.character_id
+      WHERE r.applied = 0 LIMIT 60`).bind(...key),
   ];
 }
 
 async function fieldView(db, actor, response, now, clientVersion, snapshot) {
-  const [nearby, monsters, characters, rewards] = snapshot ?? await db.batch(fieldViewQueries(db, actor, now));
+  const [nearby, monsters, characters, rewards] = snapshot ?? await db.batch(fieldViewQueries(db,actor.actor,now));
+  if (!characters.results.length) return fail(409, "다른 창에서 이 계정이 월드에 접속했어요.");
   const { row, loot } = await settleRewards(db, characters.results[0], rewards.results);
   const pose = JSON.parse(actor.pose);
   const progress = clientVersion === row.revision ? null : JSON.parse(row.state);
   if (progress) delete progress.gear;
-  return reply({ actor:actor.actor, now, poll:FIELD_POLL, region:pose.region, pose, ...response,
+  const clock = Date.now();
+  return reply({ actor:actor.actor, now:clock, poll:FIELD_POLL, region:pose.region, pose, ...response,
     progress, stateVersion:row.revision, loot,
     players:nearby.results.map(other => ({ id:other.actor, name:JSON.parse(other.profile).name, ...JSON.parse(other.pose) })),
-    monsters:fieldSnapshot(JSON.parse(monsters.results[0]?.state ?? "{}"), now) });
+    monsters:fieldSnapshot(JSON.parse(monsters.results[0]?.state ?? "{}"), clock) });
 }
 
 async function sharedWorld(request, store, db, session, action) {

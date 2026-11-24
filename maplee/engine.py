@@ -459,6 +459,24 @@ class Game:
         self.edge_jump_until = self.jump_buffer_until = -1
         self.dirty = True
 
+    def reconcile_field_pose(self, sent, accepted):
+        # Apply only the correction to the acknowledged sample. Movement since
+        # it was sent is still valid and should continue through the correction.
+        dx, dy = accepted["x"] - sent[0], accepted["y"] - sent[1]
+        if not dx and not dy:
+            return
+        p = self.p
+        area = AREAS[area_at(p["x"])]
+        p["x"] = limit(p["x"] + dx, area["start"] + 24, area["end"] - 24)
+        floor = ground_at(p["x"])
+        if self.surface == "ground":
+            p["y"] = floor
+        elif isinstance(self.surface, dict) and over_ledge(p["x"], self.surface):
+            p["y"] = self.surface["y"]
+        else:
+            self.surface = self.ladder = None
+            p["y"] = min(floor, p["y"] + dy)
+
     def nearby(self):
         x, y = self.p["x"], self.p["y"]
         for portal in PORTALS:

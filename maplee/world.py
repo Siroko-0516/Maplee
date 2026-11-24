@@ -16,7 +16,7 @@ class SharedWorld:
         self.actor = None
         self.inflight = False
         self.retry_at = 0
-        self.server_time = self.received_at = self.last_success = 0.0
+        self.server_time = self.received_at = self.last_success = self.last_sent = 0.0
         self.status = "접속 대기 중"
         self.players = {}
         self.sequence = 1
@@ -60,11 +60,16 @@ class SharedWorld:
         else:
             callback()
 
+    def wake(self):
+        now = number(window.performance.now())
+        self.retry_at = min(self.retry_at, max(self.last_sent + 125, now))
+
     def queue(self, action, argument, close=False):
         if not self.actor or len(self.operations) >= 36:
             self.app.toast("월드 연결을 확인하고 다시 시도해주세요.")
             return False
         self.operations.append(([action,argument],close))
+        self.wake()
         return True
 
     def combat(self, action, argument):
@@ -74,11 +79,13 @@ class SharedWorld:
         player = game.p
         self.operations.append(([action,argument,round(game.shared_clock),round(player["x"]),round(player["y"]),
                                  game.swing["dir"] if action == "attack" and game.swing else game.facing],False))
+        self.wake()
         return True
 
     def travel(self, target):
         if self.actor and self.move is None and not (self.batch and self.batch[0].get("move") is not None):
             self.move = target
+            self.wake()
 
     def pose(self):
         game = self.app.game
@@ -112,7 +119,10 @@ class SharedWorld:
                                stateVersion=self.state_version)
                 self.batch = payload, entries
             payload = self.batch[0]
+            if not payload["ops"] and payload["move"] is None:
+                payload["pose"] = self.pose()
         self.inflight = True
+        self.last_sent = now
         api("POST","/api/world/" + ("join" if joining else "sync"),payload,
             lambda status,data: self.receive(epoch,joining,now,status,data))
 
@@ -124,7 +134,7 @@ class SharedWorld:
         self.inflight = False
         now = number(window.performance.now())
         if status != 200:
-            self.retry_at = now + (400 if status == 429 else 650 if self.actor else 1600)
+            self.retry_at = now + (160 if status == 429 else 300 if self.actor else 1600)
             if status == 410:
                 mode = self.mode
                 self.leave()
@@ -136,12 +146,18 @@ class SharedWorld:
             elif status != 429:
                 self.set_status("연결을 다시 시도하는 중")
             return
-        self.retry_at = max(sent+int(data["poll"]),now)
+        interval = 125 if self.operations or self.move is not None else int(data["poll"])
+        self.retry_at = max(sent+interval,now)
         self.last_success = now
-        self.server_time = float(data["now"]) + min(150, (now-sent)*.5)
+        clock = float(data["now"]) + min(90, (now-sent)*.25)
+        if not joining:
+            estimate = self.server_time + now - self.received_at
+            clock = estimate + limit((clock-estimate)*.3, -100, 100)
+        self.server_time = clock
         self.received_at = now
         game = self.app.game
         game.shared_clock = self.server_time
+        sample = data.get("sample")
         if joining:
             self.actor = data["actor"]
             game.enter_shared_world(self.combat)
@@ -153,6 +169,8 @@ class SharedWorld:
             payload, entries = self.batch
             self.batch = None
             self.sequence += 1
+            if sample is None:
+                sample = [payload["pose"][key] for key in ("x", "y")]
             for index, accepted in data.get("results",()):
                 if accepted and entries[index][1]:
                     self.app.close_panel()
@@ -164,8 +182,10 @@ class SharedWorld:
         warp = data.get("warp")
         if warp:
             self.app.arrive(destination["x"], warp)
-        elif area_at(game.p["x"]) != data["region"] or abs(destination["x"] - game.p["x"]) > 150:
+        elif area_at(game.p["x"]) != data["region"]:
             game.travel(destination["x"])
+        elif sample is not None:
+            game.reconcile_field_pose(sample, destination)
         if data["stateVersion"] > self.state_version:
             self.state_version = data["stateVersion"]
             game.sync_progress(data["progress"], warp)
@@ -190,15 +210,16 @@ class SharedWorld:
         self.players = {}
         for player in players:
             old = previous.get(player["id"])
-            if old and abs(old["x"]-player["x"]) < 230 and abs(old["y"]-player["y"]) < 165:
+            interval = limit(now-old["arrived"], 180, 650) if old else 320
+            if old and abs(old["x"]-player["x"]) < 40+interval*.62 and abs(old["y"]-player["y"]) < 35+interval*1.6:
                 x,y = self.interpolated(old,now)
             else:
                 x,y = player["x"],player["y"]
-            self.players[player["id"]] = dict(player,from_x=x,from_y=y,arrived=now)
+            self.players[player["id"]] = dict(player,from_x=x,from_y=y,arrived=now,interval=interval)
 
     @staticmethod
     def interpolated(player, now):
-        fraction = limit((now-player["arrived"])/230,0,1)
+        fraction = limit((now-player["arrived"])/player["interval"],0,1)
         return (player["from_x"]+(player["x"]-player["from_x"])*fraction,
                 player["from_y"]+(player["y"]-player["from_y"])*fraction)
 

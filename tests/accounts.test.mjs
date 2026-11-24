@@ -67,7 +67,7 @@ function fixture() {
     assert.equal(response.status,200,JSON.stringify(data));
     return data;
   }
-  return { SAVES,call,signup,legacy,get,join,sync };
+  return { SAVES,WORLD,call,signup,legacy,get,join,sync };
 }
 
 test("accounts, four slots, durable legacy migration and settings-only autosaves",async () => {
@@ -213,4 +213,45 @@ test("shop charges, equipment identity and reconnect preserve server results",as
   assert.equal(reloaded.equipmentIds.weapon,reloaded.characterId+":bronze:1");
   const rejoined = await join(cookie,actor.pose);
   assert.equal(rejoined.progress.gold,reloaded.progress.gold);
+});
+
+test("movement uses one database batch and retries acknowledge the original position",async t => {
+  const { WORLD,signup,legacy,join,sync } = fixture();
+  let now = 1_800_000_100_000;
+  t.mock.method(Date,"now",()=>now);
+  const cookie = await signup("field_latency");
+  const x = catalog.start;
+  await legacy("field_latency",0,{ profile:starter,revision:0,updated:now/1000,
+    progress:{ level:1,job:"beginner",x,worldLayout:catalog.layout } });
+  const actor = await join(cookie,{ x,y:390,facing:1 });
+
+  const batches = t.mock.method(WORLD,"batch",WORLD.batch);
+  now += 320;
+  const airborne = { x:x+95,y:130,facing:1 };
+  const first = await sync(actor,1,airborne,{ stateVersion:actor.stateVersion });
+  assert.equal(batches.mock.callCount(),1);
+  assert.deepEqual(first.sample,[airborne.x,airborne.y]);
+  assert.equal(first.pose.y,airborne.y);
+  assert.equal(first.progress,null);
+
+  now += 155;
+  const descending = { x:x+131,y:365,facing:1 };
+  const retry = await sync(actor,1,descending);
+  assert.deepEqual(retry.sample,first.sample);
+  assert.equal(retry.pose.y,airborne.y);
+  const landed = await sync(actor,2,descending);
+  assert.deepEqual(landed.sample,[descending.x,descending.y]);
+  assert.equal(landed.pose.y,descending.y);
+
+  now += 4500;
+  const afterDelay = { x:x+1550,y:330,facing:1 };
+  const resumed = await sync(actor,3,afterDelay);
+  assert.equal(resumed.pose.x,afterDelay.x);
+  assert.equal(resumed.pose.y,afterDelay.y);
+  now += 120;
+  const invalid = { ...afterDelay,y:500 };
+  const constrained = await sync(actor,4,invalid);
+  assert.deepEqual(constrained.sample,[invalid.x,invalid.y]);
+  assert.equal(constrained.pose.x,afterDelay.x);
+  assert.equal(constrained.pose.y,afterDelay.y);
 });

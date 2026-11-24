@@ -134,6 +134,22 @@ class WorldTests(unittest.TestCase):
         self.assertGreater(game.p["y"], platform["y"])
         self.assertIsNone(game.surface)
 
+    def test_field_movement_acknowledgments_preserve_input_after_the_sample(self):
+        game = self.sandbox(150)
+        sample = round(game.p["x"]), round(game.p["y"])
+        self.step(game, 40, "ArrowRight")
+        game.jump()
+        game.start_attack()
+        self.step(game, 5, "ArrowRight")
+        x, y, velocity, swing = game.p["x"], game.p["y"], game.vy, game.swing
+        self.assertGreater(x - sample[0], 150)
+        game.reconcile_field_pose(sample, dict(x=sample[0], y=sample[1]))
+        self.assertEqual((game.p["x"], game.p["y"], game.vy), (x, y, velocity))
+        game.reconcile_field_pose(sample, dict(x=sample[0] - 10, y=sample[1]))
+        self.assertEqual((game.p["x"], game.p["y"], game.vy), (x - 10, y, velocity))
+        self.assertIs(game.swing, swing)
+        self.assertIsNone(game.surface)
+
     def test_camera_follows_jump_and_portal_with_narrow_view(self):
         game = self.sandbox(map_x(1150))
         game.set_camera_view(320,468)
