@@ -3,7 +3,7 @@ from math import ceil, cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
 from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
-from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
+from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
 WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
@@ -361,7 +361,7 @@ class Renderer:
                 phase = 0.55 + 0.45 * after_strike / 9
         else:
             action = "move"
-        y = m["y"] - (sin(phase_tick / 10) * 3 if species.get("float") else 0)
+        y = monster_feet_y(m, game.tick)
         scale = 1.5 if species.get("elite") else 1
         if m["windup"]:
             reach = m["range"]

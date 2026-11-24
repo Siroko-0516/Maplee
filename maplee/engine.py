@@ -5,7 +5,7 @@ from random import random
 from .hunting import HUNT_ZONES, next_hunting_wave
 from .content import (
     AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, WORLD_WIDTH, map_x,
+    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, WORLD_WIDTH, map_x, saved_x,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
@@ -27,11 +27,18 @@ def direction(value, fallback=1):
     return 1 if value > 0 else -1 if value < 0 else fallback
 
 
+def monster_feet_y(monster, tick):
+    spec = monster["spec"]
+    if not spec.get("float"):
+        return monster["y"]
+    return monster["y"] - spec.get("hover", 0) - sin((tick + monster["phase"]) / 10) * 3
+
+
 def monster_bounds(monster, tick):
     spec = monster["spec"]
     width, height = spec.get("body_size", (36, 36))
     scale = 1.5 if spec.get("elite") else 1
-    bottom = monster["y"] - (sin((tick + monster["phase"]) / 10) * 3 if spec.get("float") else 0)
+    bottom = monster_feet_y(monster, tick)
     half = width * scale / 2
     return monster["x"] - half, bottom - height * scale, monster["x"] + half, bottom
 
@@ -115,7 +122,7 @@ class Game:
         for key in ("x", "hp", "mp", "level", "xp", "gold", "kills", "pots", "tonics"):
             value = saved.get(key)
             if isinstance(value, (int, float)) and 0 <= value <= 10**9:
-                p[key] = map_x(value) if key == "x" and saved.get("worldLayout") != WORLD_LAYOUT else int(value)
+                p[key] = saved_x(value, saved.get("worldLayout")) if key == "x" else int(value)
         p["level"] = limit(p["level"], 1, 200)
         p["x"] = limit(p["x"], 24, WORLD_WIDTH - 24)
         area = AREAS[area_at(p["x"])]
@@ -577,10 +584,10 @@ class Game:
         if spec.get("aggro") and monster["state"] != "return":
             monster["state"] = "pursuit"
         self.move_monster(monster, monster["x"] + facing * 8, 8)
-        top = monster_bounds(monster, self.tick)[1]
+        _, top, _, bottom = monster_bounds(monster, self.tick)
         lift = 25 if impact == "stab_hit" else 3
         self.effects.append(("damage", self.tick, monster["x"], top-lift, 42, (power, 0)))
-        self.effects.append((impact, self.tick, monster["x"], (monster_bounds(monster, self.tick)[1] + monster["y"]) / 2, 16, facing))
+        self.effects.append((impact, self.tick, monster["x"], (top + bottom) / 2, 16, facing))
         if monster["hp"] <= 0:
             self.reward(monster)
 

@@ -221,46 +221,9 @@ def bird(d, phase, blink):
     d.line((20,33,20+phase,35),fill="#d3ad61",width=2)
 
 
-def shell(d, phase, blink):
-    ink="#483e50"
-    for x in (8,15,25,30):
-        foot=phase if x%2 else -phase
-        d.ellipse((x+foot-2,30,x+foot+3,35),fill="#7d6174",outline=ink)
-    d.ellipse((5,22,33,32),fill="#a2838d",outline=ink,width=2)
-    d.ellipse((8,10,29,30),fill="#b78991",outline=ink,width=2)
-    d.ellipse((10,11,24,27),fill="#e1bd9b")
-    d.ellipse((11,12,19,21),fill="#f5ddba")
-    d.line(((17,13),(18,17),(22,18),(19,23),(25,24),(26,26)),fill="#906f80")
-    d.ellipse((24,23,36,32),fill="#9e8a83",outline=ink)
-    d.rectangle((31,26,32,26 if blink else 28),fill="#f8d275")
-    d.point((33,30),fill="#eacaac")
-
-
-def guardian(d, phase, blink):
-    ink="#293a48"
-    for x in (9,14,23,29):
-        foot=phase if x%2 else -phase
-        d.line(((x,28),(x+foot,34),(x+foot+2,35)),fill=ink,width=2)
-    d.polygon(((5,25),(6,20),(13,19),(19,21),(27,17),(33,18),(34,24),
-               (30,29),(19,32),(8,30)),fill="#647f75",outline=ink)
-    d.line((7,22,19,24),fill="#aac195",width=2)
-    d.polygon(((24,17),(23,11),(26,10),(28,14),(34,13),(37,20),(36,25),
-               (30,26),(27,23)),fill="#8bab8a",outline=ink)
-    for points in (((28,15),(23,9),(22,3),(24,1)),((32,14),(34,8),(33,4),(36,2)),
-                   ((23,10),(19,7),(18,4)),((34,8),(37,7),(39,4))):
-        d.line(points,fill="#6f534a",width=2)
-        d.line(points[:2],fill="#d2a263")
-        x,y=points[-1]
-        d.line((x-1,y,x+1,y),fill="#efb066")
-    d.rectangle((33,17,34,17 if blink else 19),fill="#ffe09b")
-    d.line((33,23,35,23),fill="#dce7a5")
-    for x,y in ((12,24),(16,26),(20,24),(27,19)):
-        d.point((x,y),fill="#f1c872")
-
-
 def creature_atlas():
-    atlas=Image.new("RGBA",(80*23,80*4))
-    for row,paint in enumerate((beetle,bird,shell,guardian)):
+    atlas=Image.new("RGBA",(80*23,80*2))
+    for row,paint in enumerate((beetle,bird)):
         for col in range(23):
             sprite=Image.new("RGBA",(40,40))
             moves=(-1,0,1,2,1,0)
@@ -269,10 +232,10 @@ def creature_atlas():
             cel=Image.new("RGBA",sprite.size)
             if 10 <= col < 16:
                 dx=(-2,-3,-1,2,2,0)[col-10]
-                dy=(1,0,-1,-3,-1,0)[col-10] if row!=2 else 0
+                dy=(1,0,-1,-3,-1,0)[col-10]
                 cel.paste(sprite,(dx,dy))
                 if 12 <= col <= 14:
-                    color=("#ffc77b","#bcebe7","#efc2a0","#eec783")[row]
+                    color=("#ffc77b","#bcebe7")[row]
                     ImageDraw.Draw(cel).line(((32,24),(36,22),(39,22)),fill=color)
             elif col >= 18:
                 stage=col-18

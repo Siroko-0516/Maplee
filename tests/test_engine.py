@@ -1,7 +1,7 @@
 import json
 import unittest
 from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
-from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, Game, area_at, ground_at
+from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, Game, area_at, ground_at, monster_bounds, monster_feet_y
 
 
 class WorldTests(unittest.TestCase):
@@ -55,6 +55,14 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(game.p["gold"],470)
         self.assertEqual(Game(game.p).p["x"],game.p["x"])
 
+    def test_previous_layout_positions_follow_shortened_forest(self):
+        forest = AREAS[1]
+        self.assertAlmostEqual(forest["end"]-forest["start"], (11375-3062)*.75, delta=1)
+        for authored in (1750, 5750, 13900, 28800, 33400):
+            restored = Game({"level":14, "worldLayout":2, "x":round(authored*1.25)})
+            self.assertAlmostEqual(restored.p["x"], map_x(authored), delta=1)
+            self.assertEqual(Game(restored.p).p["x"], restored.p["x"])
+
     def test_ladder_reaches_floating_ledge_and_returns_to_ground(self):
         x, top, bottom = LADDERS[0]
         game = self.sandbox(x)
@@ -83,11 +91,14 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(game.camera,game.camera_target())
         self.assertEqual(game.camera_y,game.camera_vertical_target())
 
-    def test_canopy_stairs_connect_ground_to_the_top_platform(self):
+    def assert_climb_route(self, authored_x, from_ledge=False):
         route = [next(ladder for ladder in LADDERS if ladder[0] == map_x(x))
-                 for x in (26205, 26520, 26700, 27000)]
+                 for x in authored_x]
         game = self.sandbox(route[0][0])
         game.set_camera_view(1040, 585)
+        if from_ledge:
+            game.p["y"] = route[0][2]
+            game.surface = "ladder"
         for x, top, bottom in route:
             for _ in range(280):
                 if abs(game.p["x"] - x) <= 8:
@@ -100,6 +111,13 @@ class WorldTests(unittest.TestCase):
             self.assertEqual(game.p["y"], top)
         self.assertLess(route[-1][1], 0)
         self.assertGreater(game.p["y"] - game.camera_y, 80)
+
+    def test_canopy_stairs_connect_ground_to_the_top_platform(self):
+        self.assert_climb_route((26205, 26520, 26700, 27000))
+
+    def test_bellflower_routes_reach_high_ledges(self):
+        self.assert_climb_route((3450, 3680, 4135), from_ledge=True)
+        self.assert_climb_route((5356, 5580, 5840, 6100), from_ledge=True)
 
     def test_reclass_from_existing_save_retains_items_and_health(self):
         game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,
@@ -176,16 +194,27 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(restored.p["job"], "guardian")
 
     def test_monster_pursues_and_returns(self):
-        game = self.sandbox(12670)
-        enemy = game.spawn(12750, 5, 0)
+        x = map_x(12670)
+        game = self.sandbox(x)
+        enemy = game.spawn(x+80, 5, 0)
         self.step(game, 4)
         self.assertEqual(enemy["state"], "pursuit")
         self.assertLess(enemy["x"], enemy["home"])
-        game.travel(12990)
+        game.travel(x+320)
         self.step(game, 1)
         self.assertEqual(enemy["state"], "return")
         self.step(game, 50)
         self.assertEqual(enemy["state"], "patrol")
+
+    def test_star_pixie_hovers_and_hitbox_follows(self):
+        game = Game()
+        pixies = [m for m in game.monsters if m["spec"]["name"] == "스타픽시"]
+        for habitat in (True, False):
+            monster = next(m for m in pixies if bool(m["ledge"]) == habitat)
+            for tick in (0, 17, 51):
+                feet = monster_feet_y(monster, tick)
+                self.assertIn(round(monster["y"]-feet), range(21, 28))
+                self.assertEqual(monster_bounds(monster, tick)[3], feet)
 
     def test_economy_quest_boss_and_crafting(self):
         game = self.sandbox(18135, saved={"level": 13, "gold": 525})

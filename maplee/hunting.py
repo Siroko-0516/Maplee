@@ -3,7 +3,7 @@
 from .content import map_x
 
 SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, MOSS, ANCHOR = range(13)
-BEETLE, BELLBIRD, EGGSHELL, GUARDIAN = range(13, 17)
+BEETLE, BELLBIRD = range(13, 15)
 
 
 def hunting_spot(label, ground=(), ledges=()):
@@ -28,7 +28,7 @@ HUNT_ZONES = (
     )),
     hunting_zone("세 갈래 꽃길", (1, 5), 250, 150, (
         hunting_spot("새싹 비탈",
-                     ground=((2760, SLIME), (2920, SLIME), (3270, SLIME), (3450, MUSHROOM)),
+                     ground=((2800, SLIME), (2920, SLIME), (3270, SLIME), (3450, MUSHROOM)),
                      ledges=((2685, SLIME), (3060, SLIME), (3320, MUSHROOM))),
         hunting_spot("버섯 공터",
                      ground=((3930, SLIME), (4130, MUSHROOM), (4510, MUSHROOM),
@@ -39,6 +39,10 @@ HUNT_ZONES = (
                              (7360, MUSHROOM), (7825, SNAIL), (8040, SNAIL), (8510, SNAIL)),
                      ledges=((6050, MUSHROOM), (6580, SNAIL), (7200, MUSHROOM),
                              (7820, SNAIL), (8320, SNAIL), (8570, SNAIL))),
+        hunting_spot("쌍가지 수관길",
+                     ledges=((3275,SLIME),(3620,MUSHROOM),(4010,MUSHROOM),(5270,SLIME),
+                             (5510,MUSHROOM),(5740,MUSHROOM),(5960,SNAIL),(6370,MUSHROOM),
+                             (6640,SNAIL),(7070,MUSHROOM))),
     )),
     hunting_zone("방파제 암초밭", (7, 9), 290, 165, (
         hunting_spot("창고 뒤뜰",
@@ -98,16 +102,16 @@ HUNT_ZONES = (
                      ground=((27390,BEETLE),(27720,BELLBIRD),(28100,BEETLE),(28680,BELLBIRD)),
                      ledges=((27210,BEETLE),(27530,BELLBIRD),(27950,BELLBIRD),(28430,BEETLE),(28740,BELLBIRD))),
     )),
-    hunting_zone("해질녘 둥지", (19, 23), 275, 215, (
+    hunting_zone("해질녘 둥지", (11, 19), 275, 215, (
         hunting_spot("첫 번째 알터",
-                     ground=((29770,EGGSHELL),(29995,BELLBIRD),(30280,EGGSHELL),(30520,EGGSHELL)),
-                     ledges=((29690,BELLBIRD),(29980,EGGSHELL),(30290,BELLBIRD))),
+                     ground=((29770,GOLEM),(29995,BELLBIRD),(30280,GOLEM),(30520,GOLEM)),
+                     ledges=((29690,BELLBIRD),(29980,GOLEM),(30290,BELLBIRD))),
         hunting_spot("황금잎 계단",
-                     ground=((30975,EGGSHELL),(31230,EGGSHELL),(31640,BELLBIRD),(32020,EGGSHELL)),
-                     ledges=((30880,EGGSHELL),(31260,BELLBIRD),(31670,EGGSHELL),(32030,BELLBIRD))),
-        hunting_spot("노을 수호자의 둥지",
-                     ground=((32608,EGGSHELL),(32910,BELLBIRD),(33395,GUARDIAN),(33670,EGGSHELL)),
-                     ledges=((32410,EGGSHELL),(32740,BELLBIRD),(33150,EGGSHELL),(33580,BELLBIRD))),
+                     ground=((30975,GOLEM),(31230,GOLEM),(31640,BELLBIRD),(32020,GOLEM)),
+                     ledges=((30880,GOLEM),(31260,BELLBIRD),(31670,GOLEM),(32030,BELLBIRD))),
+        hunting_spot("머쉬맘의 둥지",
+                     ground=((32608,GOLEM),(32910,BELLBIRD),(33395,MUSHMOM),(33670,GOLEM)),
+                     ledges=((32410,GOLEM),(32740,BELLBIRD),(33150,GOLEM),(33580,BELLBIRD))),
     ), boss_waves=5),
 )
 

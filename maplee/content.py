@@ -4,21 +4,32 @@ from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
-WORLD_LAYOUT = 2
+WORLD_LAYOUT = 3
 PANORAMA_Y = 144
+BELLFLOWER_START, BELLFLOWER_END = 2450, 9100
+WORLD_SCALE = 1.25
 
 
 def map_x(value):
     """Convert coordinates authored against the original layout."""
-    return round(value*1.25)
+    forest_distance = min(max(value - BELLFLOWER_START, 0), BELLFLOWER_END - BELLFLOWER_START)
+    return round((value - forest_distance / 4) * WORLD_SCALE)
+
+
+def saved_x(value, layout):
+    if layout == WORLD_LAYOUT:
+        return int(value)
+    if layout == 2:
+        value /= WORLD_SCALE
+    return map_x(value)
 
 
 WORLD_WIDTH = 34000
 
 AREAS = [
-    dict(name="솔방울 마을", start=0, end=2450, icon="🍄", material="stone", image="daylight", view=0),
-    dict(name="종꽃 숲길", start=2450, end=9100, icon="🌿", material="terrain", image="bellflower", view=270),
-    dict(name="푸른돛 항구", start=9100, end=12000, icon="⚓", material="stone", image="daylight", view=870),
+    dict(name="솔방울 마을", start=0, end=BELLFLOWER_START, icon="🍄", material="stone", image="daylight", view=0),
+    dict(name="종꽃 숲길", start=BELLFLOWER_START, end=BELLFLOWER_END, icon="🌿", material="terrain", image="bellflower", view=270),
+    dict(name="푸른돛 항구", start=BELLFLOWER_END, end=12000, icon="⚓", material="stone", image="daylight", view=870),
     dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="stone", image="cavern", view=0),
     dict(name="달바람 고원", start=14900, end=18300, icon="🌙", material="terrain", image="highland", view=0),
     dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain", image="ember_grove", view=0),
@@ -226,6 +237,9 @@ PROPS.extend((
 LEDGES.extend(
     dict(x=x,y=y,w=w,ladderX=ladder)
     for x,y,w,ladder in (
+        (3275,26,440,3450),(3620,-94,560,3680),(4010,-216,680,4135),
+        (5270,116,415,5356),(5510,6,470,5580),(5740,-103,470,5840),(5960,-215,465,6100),
+        (6370,-87,450,6495),(6640,-194,535,6740),(7070,-99,460,7170),
         (25170,254,320,25312),(25570,248,415,25772),(25770,144,420,25850),
         (25980,247,610,26205),(26260,122,810,26520),(26510,-4,680,26700),(26720,-132,510,27000),
         (27210,286,390,27400),(27530,185,540,27562),(27950,86,510,28006),
@@ -238,6 +252,9 @@ LEDGES.extend(
 PROPS.extend(
     (x,frame,width,floor,"canopy_props")
     for x,frame,width,floor in (
+        (3490,0,430,None),(3650,3,170,26),(3910,2,217,-94),(4450,3,251,-216),
+        (5600,0,452,None),(5510,3,185,116),(5715,2,194,6),(6210,3,221,-215),
+        (6610,3,199,-87),(6855,2,190,-194),(7330,3,167,-99),
         (25235,2,179,254),(25512,0,380,None),(25806,3,196,248),(26430,0,420,None),
         (26375,3,245,122),(26885,2,210,-132),(27255,0,425,None),(27690,3,214,185),
         (28095,2,180,86),(28555,0,369,None),(28940,3,205,138),
@@ -528,6 +545,7 @@ SPECIES = [{'name': '슬라임',
   'gold': 93,
   'speed': 1.35,
   'float': True,
+  'hover': 24,
   'loot': 'plume',
   'rare': 'shimmer',
   'aggro': 143},
@@ -581,14 +599,8 @@ SPECIES.extend((
     dict(name="솜깃 방울새", level=19, sprite=1, hp=460, attack=57, xp=250, gold=124,
          speed=1.75, loot="plume", rare="nightbow", aggro=160, reach=54, windup_ticks=23,
          body_size=(45,49), float=True, equipmentDrops=("nightbow","dawnwand")),
-    dict(name="알껍질 파수꾼", level=21, sprite=2, hp=620, attack=65, xp=330, gold=156,
-         speed=1.2, loot="quartz", rare="moonseal", aggro=142, reach=47, windup_ticks=24,
-         body_size=(50,49), equipmentDrops=("glasscoat","hwarang")),
-    dict(name="노을뿔 수호수", level=23, sprite=3, hp=1450, attack=79, xp=1120, gold=485,
-         speed=1.5, loot="nightcore", rare="moonseal", aggro=187, reach=77, windup_ticks=33,
-         body_size=(59,61), elite=True, equipmentDrops=("moonseal","stormknuckle","dawnwand")),
 ))
-for _species in SPECIES[-4:]:
+for _species in SPECIES[-2:]:
     _species.update(image="canopy_mobs", framebooks=CANOPY_FRAMEBOOKS)
 
 
