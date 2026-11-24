@@ -68,8 +68,10 @@ def build(output, cache):
     page = page.replace(expect, packed)
     assets = output / "assets"
     assets.mkdir(exist_ok=True)
-    from maplee.content import AREAS, IMAGES, ITEMS, SLOTS, WORLD_LAYOUT
-    from maplee.engine import Game, area_at
+    from maplee.content import (AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, IMAGES, ITEMS, LEDGES,
+                                MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS,
+                                SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT)
+    from maplee.engine import Game, PORTALS, START_X, SWING_END, SWING_WINDUP, area_at
     from maplee.hunting import HUNT_ZONES
     for name in IMAGES.values():
         shutil.copyfile(ROOT / "assets" / name, assets / name)
@@ -89,24 +91,41 @@ def build(output, cache):
     main = (ROOT/"server/accounts.mjs").read_text().removeprefix('import { asset } from "./static.mjs";\n')
     static = (ROOT/"server/static.mjs").read_text()
     shared = (ROOT/"server/world.mjs").read_text()
+    progression = (ROOT/"server/progression.mjs").read_text()
     monsters = []
-    for monster in Game().monsters:
+    game = Game()
+    map_ids = ("pinecone", "bellflower", "blue-sail", "glass-mine", "moonwind", "ember-grove",
+               "lantern-quay", "windroot", "sunset-eggs", "copper-terraces", "glassseed")
+    if len(AREAS) != len(map_ids):
+        raise ValueError("Each map needs a persistent ID")
+    for monster in game.monsters:
         region = area_at(monster["home"])
         zone = HUNT_ZONES[region]
         spec = monster["spec"]
         recovery = zone["recovery"] + (zone["boss_waves"]*zone["wave"] if spec.get("elite") else 0)
         monsters.append({
             **{key:monster[key] for key in ("home", "left", "right", "y")},
-            "direction":monster["dir"], "region":region, "hp":spec["hp"],
+            "id":monster["spawn_id"], "kind":monster["kind"], "direction":monster["dir"],
+            "region":region, "hp":spec["hp"], "attack":spec["attack"], "hover":spec.get("hover", 0),
+            "body":spec.get("body_size", (36, 36)), "elite":spec.get("elite", False),
+            "undead":spec.get("undead", False), "reach":spec.get("reach", 60 if spec.get("elite") else 25),
             "speed":spec["speed"], "ledge":bool(monster["ledge"]),
             "wave":round(zone["wave"]*1000/60), "recovery":round(recovery*1000/60),
         })
-    shared_world = {"layout":WORLD_LAYOUT, "ends":[area["end"] for area in AREAS],
-                  "monsters":monsters,
-                  "items":{slot:[key for key, item in ITEMS.items() if item.get("slot") == slot] for slot in SLOTS}}
+    if len({monster["id"] for monster in monsters}) != len(monsters):
+        raise ValueError("Spawn IDs must be unique")
+    shared_world = {
+        "layout":WORLD_LAYOUT, "mapIds":map_ids, "ends":[area["end"] for area in AREAS],
+        "ground":GROUND, "ledges":LEDGES, "portals":PORTALS, "npcs":NPCS, "start":START_X,
+        "monsters":monsters, "species":SPECIES, "items":ITEMS, "slots":list(SLOTS), "jobs":CLASSES,
+        "attributes":ATTRIBUTES, "quests":QUESTS, "recipes":RECIPES, "starterWeapons":STARTER_WEAPONS,
+        "weaponAttacks":WEAPON_ATTACKS, "supports":SUPPORTS, "hotbar":list(HOTBAR_ACTIONS),
+        "basicTicks":len(MELEE_POSES), "basicImpact":MELEE_IMPACT,
+        "swingTicks":SWING_END, "swingImpact":SWING_WINDUP, "defaults":game.p,
+    }
     (worker/"index.js").write_text(
         "const ASSETS = " + json.dumps(bundle) + ";\nconst SHARED_WORLD = " + json.dumps(shared_world) +
-        ";\n" + static + "\n" + shared + "\n" + main, encoding="utf-8"
+        ";\n" + static + "\n" + progression + "\n" + shared + "\n" + main, encoding="utf-8"
     )
     return output
 

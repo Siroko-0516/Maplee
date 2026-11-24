@@ -382,7 +382,7 @@ class GameInterface:
         self.text(game.ap(),x+w*75/198,y+33,INK,13,True,"center")
         y += 51
         for code,(key,attr) in zip(STAT_CODES,ATTRIBUTES.items()):
-            action=(lambda key=key:self.app.execute(lambda:game.add_attribute(key))) if game.ap() else None
+            action=(lambda key=key:self.app.world.queue("attribute",key)) if game.ap() else None
             self.stat_pair(x,y,w,f"{code}  {attr['name']}",p["attributes"][key],action,True)
             y += 21
         caption="접기" if self.detail else "자세히 보기"

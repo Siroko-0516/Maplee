@@ -2,7 +2,7 @@
 import json
 from browser import document, window
 from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS
-from .engine import START_X, STEP, Game, area_at
+from .engine import STEP, Game, area_at
 from .hunting import HUNT_ZONES
 from .lobby import Lobby
 from .render import Renderer, number
@@ -155,7 +155,7 @@ class App:
         if code in SHORTCUTS:
             self.show_panel(SHORTCUTS[code])
             return
-        if self.paused or not self.renderer.ready:
+        if self.paused or not self.renderer.ready or not self.world.actor:
             return
         game = self.game
         if code.startswith("Digit"):
@@ -171,13 +171,7 @@ class App:
         elif code == "ArrowUp":
             kind, target = game.nearby()
             if kind == "portal":
-                game.travel(target[1])
-                self.clear_input()
-                area, hunt = AREAS[target[2]], HUNT_ZONES[target[2]]
-                self.portal_until = number(window.performance.now())+320
-                low, high = hunt["levels"]
-                self.toast(f"{area['name']} · {hunt['label']} · Lv. {low}–{high}")
-                self.save()
+                self.world.travel(target[0])
             elif kind == "npc":
                 self.show_panel(target["kind"], target)
         elif code == "KeyR":
@@ -186,17 +180,27 @@ class App:
             self.manual_save()
 
     def home(self):
-        self.game.travel(START_X)
-        self.game.notice = "솔방울 마을로 돌아왔어요."
+        self.world.travel("home")
+
+    def arrive(self, x, reason):
+        self.game.travel(x)
+        self.clear_input()
+        if reason == "portal":
+            region = area_at(x)
+            area, hunt = AREAS[region], HUNT_ZONES[region]
+            low, high = hunt["levels"]
+            self.portal_until = number(window.performance.now()) + 320
+            self.toast(f"{area['name']} · {hunt['label']} · Lv. {low}–{high}")
+        else:
+            self.toast("솔방울 마을에서 회복했어요." if reason == "respawn" else "솔방울 마을로 돌아왔어요.")
         self.save()
 
     def run_slot(self, i):
-        if self.paused or not self.renderer.ready:
+        if self.paused or not self.renderer.ready or not self.world.actor:
             return
         action = self.game.p["hotbar"][i]
         if action in ("hp", "mp"):
-            if self.game.heal(action == "mp"):
-                self.save()
+            self.world.queue("potion",action)
         elif action == "skill":
             self.game.start_attack(True)
         elif action == "support":
@@ -205,7 +209,7 @@ class App:
             self.home()
 
     def toggle_pause(self):
-        if self.world.actor:
+        if self.world.mode == "shared":
             self.toast("공용 월드에서는 게임이 계속 진행돼요.")
             return
         self.clear_input()
@@ -239,15 +243,6 @@ class App:
 
     def row(self, title, detail="", action=None, callback=None, disabled=False, item=None):
         self.rows.append(("row", title, detail, action, callback, disabled, item))
-
-    def execute(self, operation, close=False):
-        if operation():
-            self.save()
-            if close:
-                self.close_panel()
-            elif self.panel:
-                self.render_panel()
-        self.messages()
 
     def render_panel(self):
         id, npc = self.panel
@@ -296,13 +291,13 @@ class App:
             self.note(details[job["shape"]])
         rank = p["skillRanks"]["primary"]
         self.row(f"{job['skill']} · 랭크 {rank}/5", f"X · MP {job['cost']} · 피해 {round(100 * (job['power'] + .25 * (rank - 1)))}%",
-                 "강화", lambda: self.execute(lambda: game.raise_skill("primary")),
+                 "강화", lambda: self.world.queue("skill_rank","primary"),
                  rank == 5 or p["level"] < game.rank_level("primary", rank + 1) or not game.sp(), p["equipment"]["weapon"])
         if p["job"] in SUPPORTS:
             support = SUPPORTS[p["job"]]
             rank = p["skillRanks"]["support"]
             self.row(f"{support['name']} · 랭크 {rank}/3", f"V · MP {support['cost']} · {support['summary']}",
-                     "강화" if rank else "배우기", lambda: self.execute(lambda: game.raise_skill("support")),
+                     "강화" if rank else "배우기", lambda: self.world.queue("skill_rank","support"),
                      rank == 3 or p["level"] < game.rank_level("support", rank + 1) or not game.sp())
         else:
             self.note("전직 후 Lv. 7부터 보조 스킬을 배울 수 있어요.")
@@ -316,7 +311,7 @@ class App:
         if active == "supply":
             for id, count, detail in (("potion", p["pots"], "HP 55 회복"), ("tonic", p["tonics"], "MP 35 회복")):
                 self.row(f"{ITEMS[id]['name']} ×{count}", detail, "사용",
-                         lambda id=id: self.execute(lambda: game.heal(id == "tonic")), not count, id)
+                         lambda id=id: self.world.queue("potion","mp" if id == "tonic" else "hp"), not count, id)
             return
         bag = [id for id in p["bag"] if bool(ITEMS[id].get("slot")) == (active == "gear")]
         chosen = self.category.get("selected-item")
@@ -329,7 +324,7 @@ class App:
         if active == "gear":
             equipped = p["equipment"].get(item["slot"]) == selected
             self.row(item["name"], item_details(selected), "해제" if equipped else "장착",
-                     lambda: self.execute(lambda: game.toggle_equipment(selected)), not game.can_equip(selected), selected)
+                     lambda: self.world.queue("equip_item",selected), not game.can_equip(selected), selected)
         else:
             self.row(item["name"], f"보유 {p['bag'][selected]}개 · 판매 {item['price']//2} 메소", item=selected)
 
@@ -394,15 +389,17 @@ class App:
     def account(self):
         self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
         self.row("공용 월드", self.world.status,
-                 "혼자 하기" if self.world.enabled else "접속", self.toggle_world)
+                 "혼자 하기" if self.world.mode == "shared" else "공용 월드", self.toggle_world)
         self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
         self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
 
     def toggle_world(self):
-        if self.world.enabled:
-            self.world.leave()
-        else:
-            self.world.start()
+        mode = "solo" if self.world.mode == "shared" else "shared"
+        self.world.flush(lambda: self.switch_world(mode))
+
+    def switch_world(self, mode):
+        self.world.leave()
+        self.world.start(mode)
 
     def manual_save(self):
         if self.save():
@@ -420,10 +417,10 @@ class App:
             item = ITEMS[id]
             if active == "buy":
                 self.row(item["name"], item_details(id), f"{item['price']} 메소",
-                         lambda id=id: self.execute(lambda: game.buy(id, npc["stock"])), p["gold"] < item["price"], id)
+                         lambda id=id: self.world.queue("buy",id), p["gold"] < item["price"], id)
             else:
                 self.row(f"{item['name']} ×{p['bag'][id]}", item_details(id), f"판매 {item['price']//2}",
-                         lambda id=id: self.execute(lambda: game.sell(id)), not game.sellable(id), id)
+                         lambda id=id: self.world.queue("sell",id), not game.sellable(id), id)
 
     def trainer(self):
         game, p = self.game, self.game.p
@@ -432,7 +429,7 @@ class App:
         for job, support in SUPPORTS.items():
             primary = CLASSES[job]
             self.row(primary["name"], f"X {primary['skill']} · V {support['name']}", "전직",
-                     lambda job=job: self.execute(lambda: game.change_job(job)), p["level"] < 5 or p["job"] == job)
+                     lambda job=job: self.world.queue("job",job), p["level"] < 5 or p["job"] == job)
 
     def quest_panel(self, index):
         game = self.game
@@ -440,9 +437,9 @@ class App:
         self.note(quest["detail"])
         detail = f"{progress['count']}/{quest['target']} · {quest['xp']} EXP · {quest['gold']} 메소"
         if progress["state"] == 0:
-            self.row(quest["name"], detail, "의뢰 받기", lambda: self.execute(lambda: game.accept_quest(index), True), item=quest["item"])
+            self.row(quest["name"], detail, "의뢰 받기", lambda: self.world.queue("accept_quest",index,True), item=quest["item"])
         elif progress["state"] == 1:
-            self.row(quest["name"], detail, "보상 받기", lambda: self.execute(lambda: game.claim_quest(index)),
+            self.row(quest["name"], detail, "보상 받기", lambda: self.world.queue("claim_quest",index),
                      progress["count"] < quest["target"], quest["item"])
         else:
             self.note("의뢰를 완료했어요.")
@@ -453,7 +450,7 @@ class App:
             id = recipe["item"]
             ingredients = ", ".join(f"{ITEMS[key]['name']} {game.p['bag'].get(key, 0)}/{value}" for key, value in recipe["ingredients"].items())
             self.row(ITEMS[id]["name"], f"{ingredients} · {recipe['gold']} 메소", "제작",
-                     lambda id=id: self.execute(lambda: game.craft(id)), not game.can_craft(recipe), id)
+                     lambda id=id: self.world.queue("craft",id), not game.can_craft(recipe), id)
 
     def hud(self):
         if self.panel:
@@ -517,7 +514,7 @@ class App:
         self.world.tick(now)
         keys = self.keys | set(self.pointers.values()) if self.pointers else self.keys
         while self.accumulator >= STEP:
-            if self.renderer.ready and not self.paused:
+            if self.renderer.ready and not self.paused and self.world.actor:
                 game.step(keys)
                 if game.tick % 300 == 0:
                     self.save()

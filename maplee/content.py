@@ -31,7 +31,7 @@ AREAS = [
     dict(name="솔방울 마을", start=0, end=BELLFLOWER_START, icon="🍄", material="stone", image="daylight", view=0),
     dict(name="종꽃 숲길", start=BELLFLOWER_START, end=BELLFLOWER_END, icon="🌿", material="terrain", image="bellflower", view=270),
     dict(name="푸른돛 항구", start=BELLFLOWER_END, end=12000, icon="⚓", material="stone", image="daylight", view=870),
-    dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="stone", image="cavern", view=0),
+    dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="quarry_ground", image="cavern", view=0),
     dict(name="달바람 고원", start=14900, end=18300, icon="🌙", material="terrain", image="highland", view=0),
     dict(name="잿등불 숲", start=18300, end=21400, icon="✧", material="terrain", image="ember_grove", view=0),
     dict(name="안개등 부두", start=21400, end=24700, icon="⚓", material="stone", image="lantern_quay", view=0),
@@ -601,65 +601,29 @@ for _species in SPECIES:
     _source, _species["body_size"], _species["framebooks"] = MOB_BOOKS[_species["sprite"]]
 
 
-for name, level, row, loot, equipment in (
-    ("이끼 망령",16,0,"spores",("shadowdagger","hwarang")),
-    ("닻불 망령",18,1,"ash",("stormknuckle","dawnwand")),
+# Higher-level field variants share the existing classic animation books.
+# Keep species indices stable for earlier quest and bestiary saves.
+for base, name, level, hp, attack, xp, gold, rare, drops in (
+    (6, "잿숲 버블링", 16, 396, 49, 144, 96, "shadowdagger", ("shadowdagger","hwarang")),
+    (9, "안개등 클랑", 18, 428, 51, 162, 108, "stormknuckle", ("stormknuckle","dawnwand")),
+    (7, "거목 스톤골렘", 18, 425, 55, 232, 115, "glasscoat", ("glasscoat","stormknuckle")),
+    (8, "수관 스타픽시", 19, 460, 57, 250, 124, "nightbow", ("nightbow","dawnwand")),
+    (6, "구리 버블링", 18, 388, 50, 217, 104, "prism", ("chimewand","glasscoat")),
+    (7, "구리 스톤골렘", 20, 515, 59, 275, 133, "stormknuckle", ("stormknuckle","hwarang")),
+    (8, "씨앗숲 스타픽시", 21, 620, 63, 322, 151, "shimmer", ("dawnwand","glasscoat")),
+    (10, "씨앗숲 머쉬맘", 23, 1480, 77, 1080, 460, "moonseal", ("moonseal","hwarang","dawnwand")),
 ):
-    SPECIES.append(dict(name=name,level=level,sprite=row,hp=140+level*16,
-                        attack=33+level,xp=level*9,gold=level*6,speed=1.1,
-                        loot=loot,rare=equipment[0],equipmentDrops=equipment,
-                        aggro=147,undead=True,body_size=(46,48),image="expansion_mobs",
-                        **({"float": True} if row else {})))
-
-CANOPY_FRAMEBOOKS = {
-    "stand": (0, (14,28,42,56)), "move": (4, (6,12,18,24,30,36)),
-    "attack1": (10, (9,16,22,28,34,40)), "hit1": (16, (4,8)),
-    "die1": (18, (6,12,18,24,30)),
-}
-SPECIES.extend((
-    dict(name="등불딱정벌레", level=18, sprite=0, hp=425, attack=55, xp=232, gold=115,
-         speed=1.55, loot="ash", rare="glasscoat", aggro=156, reach=36, windup_ticks=19,
-         body_size=(48,31), equipmentDrops=("glasscoat","stormknuckle")),
-    dict(name="솜깃 방울새", level=19, sprite=1, hp=460, attack=57, xp=250, gold=124,
-         speed=1.75, loot="plume", rare="nightbow", aggro=160, reach=54, windup_ticks=23,
-         body_size=(45,49), float=True, equipmentDrops=("nightbow","dawnwand")),
-))
-for _species in SPECIES[-2:]:
-    _species.update(image="canopy_mobs", framebooks=CANOPY_FRAMEBOOKS)
-
-TERRACE_FRAMEBOOKS = {
-    "stand": (0, (10,20,30,40)), "move": (4, (5,10,15,20,25,30,35,40)),
-    "attack1": (12, (5,11,16,21,26,32,40)), "hit1": (19, (3,6,10)),
-    "die1": (22, (5,10,15,20,25,32)),
-}
-SPECIES.extend((
-    dict(name="물수정 방울", level=18, sprite=0, hp=388, attack=50, xp=217, gold=104,
-         speed=1.42, body_size=(48,40), aggro=144, reach=38, windup_ticks=20,
-         loot="jelly", rare="prism", equipmentDrops=("chimewand","glasscoat")),
-    dict(name="황동갓 등불지기", level=20, sprite=1, hp=515, attack=59, xp=275, gold=133,
-         speed=1.18, body_size=(48,54), aggro=157, reach=56, windup_ticks=25,
-         loot="quartz", rare="stormknuckle", equipmentDrops=("stormknuckle","hwarang")),
-    dict(name="꿀수정 방울", level=21, sprite=2, hp=620, attack=63, xp=322, gold=151,
-         speed=1.53, body_size=(48,40), aggro=168, reach=42, windup_ticks=19,
-         loot="jelly", rare="shimmer", equipmentDrops=("dawnwand","glasscoat")),
-    dict(name="별갓 등불지기", level=23, sprite=3, hp=1480, attack=77, xp=1080, gold=460,
-         speed=1.25, body_size=(48,54), aggro=191, reach=76, windup_ticks=32, elite=True,
-         loot="nightcore", rare="moonseal", equipmentDrops=("moonseal","hwarang","dawnwand")),
-))
-for _species in SPECIES[-4:]:
-    _species.update(image="terrace_mobs", framebooks=TERRACE_FRAMEBOOKS)
+    SPECIES.append(dict(SPECIES[base], name=name, level=level, hp=hp, attack=attack, xp=xp, gold=gold,
+                        rare=rare, equipmentDrops=drops))
+SPECIES[11].update(undead=True, loot="spores")
+SPECIES[12].update(undead=True, loot="ash")
 
 
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
-    if species.get("image") == "expansion_mobs":
-        frame = {"stand":0, "move":ticks//6%4, "attack1":5, "hit1":6, "die1":7}[action]
-        return frame*64, species["sprite"]*64, 64, 64, -32, -60
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
     frame = first + bisect_right(ends, position)
-    if species.get("image") in ("canopy_mobs","terrace_mobs"):
-        return frame * 80, species["sprite"] * 80, 80, 80, -40, -72
     return MOB_FRAMES[frame]
 
 
@@ -835,15 +799,18 @@ JOB_LOOKS = {job: "hero_" + job for job in ("guardian", "ranger", "mage")}
 IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
 
 IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
-IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png", expansion_mobs="expansion-mobs.png",
+IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png",
               daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
               highland="highland-panorama-tall.png", ladder="ladder.png")
 IMAGES["bellflower"] = "bellflower-forest.png"
-IMAGES.update(windroot="windroot.png", sunegg="sunegg.png", canopy_props="canopy-scenery.png",
-              canopy_mobs="canopy-monsters.png")
+IMAGES.update(windroot="windroot.png", sunegg="sunegg.png", canopy_props="canopy-scenery.png")
 IMAGES.update(copper_ground="copper-ground.png", seed_ground="seed-ground.png", terrace_sky="terrace-sky.png",
               seed_sky="seed-sky.png", seed_canopy="seed-canopy.png", terrace_props="terrace-props.png",
-              terrace_mobs="terrace-monsters.png")
+              terrain="grass-cliff.png", quarry_ground="quarry-ground.png", quarry_props="quarry-scenery.png")
+SPRITES["quarry_props"] = [(0,0,144,196),(144,0,164,192),(308,0,204,147)]
+PROPS.extend((x, art, width, None, "quarry_props") for x, art, width in (
+    (12680,0,154),(12840,1,194),(13175,2,179),(13670,0,169),(14130,1,191),(14595,2,189),
+))
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",

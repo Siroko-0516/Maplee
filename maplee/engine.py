@@ -206,6 +206,24 @@ class Game:
         self.dirty = True
         self._stats_cache = None
 
+    def sync_progress(self, state, warp=None):
+        old_level, old_hp, old_job = self.p["level"], self.p["hp"], self.p["job"]
+        for key in ("hp", "mp", "level", "xp", "gold", "kills", "pots", "tonics", "job", "bag",
+                    "equipment", "quests", "attributes", "skillRanks", "bestiary"):
+            self.p[key] = state[key]
+        if self.p["trackedQuest"] is None or self.p["quests"][self.p["trackedQuest"]]["state"] != 1:
+            self.p["trackedQuest"] = state.get("trackedQuest")
+        if old_job != self.p["job"]:
+            self.swing = None
+            self.support_until = self.tick
+        self.changed()
+        if self.p["level"] > old_level:
+            self.text("LEVEL UP!", self.p["x"], self.p["y"] - 76, "#ffe8a0")
+            self.notice = f"Lv. {self.p['level']} 달성!"
+            self.sound = 840
+        elif self.p["hp"] < old_hp and not warp:
+            self.effects.append(("damage", self.tick, self.p["x"], self.p["y"] - 65, 42, (old_hp-self.p["hp"], 2)))
+
     def stats(self):
         if self._stats_cache is not None:
             return self._stats_cache
@@ -474,7 +492,10 @@ class Game:
         if self.p["mp"] < support["cost"]:
             self.notice = "마력이 부족해요."
             return False
-        self.p["mp"] -= support["cost"]
+        if self.shared_hit is None:
+            self.p["mp"] -= support["cost"]
+        elif not self.shared_hit("support", "cast"):
+            return False
         self.support_started = self.tick
         self.support_until = self.tick + 420 + 90 * (rank - 1)
         self.support_cd = 720
@@ -497,7 +518,8 @@ class Game:
         if skill and (self.skill_cd or self.p["mp"] < job["cost"]):
             return False
         if skill:
-            self.p["mp"] -= job["cost"]
+            if self.shared_hit is None:
+                self.p["mp"] -= job["cost"]
             self.skill_cd = job["cooldown"]
             self.dirty = True
         if self.support_value("stealth"):
@@ -536,11 +558,13 @@ class Game:
         shape, power, radius = self.swing["shape"], self.swing["power"], self.swing["reach"]
         if contact_age == 0 or second_stab:
             self.sound = 740 if skill else 505
+        if self.shared_hit is not None and contact_age == 0:
+            self.shared_hit("attack", "primary" if skill else "basic")
         if shape in ("arrow", "bolt"):
             self.effects.append((shape, self.tick, p["x"] + facing * 18, p["y"] - 24,
                                  1 + radius // 15, (facing, power, "bomb") if skill and shape == "arrow" else (facing, power)))
             return
-        if shape == "heal":
+        if shape == "heal" and self.shared_hit is None:
             amount = min(self.stats()["hp"] - p["hp"], round(self.stats()["hp"] * (.22 + .04*p["skillRanks"]["primary"])))
             p["hp"] += amount
             if amount:
@@ -548,6 +572,8 @@ class Game:
             self.dirty = True
         if not self.swing["melee"] and shape != "stab":
             self.effects.append((shape, self.tick, p["x"], p["y"] - 24, 17 if skill else 11, facing))
+        if self.shared_hit is not None:
+            return
         back = 4 if shape in ("slash", "arc", "punch", "stab") else radius
         ends = (p["x"] - facing * back, p["x"] + facing * radius)
         height = 92 if shape == "stars" else 64 if skill else 53
@@ -571,7 +597,7 @@ class Game:
             self.hit(monster, power + (int(random()*3) if not skill else 0),
                      direction(monster["x"]-p["x"], facing), effect)
 
-    def spawn(self, x, kind, index, ledge=None):
+    def spawn(self, x, kind, index, ledge=None, spawn_id=None):
         spec = SPECIES[kind]
         region = area_at(x)
         area = AREAS[region]
@@ -581,7 +607,7 @@ class Game:
         monster = {"x": x, "y": ledge["y"] if ledge else ground_at(x), "home": x, "kind": kind, "spec": spec,
                    "left": low, "right": high, "dir": 1 if index % 2 else -1, "hp": spec["hp"], "dead": None,
                    "state": "patrol", "hurt": 0, "windup": 0, "strike": -100, "next": 0, "ledge": ledge, "phase": index * 31,
-                   "id": len(self.monsters), "region": region, "life": 0, "shared_until": 0}
+                   "id": len(self.monsters), "spawn_id": spawn_id, "region": region, "life": 0, "shared_until": 0}
         self.monsters.append(monster)
         self._monster_count = -1
         return monster
@@ -598,12 +624,13 @@ class Game:
         ledges = {ledge["x"]: ledge for ledge in LEDGES}
         for zone in HUNT_ZONES:
             for spot in zone["spots"]:
-                for x, kind in spot["ground"]:
-                    self.spawn(x, kind, len(self.monsters))
-                for left, kind in spot["ledges"]:
+                ground_ids, ledge_ids = spot["spawn_ids"]
+                for (x, kind), spawn_id in zip(spot["ground"], ground_ids):
+                    self.spawn(x, kind, len(self.monsters), spawn_id=spawn_id)
+                for (left, kind), spawn_id in zip(spot["ledges"], ledge_ids):
                     ledge = ledges[left]
                     x = left + ledge["w"] // 2
-                    self.spawn(x, kind, len(self.monsters), ledge)
+                    self.spawn(x, kind, len(self.monsters), ledge, spawn_id)
 
     def enter_shared_world(self, on_hit):
         self.solo_monsters, self.monsters = self.monsters, []
@@ -648,11 +675,6 @@ class Game:
     def hit(self, monster, power, facing, impact="impact"):
         spec = monster["spec"]
         if self.shared_hit is not None:
-            if self.shared_hit(monster, power):
-                monster["hurt"] = self.tick + 10
-                if not spec.get("elite"):
-                    monster["windup"] = 0
-                self.show_hit(monster, power, facing, impact)
             return
         monster["hp"] -= power
         monster["hurt"] = self.tick + 10
@@ -794,6 +816,12 @@ class Game:
     def take_damage(self, amount, source=None):
         if self.tick < self.inv_until:
             return
+        if self.shared_hit is not None:
+            if source and self.shared_hit("hurt", source["id"]):
+                self.inv_until, self.hurt_until = self.tick + 55, self.tick + 10
+                self.swing, self.ladder, self.surface = None, None, None
+                self.vy = -3.4
+            return
         p, stats = self.p, self.stats()
         lost = max(1, amount - int(stats["defense"] + self.support_value("defense")))
         reflected = self.support_value("reflect")
@@ -835,6 +863,8 @@ class Game:
                             entry = bounds[0] if facing > 0 else -bounds[2]
                             targets.append((entry, m))
                 monster = min(targets, key=lambda pair: pair[0])[1] if targets else None
+                if monster and self.shared_hit is not None:
+                    continue
                 if monster:
                     victims = [monster]
                     if len(data) > 2 and data[2] == "bomb":
@@ -916,7 +946,7 @@ class Game:
         for monster in monsters:
             self.monster_step(monster)
         self.collect()
-        if self.tick % 90 == 0 and self.p["mp"] < self.stats()["mp"]:
+        if self.shared_hit is None and self.tick % 90 == 0 and self.p["mp"] < self.stats()["mp"]:
             self.p["mp"] += 1
             self.dirty = True
         target_x = self.camera_target()

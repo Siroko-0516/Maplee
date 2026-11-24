@@ -4,6 +4,8 @@ from browser import document, html, window
 from .content import AVATAR_JOBS, CLASSES, STARTER_WEAPONS
 from .engine import SAVE_KEY
 
+FIELD_PROTOCOL = 1
+
 
 def api(method, path, data, callback, keepalive=False):
     payload = "" if data is None else json.dumps(data, ensure_ascii=False)
@@ -198,11 +200,9 @@ class Lobby:
             self.after_save = None
             progress = data.get("progress")
             draft = local_read(self.draft_key())
-            if draft and (draft.get("revision") == self.revision or
-                          draft.get("revision") == self.revision-1 and
-                          draft.get("inflight") == self.serialize(progress)):
-                progress = draft.get("progress",progress)
-            self.acknowledged = self.serialize(data.get("progress"))
+            self.acknowledged = self.serialize(self.settings(progress))
+            if draft and draft.get("revision") == self.revision and progress:
+                progress.update(draft.get("settings",{}))
             self.message = "자동저장 대기 중"
             if imported:
                 try:
@@ -230,7 +230,12 @@ class Lobby:
         api("POST","/api/logout",{},complete)
 
     def draft_key(self):
-        return f"maplee-draft-v2:{self.account}:{self.slot}"
+        return f"maplee-draft-v3:{self.account}:{self.slot}"
+
+    @staticmethod
+    def settings(progress):
+        return {key:progress[key] for key in ("x","y","hotbar","trackedQuest","avatarStyle")
+                if progress and key in progress}
 
     @staticmethod
     def serialize(progress):
@@ -239,7 +244,7 @@ class Lobby:
     def save_progress(self, progress, keepalive=False):
         if not self.profile:
             return False
-        serialized = self.serialize(progress)
+        serialized = self.serialize(self.settings(progress))
         if serialized == self.acknowledged and not self.saving:
             return True
         self.pending = serialized
@@ -251,7 +256,7 @@ class Lobby:
     def keep_draft(self, serialized):
         try:
             window.localStorage.setItem(self.draft_key(),json.dumps(
-                {"revision":self.revision,"progress":json.loads(serialized),"inflight":self.inflight},ensure_ascii=False))
+                {"revision":self.revision,"settings":json.loads(serialized)},ensure_ascii=False))
         except Exception:
             pass
 
@@ -288,10 +293,13 @@ class Lobby:
                     self.app.toast(self.message)
             if self.app.active and self.app.panel and self.app.panel[0] == "account":
                 self.app.render_panel()
-        api("PUT",f"/api/slot/{self.slot}",{"progress":json.loads(sent),"revision":self.revision},
+        api("PUT",f"/api/slot/{self.slot}",{"settings":json.loads(sent),"revision":self.revision,"protocol":FIELD_PROTOCOL},
             complete,keepalive)
 
     def leave(self):
+        self.app.world.flush(self.save_and_leave)
+
+    def save_and_leave(self):
         if self.blocked:
             self.return_to_slots()
             return

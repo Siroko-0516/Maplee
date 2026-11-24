@@ -3,7 +3,7 @@ from browser import window
 
 from .content import WORLD_LAYOUT
 from .engine import area_at, limit
-from .lobby import api
+from .lobby import FIELD_PROTOCOL, api
 from .render import number
 
 
@@ -11,38 +11,38 @@ class SharedWorld:
     def __init__(self, app):
         self.app = app
         self.enabled = False
+        self.mode = "shared"
         self.generation = 0
         self.actor = None
         self.inflight = False
         self.retry_at = 0
-        self.server_time = 0.0
-        self.received_at = 0.0
-        self.last_success = 0.0
-        self.status = "혼자 플레이 중"
+        self.server_time = self.received_at = self.last_success = 0.0
+        self.status = "접속 대기 중"
         self.players = {}
         self.sequence = 1
         self.batch = None
-        self.hits = []
-        self.ack = set()
-        self.rewarded = set()
+        self.operations = []
+        self.move = None
+        self.after_sync = None
+        self.state_version = -1
 
-    def start(self):
+    def start(self, mode="shared"):
         self.enabled = True
+        self.mode = mode
         self.retry_at = 0
-        self.set_status("공용 월드에 접속 중")
+        self.set_status("공용 월드에 접속 중" if mode == "shared" else "혼자 하기 연결 중")
 
     def leave(self):
         self.release()
         self.generation += 1
         self.enabled = self.inflight = False
-        self.actor = self.batch = None
+        self.actor = self.batch = self.move = self.after_sync = None
         self.players.clear()
-        self.hits.clear()
-        self.ack.clear()
-        self.rewarded.clear()
+        self.operations.clear()
         self.sequence = 1
+        self.state_version = -1
         self.app.game.leave_shared_world()
-        self.set_status("혼자 플레이 중")
+        self.set_status("접속 대기 중")
 
     def release(self):
         if self.actor:
@@ -54,24 +54,38 @@ class SharedWorld:
             if self.app.active and self.app.panel and self.app.panel[0] == "account":
                 self.app.render_panel()
 
-    def queue_hit(self, monster, power):
-        if len(self.hits) >= 90 or number(window.performance.now()) - self.last_success > 2600:
+    def flush(self, callback):
+        if self.actor and (self.operations or self.move is not None or self.batch):
+            self.after_sync = callback
+        else:
+            callback()
+
+    def queue(self, action, argument, close=False):
+        if not self.actor or len(self.operations) >= 36:
+            self.app.toast("월드 연결을 확인하고 다시 시도해주세요.")
             return False
-        player = self.app.game.p
-        self.hits.append(dict(id=monster["id"],life=monster["life"],power=round(power),
-                              x=round(player["x"]),y=round(player["y"])))
+        self.operations.append(([action,argument],close))
         return True
+
+    def combat(self, action, argument):
+        if not self.actor or len(self.operations) >= 36 or number(window.performance.now()) - self.last_success > 2200:
+            return False
+        game = self.app.game
+        player = game.p
+        self.operations.append(([action,argument,round(game.shared_clock),round(player["x"]),round(player["y"]),
+                                 game.swing["dir"] if action == "attack" and game.swing else game.facing],False))
+        return True
+
+    def travel(self, target):
+        if self.actor and self.move is None and not (self.batch and self.batch[0].get("move") is not None):
+            self.move = target
 
     def pose(self):
         game = self.app.game
         player = game.p
         frame, facing = self.app.renderer.player_pose(game)
         swing = game.swing
-        equipment = dict(player["equipment"])
-        if swing:
-            equipment["weapon"] = swing["weapon"]
-        return dict(x=round(player["x"]),y=round(player["y"]),job=player["job"],level=player["level"],
-                    equipment=equipment,frame=frame,facing=facing,
+        return dict(x=round(player["x"]),y=round(player["y"]),frame=frame,facing=facing,
                     swing=game.tick-swing["start"] if swing and swing["melee"] else None)
 
     def tick(self, now):
@@ -81,20 +95,26 @@ class SharedWorld:
             self.app.game.shared_clock = self.server_time + now - self.received_at
         if self.inflight or now < self.retry_at:
             return
-        if self.actor and not self.batch:
-            self.batch = dict(seq=self.sequence, hits=self.hits[:30], ack=sorted(self.ack)[:60])
-            del self.hits[:30]
-            self.sequence += 1
         epoch = self.generation
         joining = self.actor is None
-        args = dict(layout=WORLD_LAYOUT,pose=self.pose())
         if joining:
-            args["slot"] = self.app.lobby.slot
+            payload = dict(protocol=FIELD_PROTOCOL,layout=WORLD_LAYOUT,pose=self.pose(),
+                           slot=self.app.lobby.slot,mode=self.mode)
         else:
-            args.update(self.batch,actor=self.actor)
+            if not self.batch:
+                entries = self.operations[:24]
+                del self.operations[:24]
+                move = None if self.operations else self.move
+                if not self.operations:
+                    self.move = None
+                payload = dict(protocol=FIELD_PROTOCOL,layout=WORLD_LAYOUT,pose=self.pose(),
+                               seq=self.sequence,ops=[op for op, _ in entries],move=move,actor=self.actor,
+                               stateVersion=self.state_version)
+                self.batch = payload, entries
+            payload = self.batch[0]
         self.inflight = True
-        api("POST","/api/world/" + ("join" if joining else "sync"),args,
-            lambda status, data: self.receive(epoch,joining,now,status,data))
+        api("POST","/api/world/" + ("join" if joining else "sync"),payload,
+            lambda status,data: self.receive(epoch,joining,now,status,data))
 
     def receive(self, epoch, joining, sent, status, data):
         if epoch != self.generation or not self.enabled:
@@ -104,10 +124,11 @@ class SharedWorld:
         self.inflight = False
         now = number(window.performance.now())
         if status != 200:
-            self.retry_at = now + (650 if self.actor else 2300)
+            self.retry_at = now + (400 if status == 429 else 650 if self.actor else 1600)
             if status == 410:
+                mode = self.mode
                 self.leave()
-                self.start()
+                self.start(mode)
             elif status in (401,409,426):
                 self.leave()
                 self.set_status(data.get("error","월드 연결이 끝났어요."))
@@ -117,31 +138,52 @@ class SharedWorld:
             return
         self.retry_at = max(sent+int(data["poll"]),now)
         self.last_success = now
-        self.server_time = float(data["now"]) + (now-sent)*.5
+        self.server_time = float(data["now"]) + min(150, (now-sent)*.5)
         self.received_at = now
         game = self.app.game
         game.shared_clock = self.server_time
         if joining:
             self.actor = data["actor"]
-            game.enter_shared_world(self.queue_hit)
+            game.enter_shared_world(self.combat)
             self.app.paused = False
+            app_pose = data["pose"]
+            if app_pose["x"] != round(game.p["x"]):
+                game.travel(app_pose["x"])
         elif self.batch:
-            self.ack.difference_update(self.batch["ack"])
+            payload, entries = self.batch
             self.batch = None
+            self.sequence += 1
+            for index, accepted in data.get("results",()):
+                if accepted and entries[index][1]:
+                    self.app.close_panel()
+                elif not accepted:
+                    self.app.toast("조건이 맞지 않거나 이미 처리된 동작이에요.")
+            if payload.get("move") is not None and not data.get("warp"):
+                self.app.toast("포털 가까이에서 다시 시도해주세요.")
+        destination = data["pose"]
+        warp = data.get("warp")
+        if warp:
+            self.app.arrive(destination["x"], warp)
+        elif area_at(game.p["x"]) != data["region"] or abs(destination["x"] - game.p["x"]) > 150:
+            game.travel(destination["x"])
+        if data["stateVersion"] > self.state_version:
+            self.state_version = data["stateVersion"]
+            game.sync_progress(data["progress"], warp)
+        for id, damage, effect in data.get("hits",()):
+            monster = game.monsters[id]
+            monster["hurt"] = game.tick + 10
+            if not monster["spec"].get("elite"):
+                monster["windup"] = 0
+            game.show_hit(monster, damage, game.facing, effect)
         game.sync_shared_monsters(data["monsters"])
         self.set_players(data["players"],now)
-        rewarded = False
-        for event in data["rewards"]:
-            key = event["event"]
-            if key not in self.rewarded:
-                game.grant_monster_reward(game.monsters[event["monster"]],event["x"])
-                self.rewarded.add(key)
-                rewarded = True
-            self.ack.add(key)
-        if rewarded:
-            game.dirty = True
-            self.app.save()
-        self.set_status(f"{len(self.players)+1}명 접속 · 이 지역")
+        loot = data.get("loot")
+        if loot:
+            game.loot = (loot["gold"],loot["items"])
+        self.set_status(f"{len(self.players)+1}명 접속 · 이 지역" if self.mode == "shared" else "혼자 플레이 중")
+        if self.after_sync and not self.operations and self.move is None:
+            callback, self.after_sync = self.after_sync, None
+            callback()
 
     def set_players(self, players, now):
         previous = self.players

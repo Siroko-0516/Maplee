@@ -3,7 +3,9 @@ import { DatabaseSync } from "node:sqlite";
 
 export function sqliteWorld(path) {
   const db = new DatabaseSync(path);
-  db.exec(readFileSync(new URL("../drizzle/0000_world.sql", import.meta.url), "utf8"));
+  const migrations = new URL("../drizzle/", import.meta.url);
+  const { entries } = JSON.parse(readFileSync(new URL("meta/_journal.json", migrations), "utf8"));
+  for (const migration of entries) db.exec(readFileSync(new URL(migration.tag + ".sql", migrations), "utf8"));
   return {
     prepare(sql) {
       const statement = db.prepare(sql);
@@ -11,6 +13,7 @@ export function sqliteWorld(path) {
         return {
           bind,
           async first() { return statement.get(...values) ?? null; },
+          async all() { return this.execute(); },
           async run() { return this.execute(); },
           execute() {
             if (statement.columns().length) return { results: statement.all(...values), meta: { changes: 0 } };

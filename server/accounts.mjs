@@ -97,7 +97,7 @@ function progress(data) {
 function brief(slot, document) {
   const chosen = document.progress?.avatarStyle;
   return { slot, profile: { ...document.profile, job: document.progress?.job || document.profile.job,
-    ...(avatarStyles.has(chosen) ? { style: chosen } : {}) },
+    ...(avatarStyles.has(chosen) ? { style: chosen } : {}) }, characterId:document.characterId,
     level: document.progress?.level || 1, updated: document.updated };
 }
 
@@ -130,7 +130,7 @@ async function accounts(request, store, world) {
     const token = random(32);
     const session = { id: account.id, login, expiry: now + SESSION_SECONDS };
     await store.put("sessions/" + await digest(token),JSON.stringify(session));
-    return reply({ account: login, slots: await slots(store,account.id) },200,
+    return reply({ account: login, slots: await slots(world,store,account.id) },200,
       { "Set-Cookie": sessionCookie(token,request,SESSION_SECONDS) });
   }
 
@@ -139,48 +139,66 @@ async function accounts(request, store, world) {
   const session = key && (await record(store,key))?.value;
   if (!session || session.expiry <= now) return fail(401,"로그인이 필요해요.");
   if (pathname === "/api/logout" && method === "POST") {
+    // The browser releases its actor when it leaves the field. Retain transient
+    // cooldown state here so logout cannot restart a skill or clear a hit.
     await store.delete(key);
     return reply({},200,{"Set-Cookie":sessionCookie("",request,0)});
   }
   if (pathname === "/api/session" && method === "GET")
-    return reply({ account: session.login, slots: await slots(store,session.id) });
+    return reply({ account: session.login, slots: await slots(world,store,session.id) });
 
   const worldAction = /^\/api\/world\/(join|sync|leave)$/.exec(pathname)?.[1];
   if (worldAction) return await sharedWorld(request, store, world, session, worldAction);
 
   const match = /^\/api\/slot\/([0-3])$/.exec(pathname);
   if (!match) return fail(404,"페이지를 찾을 수 없어요.");
+  if (!world) return fail(503,"캐릭터 저장소에 연결할 수 없어요.");
   const slot = Number(match[1]);
-  const saveKey = "slots/" + session.id + "/" + slot;
-  const saved = await record(store,saveKey);
+  const saved = await loadCharacter(world,store,session.id,slot);
   if (method === "GET")
-    return saved ? reply(saved.value) : fail(404,"빈 캐릭터 슬롯이에요.");
+    return saved ? reply(characterDocument((await settleRewards(world,saved)).row)) : fail(404,"빈 캐릭터 슬롯이에요.");
   if (method === "POST") {
     const data = await body(request,MAX_SAVE_BYTES);
     const identity = profile(data?.profile);
     if (!identity) return fail(400,"캐릭터 이름은 한글·영문·숫자 등 2~14자로 입력해주세요.");
     const imported = data.legacy == null ? null : progress(data.legacy);
     if (data.legacy != null && !imported) return fail(400,"이전 세이브를 가져올 수 없어요.");
-    const entry = { profile: identity, progress: imported, revision: 0, updated: now };
-    if (!await put(store,saveKey,entry)) return fail(409,"이미 캐릭터가 있는 슬롯이에요.");
-    return reply(entry,201);
+    if (saved) return fail(409,"이미 캐릭터가 있는 슬롯이에요.");
+    const created = await insertCharacter(world,session.id,slot,identity,imported,0,now);
+    if (!created.meta.changes) return fail(409,"이미 캐릭터가 있는 슬롯이에요.");
+    return reply(characterDocument(await slotRow(world,session.id,slot)),201);
   }
   if (method === "PUT" && saved) {
     const data = await body(request,MAX_SAVE_BYTES);
-    const current = progress(data?.progress);
-    if (!current) return fail(400,"진행 기록을 저장할 수 없어요.");
-    if (data.revision !== saved.value.revision) return fail(409,"다른 탭에 더 최신 저장이 있어요.");
-    const next = { ...saved.value, progress: current, revision: saved.value.revision + 1, updated: now };
-    if (!await put(store,saveKey,next,saved)) return fail(409,"다른 탭에 더 최신 저장이 있어요.");
-    return reply({ revision: next.revision, updated: now });
+    if (!data || data.protocol !== FIELD_PROTOCOL) return fail(426,"새 버전을 불러오려면 새로고침해주세요.");
+    if (!Number.isSafeInteger(data.revision) || data.revision !== saved.save_revision)
+      return fail(409,"다른 탭에 더 최신 저장이 있어요.");
+    let row = saved;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const state = JSON.parse(row.state);
+      settingsFrom(state,objectValue(data.settings));
+      const actor = await fieldActor(world,session.id);
+      if (actor?.character_id === row.id) {
+        const pose = JSON.parse(actor.pose);
+        Object.assign(state,{ x:pose.x, y:pose.y });
+      }
+      const result = await world.prepare(`UPDATE characters SET state = ?, revision = revision + 1,
+        save_revision = save_revision + 1, updated = ? WHERE id = ? AND revision = ? AND save_revision = ?`)
+        .bind(JSON.stringify(state),now,row.id,row.revision,data.revision).run();
+      if (result.meta.changes) return reply({ revision:data.revision+1, updated:now });
+      row = await slotRow(world,session.id,slot);
+      if (row.save_revision !== data.revision) return fail(409,"다른 탭에 더 최신 저장이 있어요.");
+    }
+    return fail(503,"잠시 후 저장을 다시 시도해요.");
   }
   return fail(404,"캐릭터 슬롯을 찾을 수 없어요.");
 }
 
-async function slots(store, id) {
+async function slots(db, store, id) {
+  if (!db) return [null,null,null,null];
   return await Promise.all(Array.from({ length:4 }, async (_,index) => {
-    const saved = await record(store,"slots/"+id+"/"+index);
-    return saved ? brief(index,saved.value) : null;
+    const saved = await loadCharacter(db,store,id,index);
+    return saved ? brief(index,characterDocument(saved)) : null;
   }));
 }
 

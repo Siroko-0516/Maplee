@@ -2,14 +2,15 @@
 
 from .content import map_x
 
-SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, MOSS, ANCHOR = range(13)
-BEETLE, BELLBIRD = range(13, 15)
-WATER_GEM, BRASS_KEEPER, HONEY_GEM, STAR_KEEPER = range(15, 19)
+SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, ASH_BUBBLE, QUAY_CLANG = range(13)
+ROOT_GOLEM, CANOPY_PIXIE = range(13, 15)
+COPPER_BUBBLE, COPPER_GOLEM, FOREST_PIXIE, FOREST_MUSHMOM = range(15, 19)
 
 
 def hunting_spot(label, ground=(), ledges=()):
     return {"label":label, "ground":tuple((map_x(x),kind) for x,kind in ground),
-            "ledges":tuple((map_x(x),kind) for x,kind in ledges)}
+            "ledges":tuple((map_x(x),kind) for x,kind in ledges),
+            "spawn_ids":(tuple(f"floor-{x}" for x, _ in ground), tuple(f"ledge-{x}" for x, _ in ledges))}
 
 
 def hunting_zone(label, levels, wave, recovery, spots, boss_waves=0):
@@ -73,66 +74,66 @@ HUNT_ZONES = (
     ), boss_waves=6),
     hunting_zone("잿불 뿌리터", (12, 16), 245, 195, (
         hunting_spot("그을린 나무길",
-                     ground=((18710, MOSS), (18920, MOSS), (19180, PIXIE)),
-                     ledges=((18820, PIXIE), (19180, MOSS))),
+                     ground=((18710, ASH_BUBBLE), (18920, ASH_BUBBLE), (19180, PIXIE)),
+                     ledges=((18820, PIXIE), (19180, ASH_BUBBLE))),
         hunting_spot("재 묻은 뿌리",
-                     ground=((19580, MOSS), (19770, MOSS), (20000, PIXIE), (20230, MOSS)),
-                     ledges=((19740, MOSS), (20200, PIXIE))),
+                     ground=((19580, ASH_BUBBLE), (19770, ASH_BUBBLE), (20000, PIXIE), (20230, ASH_BUBBLE)),
+                     ledges=((19740, ASH_BUBBLE), (20200, PIXIE))),
         hunting_spot("꺼진 등불터",
-                     ground=((20600, MOSS), (20775, MOSS), (20985, MOSS)), ledges=((20570, MOSS),)),
+                     ground=((20600, ASH_BUBBLE), (20775, ASH_BUBBLE), (20985, ASH_BUBBLE)), ledges=((20570, ASH_BUBBLE),)),
     )),
     hunting_zone("안개등 잔교", (13, 18), 225, 205, (
         hunting_spot("밀물 계단",
-                     ground=((21760, CLANG), (22005, ANCHOR), (22240, CLANG)),
-                     ledges=((22120, ANCHOR),)),
+                     ground=((21760, CLANG), (22005, QUAY_CLANG), (22240, CLANG)),
+                     ledges=((22120, QUAY_CLANG),)),
         hunting_spot("침수된 선착장",
-                     ground=((22640, ANCHOR), (22840, ANCHOR), (23030, CLANG), (23250, ANCHOR)),
-                     ledges=((22500, ANCHOR), (23000, ANCHOR), (23400, CLANG))),
+                     ground=((22640, QUAY_CLANG), (22840, QUAY_CLANG), (23030, CLANG), (23250, QUAY_CLANG)),
+                     ledges=((22500, QUAY_CLANG), (23000, QUAY_CLANG), (23400, CLANG))),
         hunting_spot("마지막 계류장",
-                     ground=((23750, ANCHOR), (23950, ANCHOR), (24160, ANCHOR), (24360, CLANG)),
-                     ledges=((23900, ANCHOR), (24330, ANCHOR))),
+                     ground=((23750, QUAY_CLANG), (23950, QUAY_CLANG), (24160, QUAY_CLANG), (24360, CLANG)),
+                     ledges=((23900, QUAY_CLANG), (24330, QUAY_CLANG))),
     )),
     hunting_zone("거목의 뿌리와 수관", (18, 19), 260, 205, (
         hunting_spot("등불 뿌리밭",
-                     ground=((25230,BEETLE),(25472,BEETLE),(25700,BEETLE),(25921,BELLBIRD)),
-                     ledges=((25170,BEETLE),(25570,BEETLE),(25770,BELLBIRD))),
+                     ground=((25230,ROOT_GOLEM),(25472,ROOT_GOLEM),(25700,ROOT_GOLEM),(25921,CANOPY_PIXIE)),
+                     ledges=((25170,ROOT_GOLEM),(25570,ROOT_GOLEM),(25770,CANOPY_PIXIE))),
         hunting_spot("구름까지 닿는 거목",
-                     ground=((26340,BEETLE),(26640,BELLBIRD),(26910,BEETLE)),
-                     ledges=((25980,BEETLE),(26260,BELLBIRD),(26510,BEETLE),(26720,BELLBIRD))),
+                     ground=((26340,ROOT_GOLEM),(26640,CANOPY_PIXIE),(26910,ROOT_GOLEM)),
+                     ledges=((25980,ROOT_GOLEM),(26260,CANOPY_PIXIE),(26510,ROOT_GOLEM),(26720,CANOPY_PIXIE))),
         hunting_spot("덩굴 공중길",
-                     ground=((27390,BEETLE),(27720,BELLBIRD),(28100,BEETLE),(28680,BELLBIRD)),
-                     ledges=((27210,BEETLE),(27530,BELLBIRD),(27950,BELLBIRD),(28430,BEETLE),(28740,BELLBIRD))),
+                     ground=((27390,ROOT_GOLEM),(27720,CANOPY_PIXIE),(28100,ROOT_GOLEM),(28680,CANOPY_PIXIE)),
+                     ledges=((27210,ROOT_GOLEM),(27530,CANOPY_PIXIE),(27950,CANOPY_PIXIE),(28430,ROOT_GOLEM),(28740,CANOPY_PIXIE))),
     )),
     hunting_zone("해질녘 둥지", (11, 19), 275, 215, (
         hunting_spot("첫 번째 알터",
-                     ground=((29770,GOLEM),(29995,BELLBIRD),(30280,GOLEM),(30520,GOLEM)),
-                     ledges=((29690,BELLBIRD),(29980,GOLEM),(30290,BELLBIRD))),
+                     ground=((29770,GOLEM),(29995,CANOPY_PIXIE),(30280,GOLEM),(30520,GOLEM)),
+                     ledges=((29690,CANOPY_PIXIE),(29980,GOLEM),(30290,CANOPY_PIXIE))),
         hunting_spot("황금잎 계단",
-                     ground=((30975,GOLEM),(31230,GOLEM),(31640,BELLBIRD),(32020,GOLEM)),
-                     ledges=((30880,GOLEM),(31260,BELLBIRD),(31670,GOLEM),(32030,BELLBIRD))),
+                     ground=((30975,GOLEM),(31230,GOLEM),(31640,CANOPY_PIXIE),(32020,GOLEM)),
+                     ledges=((30880,GOLEM),(31260,CANOPY_PIXIE),(31670,GOLEM),(32030,CANOPY_PIXIE))),
         hunting_spot("머쉬맘의 둥지",
-                     ground=((32608,GOLEM),(32910,BELLBIRD),(33395,MUSHMOM),(33670,GOLEM)),
-                     ledges=((32410,GOLEM),(32740,BELLBIRD),(33150,GOLEM),(33580,BELLBIRD))),
+                     ground=((32608,GOLEM),(32910,CANOPY_PIXIE),(33395,MUSHMOM),(33670,GOLEM)),
+                     ledges=((32410,GOLEM),(32740,CANOPY_PIXIE),(33150,GOLEM),(33580,CANOPY_PIXIE))),
     ), boss_waves=5),
     hunting_zone("구리 절벽 사냥터", (18, 20), 255, 190, (
         hunting_spot("구리 바닥",
-                     ground=((34540,WATER_GEM),(34880,WATER_GEM),(35200,BRASS_KEEPER)),
-                     ledges=((34290,WATER_GEM),(34350,WATER_GEM),(34760,BRASS_KEEPER))),
+                     ground=((34540,COPPER_BUBBLE),(34880,COPPER_BUBBLE),(35200,COPPER_GOLEM)),
+                     ledges=((34290,COPPER_BUBBLE),(34350,COPPER_BUBBLE),(34760,COPPER_GOLEM))),
         hunting_spot("세 칸 절벽",
-                     ground=((35710,WATER_GEM),(36150,BRASS_KEEPER),(36640,WATER_GEM)),
-                     ledges=((35000,WATER_GEM),(35380,BRASS_KEEPER),(35950,BRASS_KEEPER),
-                             (36455,WATER_GEM),(36585,BRASS_KEEPER))),
+                     ground=((35710,COPPER_BUBBLE),(36150,COPPER_GOLEM),(36640,COPPER_BUBBLE)),
+                     ledges=((35000,COPPER_BUBBLE),(35380,COPPER_GOLEM),(35950,COPPER_GOLEM),
+                             (36455,COPPER_BUBBLE),(36585,COPPER_GOLEM))),
     )),
     hunting_zone("푸른 수관 사냥터", (20, 23), 280, 220, (
         hunting_spot("물비늘 여울",
-                     ground=((37510,HONEY_GEM),(37870,BRASS_KEEPER),(38230,HONEY_GEM)),
-                     ledges=((37420,HONEY_GEM),(37760,BRASS_KEEPER),(38060,HONEY_GEM))),
+                     ground=((37510,FOREST_PIXIE),(37870,COPPER_GOLEM),(38230,FOREST_PIXIE)),
+                     ledges=((37420,FOREST_PIXIE),(37760,COPPER_GOLEM),(38060,FOREST_PIXIE))),
         hunting_spot("유리씨 나무",
-                     ground=((38560,BRASS_KEEPER),(38960,HONEY_GEM),(39330,HONEY_GEM),(39660,BRASS_KEEPER)),
-                     ledges=((38460,HONEY_GEM),(38910,BRASS_KEEPER),(39390,HONEY_GEM),(39800,STAR_KEEPER))),
+                     ground=((38560,COPPER_GOLEM),(38960,FOREST_PIXIE),(39330,FOREST_PIXIE),(39660,COPPER_GOLEM)),
+                     ledges=((38460,FOREST_PIXIE),(38910,COPPER_GOLEM),(39390,FOREST_PIXIE),(39800,FOREST_MUSHMOM))),
         hunting_spot("별갓 전망대",
-                     ground=((40060,HONEY_GEM),(40472,STAR_KEEPER),(40745,BRASS_KEEPER)),
-                     ledges=((40320,HONEY_GEM),(40560,BRASS_KEEPER))),
+                     ground=((40060,FOREST_PIXIE),(40472,FOREST_MUSHMOM),(40745,COPPER_GOLEM)),
+                     ledges=((40320,FOREST_PIXIE),(40560,COPPER_GOLEM))),
     ), boss_waves=6),
 )
 

@@ -407,8 +407,6 @@ class Renderer:
             phase_tick = elapsed
         elif game.tick < m["hurt"]:
             action = "hit1"
-            if species.get("image") in ("canopy_mobs","terrace_mobs"):
-                phase = 1 - (m["hurt"] - game.tick) / 10
         elif m["windup"] or after_strike < 10:
             # Body-attack monsters use their leap or movement cels. Casters
             # play their longer source attack in step with the damage tick.
