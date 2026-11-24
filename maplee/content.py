@@ -2,6 +2,7 @@
 
 from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
+from .open_wildlife import OPEN_MOB_BOOKS, OPEN_MOB_FRAMES
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
 WORLD_LAYOUT = 2
@@ -17,7 +18,7 @@ WORLD_WIDTH = 24700
 
 AREAS = [
     dict(name="솔방울 마을", start=0, end=2450, icon="🍄", material="stone", image="daylight", view=0),
-    dict(name="종꽃 숲길", start=2450, end=9100, icon="🌿", material="terrain", image="daylight", view=270),
+    dict(name="종꽃 숲길", start=2450, end=9100, icon="🌿", material="terrain", image="bellflower", view=270),
     dict(name="푸른돛 항구", start=9100, end=12000, icon="⚓", material="stone", image="daylight", view=870),
     dict(name="유리빛 광산", start=12000, end=14900, icon="💎", material="stone", image="cavern", view=0),
     dict(name="달바람 고원", start=14900, end=18300, icon="🌙", material="terrain", image="highland", view=0),
@@ -525,6 +526,9 @@ SPECIES = [{'name': '슬라임',
 
 for _species in SPECIES:
     _source, _species["body_size"], _species["framebooks"] = MOB_BOOKS[_species["sprite"]]
+    if _source in OPEN_MOB_BOOKS:
+        _species["framebooks"] = OPEN_MOB_BOOKS[_source]
+        _species["image"] = "open_wildlife"
 
 
 for name, level, row, loot, equipment in (
@@ -540,12 +544,14 @@ for name, level, row, loot, equipment in (
 
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
-    if species.get("image") == "expansion_mobs":
+    image = species.get("image")
+    if image == "expansion_mobs":
         frame = {"stand":0, "move":ticks//6%4, "attack1":5, "hit1":6, "die1":7}[action]
         return frame*64, species["sprite"]*64, 64, 64, -32, -60
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
-    return MOB_FRAMES[first + bisect_right(ends, position)]
+    frames = OPEN_MOB_FRAMES if image == "open_wildlife" else MOB_FRAMES
+    return frames[first + bisect_right(ends, position)]
 
 
 for species, pool in zip(SPECIES, (
@@ -721,6 +727,7 @@ IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-sw
 IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png", expansion_mobs="expansion-mobs.png",
               daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
               highland="highland-panorama-tall.png", ladder="ladder.png")
+IMAGES.update(bellflower="bellflower-forest.png", open_wildlife="open-wildlife.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 IMAGES.update(custom_avatar="maplee-avatars.png", frost_avatar="hero-frost-lancer.png")

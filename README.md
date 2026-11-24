@@ -49,6 +49,11 @@ node server/local.mjs
 - `maplee/engine.py`는 물리, 전투, 몬스터 AI, 진행을 담당합니다.
 - `maplee/render.py`는 필드를, `maplee/windows.py`는 HUD와 게임 창을 별도 캔버스에 그립니다. `maplee/ui.py`에서 입력을 게임 동작에 연결합니다.
 - `tools/draw_hero.py`는 재생성할 때만 공개 렌더러에 접속합니다. 이 파일을 실행한 뒤 `tools/draw_worn.py`를 실행하면 캐릭터와 장착 장비 시트를 재생성합니다. `tools/draw_townsfolk.py`와 `tools/draw_combat.py`는 마을 NPC와 전투 효과를 그립니다. 도트 생성 스크립트는 Pillow를 사용합니다.
+- `tools/pack_open_art.py --help`에서 종꽃 숲길 배경과 몬스터 시트의 재생성 입력을 확인할 수 있습니다.
 - `python -m unittest discover -s tests`로 맵, 타격 타이밍, 보스 드롭, 제작, 세이브 호환성을 검사합니다.
 
 - 빌드 후 `node --test tests/accounts.test.mjs`로 계정 격리, 캐릭터 슬롯 4개, 저장 충돌과 로그아웃을 검사합니다.
+
+## 공개 에셋 출처
+
+종꽃 숲길의 나무 레이어는 Luis Zuno의 [SunnyLand Tall Forest Environment](https://opengameart.org/content/sunnyland-tall-forest-environment) (CC0)를 사용했습니다. 몬스터 시트에는 rvros의 [Pixel art animated Slime](https://opengameart.org/content/pixel-art-animated-slime), Spring Spring의 [SNAILOW](https://opengameart.org/content/snailow), Segel의 [Little Monster Mushroom](https://opengameart.org/content/little-monster-mushroom) (각 CC0)과 Admurin의 [Enemy Galore I](https://opengameart.org/content/enemy-galore-i) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 사용했습니다. 프레임 배열, 크기, 색상, 발 위치를 Maplee에 맞게 조정했습니다.

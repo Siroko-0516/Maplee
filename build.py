@@ -45,7 +45,9 @@ def build(output, cache):
     cache.mkdir(parents=True, exist_ok=True)
     vendor = output / "vendor"
     vendor.mkdir(exist_ok=True)
-    shutil.copyfile(ROOT / "third_party/Brython-LICENSE.txt", vendor / "Brython-LICENSE.txt")
+    credits = ("Brython-LICENSE.txt", "OPEN-ART.txt")
+    for name in credits:
+        shutil.copyfile(ROOT / "third_party" / name, vendor / name)
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     page = page.replace('<link rel="stylesheet" href="maplee/ui.css">', '<style>\n' +
                         (ROOT / "maplee/ui.css").read_text(encoding="utf-8") + '\n</style>')
@@ -58,7 +60,7 @@ def build(output, cache):
     if page.count(expect) != 1:
         raise ValueError("Expected one Python entry point")
     modules = "\n\n".join(inline_python(ROOT / "maplee" / (name + ".py"))
-                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
+                            for name in ("gear_data", "wildlife_data", "open_wildlife", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
     packed = modules + "\n\ngame_app = App()"
     if "</script" in packed.lower():
         raise ValueError("Unexpected HTML delimiter in Python source")
@@ -72,7 +74,7 @@ def build(output, cache):
     (output / "index.html").write_text(page, encoding="utf-8")
     bundle = {}
     web_files = [output/"index.html", *(assets/name for name in IMAGES.values()),
-                 *(vendor/name for name in (*RUNTIME,"Brython-LICENSE.txt"))]
+                 *(vendor/name for name in (*RUNTIME,*credits))]
     for source in web_files:
         path = '/' + source.relative_to(output).as_posix()
         raw = source.read_bytes()
