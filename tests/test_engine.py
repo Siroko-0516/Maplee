@@ -1,6 +1,6 @@
 import json
 import unittest
-from maplee.content import AREAS, ITEMS, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
+from maplee.content import AREAS, ITEMS, LEDGES, LEDGE_DEPTH, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
 from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, Game, area_at, ground_at, monster_bounds, monster_feet_y
 
 
@@ -62,6 +62,15 @@ class WorldTests(unittest.TestCase):
             restored = Game({"level":14, "worldLayout":2, "x":round(authored*1.25)})
             self.assertAlmostEqual(restored.p["x"], map_x(authored), delta=1)
             self.assertEqual(Game(restored.p).p["x"], restored.p["x"])
+
+    def test_platform_surfaces_have_separate_bodies(self):
+        for i, ledge in enumerate(LEDGES):
+            for other in LEDGES[:i]:
+                overlap = min(ledge["x"]+ledge["w"],other["x"]+other["w"]) - max(ledge["x"],other["x"])
+                if overlap > 0:
+                    self.assertGreaterEqual(abs(ledge["y"]-other["y"]),LEDGE_DEPTH,(ledge,other))
+        x = map_x(5500)
+        self.assertEqual(Game({"level":8,"x":x,"worldLayout":3}).p["x"],x)
 
     def test_ladder_reaches_floating_ledge_and_returns_to_ground(self):
         x, top, bottom = LADDERS[0]

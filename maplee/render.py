@@ -2,7 +2,7 @@
 from math import ceil, cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
+from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, LEDGE_DEPTH, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -267,11 +267,11 @@ class Renderer:
                 continue
             ctx.save()
             ctx.beginPath()
-            ctx.roundRect(x, y - 5, w, 32, 5)
+            ctx.roundRect(x, y - 5, w, LEDGE_DEPTH, 5)
             ctx.clip()
             ctx.translate(0, y - 5)
             self.tile_band(material, x, x + w)
-            self.rect(x, 28, w, 4, "#233121aa")
+            self.rect(x, LEDGE_DEPTH-4, w, 4, "#233121aa")
             ctx.restore()
         for x, top, bottom in LADDERS:
             if area["start"] <= x < area["end"] and left-14 < x < right+14:

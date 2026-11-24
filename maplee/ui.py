@@ -192,14 +192,17 @@ class App:
             return
         action = self.game.p["hotbar"][i]
         if action in ("hp", "mp"):
-            if self.game.heal(action == "mp"):
-                self.save()
+            self.use_potion(action == "mp")
         elif action == "skill":
             self.game.start_attack(True)
         elif action == "support":
             self.game.support()
         elif action == "home":
             self.home()
+
+    def use_potion(self, mana):
+        if not self.paused and self.renderer.ready and self.game.heal(mana):
+            self.save()
 
     def toggle_pause(self):
         if self.world.actor:
@@ -217,6 +220,8 @@ class App:
         if toggle and self.panel == (id, npc):
             self.close_panel()
             return
+        if self.screen.coarse:
+            self.screen.reset_pointers(None)
         self.panel = (id, npc)
         if id == "shop":
             self.category["shop"] = "buy"
@@ -265,6 +270,12 @@ class App:
             self.account()
         elif id == "hotkeys":
             self.settings()
+        elif id == "mobile_menu":
+            entries = [(label,lambda key=key:self.show_panel(key)) for key,label in MENUS.items()]
+            entries.append(("마을 귀환",self.return_from_menu))
+            if not self.world.actor:
+                entries.append(("게임 계속" if self.paused else "일시정지",self.pause_from_menu))
+            self.rows.append(("mobile_actions", entries))
         elif id == "shop":
             self.shop(npc)
         elif id == "trainer":
@@ -276,6 +287,14 @@ class App:
         else:
             self.note("출구에서 ↑를 누르면 다음 지역으로 이동해요. 적의 공격 표시를 보고 뒤로 물러나거나 점프하세요.")
         self.screen.refresh()
+
+    def return_from_menu(self):
+        self.close_panel()
+        self.home()
+
+    def pause_from_menu(self):
+        self.close_panel()
+        self.toggle_pause()
 
     def character(self):
         self.rows.append(("stats",))
