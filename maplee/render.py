@@ -480,7 +480,7 @@ class Renderer:
             for i in range(-4, 5):
                 self.rect(x + i * data / 4, y + (abs(i) - 4) * age * .45, 7, 4, "#ffa48e")
 
-    def draw(self, game, paused, profile=None, portal_fade=0):
+    def draw(self, game, paused, profile=None, portal_fade=0, peers=()):
         width,height = self.view_width,self.view_height
         self.ctx.setTransform(int(self.canvas.attrs["width"])/width,0,0,int(self.canvas.attrs["height"])/height,0,0)
         self.ctx.imageSmoothingEnabled = False
@@ -507,6 +507,13 @@ class Renderer:
                 height = 28 * sin(min(1, elapsed / 24) * pi)
                 for index, id in enumerate([None] + drop["items"]):
                     self.icon(7 if id is None else item_icon(id), drop["x"] + index * 13 - 11, drop["y"] - 10 - height, 18)
+        for player, px, py in peers:
+            if left-80 < px < right+80 and top-20 < py < top+height+90:
+                equipment = player["equipment"]
+                lean = MELEE_LEAN[player["swing"]]*player["facing"] if player["swing"] is not None else 0
+                self.avatar(ctx,equipment,equipment.get("weapon"),player["frame"],px+lean,py,80,
+                            player["facing"],swing_tick=player["swing"],job=player["job"])
+                self.label(f"Lv.{player['level']} {player['name']}",px,py-74,"#a7e6ff")
         frame, facing = self.player_pose(game)
         opacity = .48 if tick < game.inv_until and tick % 6 < 3 and tick >= game.hurt_until else 1
         equipment = game.p["equipment"]

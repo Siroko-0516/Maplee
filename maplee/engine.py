@@ -34,6 +34,16 @@ def monster_feet_y(monster, tick):
     return monster["y"] - spec.get("hover", 0) - sin((tick + monster["phase"]) / 10) * 3
 
 
+def shared_patrol(monster, clock):
+    width = monster["right"] - monster["left"]
+    offset = monster["home"] - monster["left"]
+    origin = offset if monster["id"] % 2 else 2 * width - offset
+    traveled = (clock * .06 * monster["spec"]["speed"] + origin) % (2 * width)
+    if traveled <= width:
+        return monster["left"] + traveled, 1
+    return monster["right"] - (traveled - width), -1
+
+
 def monster_bounds(monster, tick):
     spec = monster["spec"]
     width, height = spec.get("body_size", (36, 36))
@@ -108,6 +118,8 @@ class Game:
         self.inv_until = self.hurt_until = self.support_until = 0
         self.skill_cd = self.support_cd = 0
         self.drops, self.effects, self.monsters = [], [], []
+        self.shared_hit = self.solo_monsters = None
+        self.shared_clock = 0.0
         self.notice, self.loot, self.sound = "", None, None
         self.dirty = True
         self._stats_cache = None
@@ -558,7 +570,8 @@ class Game:
         high = ledge["x"] + ledge["w"] - 16 if ledge else min(area["end"] - 24, x + stride)
         monster = {"x": x, "y": ledge["y"] if ledge else ground_at(x), "home": x, "kind": kind, "spec": spec,
                    "left": low, "right": high, "dir": 1 if index % 2 else -1, "hp": spec["hp"], "dead": None,
-                   "state": "patrol", "hurt": 0, "windup": 0, "strike": -100, "next": 0, "ledge": ledge, "phase": index * 31}
+                   "state": "patrol", "hurt": 0, "windup": 0, "strike": -100, "next": 0, "ledge": ledge, "phase": index * 31,
+                   "id": len(self.monsters), "life": 0, "shared_until": 0}
         self.monsters.append(monster)
         return monster
 
@@ -573,8 +586,57 @@ class Game:
                     x = left + ledge["w"] // 2
                     self.spawn(x, kind, len(self.monsters), ledge)
 
+    def enter_shared_world(self, on_hit):
+        self.solo_monsters, self.monsters = self.monsters, []
+        self.populate()
+        self.shared_hit = on_hit
+        self.effects.clear()
+        self.swing = None
+
+    def leave_shared_world(self):
+        if self.shared_hit is None:
+            return
+        self.shared_hit = None
+        self.monsters, self.solo_monsters = self.solo_monsters, None
+        self.effects.clear()
+        self.swing = None
+
+    def sync_shared_monsters(self, rows):
+        for id, hp, life, until in rows:
+            monster = self.monsters[id]
+            if until and (monster["dead"] is None or monster["life"] != life):
+                monster.update(dead=self.tick, windup=0)
+            elif not until and monster["dead"] is not None:
+                monster.update(dead=None, windup=0, next=self.tick+30)
+            monster.update(hp=hp, life=life, shared_until=until)
+
+    def shared_monster_step(self):
+        region = area_at(self.p["x"])
+        for monster in self.monsters:
+            if area_at(monster["home"]) != region:
+                continue
+            until = monster["shared_until"]
+            if until and self.shared_clock >= until:
+                monster.update(hp=monster["spec"]["hp"], dead=None, shared_until=0,
+                               life=monster["life"]+1, next=self.tick+30)
+            if monster["dead"] is not None:
+                continue
+            x, facing = shared_patrol(monster, self.shared_clock)
+            monster["x"] = x
+            if not monster["ledge"]:
+                monster["y"] = ground_at(x)
+            if not monster["windup"]:
+                monster["dir"] = facing
+
     def hit(self, monster, power, facing, impact="impact"):
         spec = monster["spec"]
+        if self.shared_hit is not None:
+            if self.shared_hit(monster, power):
+                monster["hurt"] = self.tick + 10
+                if not spec.get("elite"):
+                    monster["windup"] = 0
+                self.show_hit(monster, power, facing, impact)
+            return
         monster["hp"] -= power
         monster["hurt"] = self.tick + 10
         monster["hit_dir"] = facing
@@ -584,12 +646,15 @@ class Game:
         if spec.get("aggro") and monster["state"] != "return":
             monster["state"] = "pursuit"
         self.move_monster(monster, monster["x"] + facing * 8, 8)
+        self.show_hit(monster, power, facing, impact)
+        if monster["hp"] <= 0:
+            self.reward(monster)
+
+    def show_hit(self, monster, power, facing, impact):
         _, top, _, bottom = monster_bounds(monster, self.tick)
         lift = 25 if impact == "stab_hit" else 3
         self.effects.append(("damage", self.tick, monster["x"], top-lift, 42, (power, 0)))
         self.effects.append((impact, self.tick, monster["x"], (top + bottom) / 2, 16, facing))
-        if monster["hp"] <= 0:
-            self.reward(monster)
 
     def reward(self, monster):
         spec = monster["spec"]
@@ -597,6 +662,10 @@ class Game:
         zone = HUNT_ZONES[area_at(monster["home"])]
         monster["revive_at"] = next_hunting_wave(zone, self.tick, spec.get("elite", False))
         monster["windup"] = 0
+        self.grant_monster_reward(monster, monster["x"])
+
+    def grant_monster_reward(self, monster, x):
+        spec = monster["spec"]
         p = self.p
         p["kills"] += 1
         key = str(monster["kind"])
@@ -613,7 +682,8 @@ class Game:
             items.append(pool[int(random()*len(pool))])
         if random() < .18:
             items.append("tonic" if monster["kind"] % 2 else "potion")
-        self.drops.append({"x": monster["x"], "y": monster["y"], "start": self.tick, "items": items, "gold": spec["gold"]})
+        floor = monster["ledge"]["y"] if monster["ledge"] else ground_at(x)
+        self.drops.append({"x": x, "y": floor, "start": self.tick, "items": items, "gold": spec["gold"]})
 
     def collect(self):
         kept = []
@@ -644,7 +714,7 @@ class Game:
     def monster_step(self, monster):
         tick, p, spec = self.tick, self.p, monster["spec"]
         if monster["dead"] is not None:
-            if tick >= monster["revive_at"]:
+            if self.shared_hit is None and tick >= monster["revive_at"]:
                 monster.update(dead=None, hp=spec["hp"], state="patrol", next=tick + 40)
                 self.move_monster(monster, monster["home"], 500)
             return
@@ -652,7 +722,8 @@ class Game:
         if area_at(monster["home"]) != area_at(p["x"]) or abs(monster["home"]-p["x"]) > active_distance or self.support_value("stealth"):
             if monster["state"] != "patrol" or monster["windup"]:
                 monster.update(state="patrol", windup=0)
-                self.move_monster(monster, monster["home"], 500)
+                if self.shared_hit is None:
+                    self.move_monster(monster, monster["home"], 500)
             return
         offset = p["x"] - monster["x"]
         same_height = abs(monster["y"] - p["y"]) < 37
@@ -670,6 +741,12 @@ class Game:
                 self.take_damage(ceil(spec["attack"] * (1.2 if enraged else 1)), monster)
             return
         if tick < monster["hurt"]:
+            return
+        if self.shared_hit is not None:
+            if same_height and abs(offset) <= reach and tick >= monster["next"]:
+                duration = 24 if enraged else spec.get("windup_ticks", 34 if elite else 17)
+                monster.update(dir=direction(offset, monster["dir"]), range=reach,
+                               windup=tick+duration, windup_duration=duration)
             return
         aggro = spec.get("aggro", 0)
         near_home = abs(p["x"] - monster["home"]) <= aggro + 70
@@ -809,6 +886,8 @@ class Game:
         if queued or "KeyZ" in keys:
             self.start_attack()
         self.move_player(dx, dy)
+        if self.shared_hit is not None:
+            self.shared_monster_step()
         self.update_attack()
         self.effect_step()
         for monster in self.monsters:

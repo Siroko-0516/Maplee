@@ -4,9 +4,11 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import worker from "../dist/server/index.js";
+import { sqliteWorld } from "./sqlite-world.mjs";
 
 mkdirSync(".maplee-data", { recursive: true });
 const db = new DatabaseSync(".maplee-data/accounts.sqlite");
+const WORLD = sqliteWorld(".maplee-data/world.sqlite");
 db.exec("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS objects (key TEXT PRIMARY KEY, value TEXT, etag TEXT)");
 const get = db.prepare("SELECT value,etag FROM objects WHERE key=?");
 const insert = db.prepare("INSERT OR IGNORE INTO objects VALUES (?,?,?)");
@@ -36,7 +38,7 @@ createServer(async (req,res) => {
     const headers = new Headers(req.headers);
     headers.set("CF-Connecting-IP",req.socket.remoteAddress);
     const result = await worker.fetch(new Request(new URL(req.url,`http://${host}:${port}`),
-      { method:req.method,headers, ...(hasBody ? { body:Readable.toWeb(req),duplex:"half" } : {}) }),{ SAVES });
+      { method:req.method,headers, ...(hasBody ? { body:Readable.toWeb(req),duplex:"half" } : {}) }),{ SAVES, WORLD });
     res.writeHead(result.status,Object.fromEntries(result.headers));
     if (result.body) Readable.fromWeb(result.body).pipe(res);
     else res.end();

@@ -7,6 +7,7 @@ from .hunting import HUNT_ZONES
 from .lobby import Lobby
 from .render import Renderer, number
 from .windows import GameInterface
+from .world import SharedWorld
 
 MENUS = {"character": "능력치", "skills": "스킬", "inventory": "장비·가방", "journal": "퀘스트",
          "map": "지도", "bestiary": "도감", "account": "계정", "hotkeys": "설정"}
@@ -54,6 +55,7 @@ class App:
         self.renderer = Renderer(document["game-canvas"])
         self.game.set_camera_view(self.renderer.view_width,self.renderer.view_height)
         self.screen = GameInterface(self, document["interface"], MENUS)
+        self.world = SharedWorld(self)
         window.bind("resize", self.resize)
         self.bind()
         self.lobby = Lobby(self)
@@ -81,9 +83,11 @@ class App:
         self.screen.canvas.focus()
         self.toast("방향키 이동 · Space 점프 · Z 공격 · ↑ 포털·대화")
         self.save()
+        self.world.start()
 
     def leave_character(self):
         self.active = False
+        self.world.leave()
         self.profile = None
         self.close_panel()
         self.clear_input()
@@ -103,7 +107,7 @@ class App:
         window.bind("keydown", self.key_down)
         window.bind("keyup", lambda event: self.keys.discard(event.code))
         window.bind("blur", self.clear_input)
-        window.bind("pagehide", lambda _: self.save(True))
+        window.bind("pagehide", self.page_hidden)
         document.bind("visibilitychange", self.visibility_changed)
 
     def resize(self, _=None):
@@ -116,6 +120,10 @@ class App:
             self.clear_input()
             self.save(True)
         self.previous = None
+
+    def page_hidden(self, _):
+        self.save(True)
+        self.world.release()
 
     def key_down(self, event):
         if not self.active or event.metaKey or event.ctrlKey or event.altKey:
@@ -194,6 +202,9 @@ class App:
             self.home()
 
     def toggle_pause(self):
+        if self.world.actor:
+            self.toast("공용 월드에서는 게임이 계속 진행돼요.")
+            return
         self.clear_input()
         self.paused = not self.paused
         self.screen.refresh()
@@ -379,8 +390,16 @@ class App:
 
     def account(self):
         self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
+        self.row("공용 월드", self.world.status,
+                 "혼자 하기" if self.world.enabled else "접속", self.toggle_world)
         self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
         self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
+
+    def toggle_world(self):
+        if self.world.enabled:
+            self.world.leave()
+        else:
+            self.world.start()
 
     def manual_save(self):
         if self.save():
@@ -492,6 +511,7 @@ class App:
             window.requestAnimationFrame(self.frame)
             return
         game = self.game
+        self.world.tick(now)
         while self.accumulator >= STEP:
             if self.renderer.ready and not self.paused:
                 game.step(self.keys | set(self.pointers.values()))
@@ -501,6 +521,7 @@ class App:
         if game.dirty:
             self.hud()
         self.messages()
-        self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320))
+        self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320),
+                           self.world.visible_players(now))
         self.screen.draw(now)
         window.requestAnimationFrame(self.frame)

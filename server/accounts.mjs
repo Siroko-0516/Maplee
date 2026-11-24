@@ -101,7 +101,7 @@ function brief(slot, document) {
     level: document.progress?.level || 1, updated: document.updated };
 }
 
-async function accounts(request, store) {
+async function accounts(request, store, world) {
   const { pathname, origin } = new URL(request.url);
   const method = request.method;
   if (!["GET", "HEAD"].includes(method) && request.headers.get("Origin") !== origin)
@@ -145,6 +145,9 @@ async function accounts(request, store) {
   if (pathname === "/api/session" && method === "GET")
     return reply({ account: session.login, slots: await slots(store,session.id) });
 
+  const worldAction = /^\/api\/world\/(join|sync|leave)$/.exec(pathname)?.[1];
+  if (worldAction) return await sharedWorld(request, store, world, session, worldAction);
+
   const match = /^\/api\/slot\/([0-3])$/.exec(pathname);
   if (!match) return fail(404,"페이지를 찾을 수 없어요.");
   const slot = Number(match[1]);
@@ -186,7 +189,7 @@ export default {
     if (!new URL(request.url).pathname.startsWith("/api/")) return asset(request);
     if (!env.SAVES) return fail(503,"계정 저장소가 아직 연결되지 않았어요.");
     try {
-      return await accounts(request,env.SAVES);
+      return await accounts(request,env.SAVES,env.WORLD);
     } catch (error) {
       console.error("Maplee storage operation failed", error?.name || "Error");
       return fail(503,"저장소에 연결할 수 없어요. 잠시 후 다시 시도해주세요.");

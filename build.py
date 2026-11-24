@@ -60,7 +60,7 @@ def build(output, cache):
     if page.count(expect) != 1:
         raise ValueError("Expected one Python entry point")
     modules = "\n\n".join(inline_python(ROOT / "maplee" / (name + ".py"))
-                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
+                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "world", "ui"))
     packed = modules + "\n\ngame_app = App()"
     if "</script" in packed.lower():
         raise ValueError("Unexpected HTML delimiter in Python source")
@@ -68,7 +68,9 @@ def build(output, cache):
     page = page.replace(expect, packed)
     assets = output / "assets"
     assets.mkdir(exist_ok=True)
-    from maplee.content import IMAGES
+    from maplee.content import AREAS, IMAGES, ITEMS, SLOTS, WORLD_LAYOUT
+    from maplee.engine import Game, area_at
+    from maplee.hunting import HUNT_ZONES
     for name in IMAGES.values():
         shutil.copyfile(ROOT / "assets" / name, assets / name)
     (output / "index.html").write_text(page, encoding="utf-8")
@@ -86,7 +88,26 @@ def build(output, cache):
     worker.mkdir(exist_ok=True)
     main = (ROOT/"server/accounts.mjs").read_text().removeprefix('import { asset } from "./static.mjs";\n')
     static = (ROOT/"server/static.mjs").read_text()
-    (worker/"index.js").write_text("const ASSETS = " + json.dumps(bundle) + ";\n" + static + "\n" + main)
+    shared = (ROOT/"server/world.mjs").read_text()
+    monsters = []
+    for monster in Game().monsters:
+        region = area_at(monster["home"])
+        zone = HUNT_ZONES[region]
+        spec = monster["spec"]
+        recovery = zone["recovery"] + (zone["boss_waves"]*zone["wave"] if spec.get("elite") else 0)
+        monsters.append({
+            **{key:monster[key] for key in ("home", "left", "right", "y")},
+            "direction":monster["dir"], "region":region, "hp":spec["hp"],
+            "speed":spec["speed"], "ledge":bool(monster["ledge"]),
+            "wave":round(zone["wave"]*1000/60), "recovery":round(recovery*1000/60),
+        })
+    shared_world = {"layout":WORLD_LAYOUT, "ends":[area["end"] for area in AREAS],
+                  "monsters":monsters,
+                  "items":{slot:[key for key, item in ITEMS.items() if item.get("slot") == slot] for slot in SLOTS}}
+    (worker/"index.js").write_text(
+        "const ASSETS = " + json.dumps(bundle) + ";\nconst SHARED_WORLD = " + json.dumps(shared_world) +
+        ";\n" + static + "\n" + shared + "\n" + main, encoding="utf-8"
+    )
     return output
 
 
