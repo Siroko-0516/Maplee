@@ -15,6 +15,7 @@ START_X = map_x(310)
 SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
 GROUND_XS = [x for x, _ in GROUND]
 AREA_ENDS = [area["end"] for area in AREAS]
+LOWEST_GROUND = max(y for _, y in GROUND)
 
 
 def limit(value, low, high):
@@ -103,7 +104,7 @@ class Game:
         self.dirty = True
         self._stats_cache = None
         self.restore(saved)
-        self.camera = self.camera_target()
+        self.set_camera_view(WIDTH,HEIGHT)
         self.populate()
 
     def restore(self, saved):
@@ -378,15 +379,26 @@ class Game:
         count = self.p["quests"][index]["count"]
         return f"{quest['who']}에게 보고" if count >= quest["target"] else f"{quest['name']} {count}/{quest['target']}"
 
+    def set_camera_view(self, width, height):
+        self.view_width, self.view_height = width,height
+        self.camera = self.camera_target()
+        self.camera_y = self.camera_vertical_target()
+
     def camera_target(self):
         area = AREAS[area_at(self.p["x"])]
-        return limit(self.p["x"] - WIDTH/2, area["start"], area["end"]-WIDTH)
+        width = self.view_width
+        return limit(self.p["x"]-width/2,area["start"],area["end"]-width)
+
+    def camera_vertical_target(self):
+        anchor = self.view_height*.71
+        return limit(self.p["y"]-anchor,-216,max(0,LOWEST_GROUND-anchor))
 
     def travel(self, x):
         if area_at(x) != area_at(self.p["x"]):
             self.effects.clear()
         self.p["x"], self.p["y"] = x, ground_at(x)
         self.camera = self.camera_target()
+        self.camera_y = self.camera_vertical_target()
         self.vy, self.surface, self.ladder, self.swing, self.walk = 0, "ground", None, None, 0
         self.land_until = 0
         self.dirty = True
@@ -794,7 +806,11 @@ class Game:
         if self.tick % 90 == 0 and self.p["mp"] < self.stats()["mp"]:
             self.p["mp"] += 1
             self.dirty = True
-        target = self.camera_target()
-        self.camera += (target - self.camera) * .19
-        if abs(target - self.camera) < .1:
-            self.camera = target
+        target_x = self.camera_target()
+        target_y = self.camera_vertical_target()
+        self.camera += (target_x-self.camera)*.19
+        self.camera_y += (target_y-self.camera_y)*.17
+        if abs(target_x-self.camera) < .1:
+            self.camera = target_x
+        if abs(target_y-self.camera_y) < .1:
+            self.camera_y = target_y

@@ -1,8 +1,8 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
-from math import cos, sin, pi
+from math import ceil, cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, AVATAR_JOBS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, avatar_style, monster_art
+from .content import AREAS, AVATAR_JOBS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, avatar_style, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -58,9 +58,16 @@ class Renderer:
 
     def resize(self, _=None):
         bounds = self.canvas.getBoundingClientRect()
-        fit = min(number(bounds.width) / WIDTH, number(bounds.height) / HEIGHT)
-        multiplier = max(1, min(3, (fit or 1) * number(window.devicePixelRatio or 1)))
-        width, height = round(WIDTH * multiplier), round(HEIGHT * multiplier)
+        css_width = number(bounds.width) or WIDTH
+        css_height = number(bounds.height) or HEIGHT
+        # Match the actual field ratio. Tall screens show a narrower part of
+        # the map, and ultrawide screens show a slightly shorter field.
+        fit = max(css_width/1440,css_height/HEIGHT)
+        self.view_width = round(css_width/fit)
+        self.view_height = round(css_height/fit)
+        multiplier = limit(fit*number(window.devicePixelRatio or 1),1,3)
+        width = round(self.view_width*multiplier)
+        height = round(self.view_height*multiplier)
         if self.canvas.attrs["width"] != str(width) or self.canvas.attrs["height"] != str(height):
             self.canvas.attrs["width"] = str(width)
             self.canvas.attrs["height"] = str(height)
@@ -180,16 +187,16 @@ class Renderer:
         self.ctx.drawImage(self.images[sheet], index % 8 * 32, index // 8 * 32, 32, 32,
                            round(x - size / 2), round(y - size / 2), size, size)
 
-    def backdrop(self, area, left):
+    def backdrop(self, area, left, camera_y):
         key = area["image"]
         width, height = self.sizes[key]
         scroll = round(max(0,left-area["start"])*.33)
         source = (area["view"] + scroll)%width
-        top = max(0,(height-HEIGHT)//2)
-        rows = min(HEIGHT,height)
+        rows = min(self.view_height,height)
+        top = limit(PANORAMA_Y+round(camera_y*.5),0,height-rows)
         x = 0
-        while x < WIDTH:
-            span = min(WIDTH-x,width-source)
+        while x < self.view_width:
+            span = min(self.view_width-x,width-source)
             self.ctx.drawImage(self.images[key],source,top,span,rows,x,0,span,rows)
             x += span
             source = 0
@@ -207,7 +214,7 @@ class Renderer:
             self.ctx.drawImage(image,0,8,width,height,left,rung,width,height)
         self.ctx.drawImage(image,0,22,width,5,left,end-2,width,5)
 
-    def tile_band(self, material, left, right, deep=False):
+    def tile_band(self, material, left, right, depth=0):
         ctx = self.ctx
         image = self.images[material]
         width, height = self.sizes[material]
@@ -218,13 +225,17 @@ class Renderer:
             if mirrored:
                 ctx.scale(-1, 1)
             ctx.drawImage(image, 0, 0)
-            if deep:
-                ctx.translate(0, height * 2)
-                ctx.scale(1, -1)
-                ctx.drawImage(image, 0, height - 52, width, 52, 0, height - 52, width, 52)
+            for offset in range(0,max(0,ceil(depth-height)),52):
+                reflected = offset % 104 == 0
+                ctx.save()
+                ctx.translate(0,height+offset+(52 if reflected else 0))
+                if reflected:
+                    ctx.scale(1,-1)
+                ctx.drawImage(image,0,height-52,width,52,0,0,width,52)
+                ctx.restore()
             ctx.restore()
 
-    def ground(self, material, left, right, stone):
+    def ground(self, material, left, right, stone, bottom):
         ctx = self.ctx
         segments = []
         for (x, y), (end, end_y) in zip(GROUND, GROUND[1:]):
@@ -238,22 +249,24 @@ class Renderer:
         ctx.moveTo(left, ground_at(left) - 5)
         for _, end, slope, offset in segments:
             ctx.lineTo(end, slope * end + offset)
-        ctx.lineTo(right, HEIGHT)
-        ctx.lineTo(left, HEIGHT)
+        ctx.lineTo(right, bottom)
+        ctx.lineTo(left, bottom)
         ctx.closePath()
         ctx.clip()
-        self.rect(left, 283, right - left, HEIGHT, "#887765" if stone else "#564522")
+        if bottom > 283:
+            self.rect(left,283,right-left,bottom-283,"#887765" if stone else "#564522")
         for start, end, slope, offset in segments:
             ctx.save()
             ctx.beginPath()
-            ctx.rect(start - .5, 0, end - start + 1, HEIGHT)
+            ctx.rect(start - .5, 0, end - start + 1, bottom)
             ctx.clip()
             ctx.transform(1, slope, 0, 1, 0, offset)
-            self.tile_band(material, start - .5, end + .5, True)
+            depth = bottom-min(ground_at(start),ground_at(end))+5
+            self.tile_band(material,start-.5,end+.5,depth)
             ctx.restore()
         ctx.restore()
 
-    def scenery(self, game, area, left, right):
+    def scenery(self, game, area, left, right, bottom):
         ctx = self.ctx
         material = area["material"]
         for prop in PROPS:
@@ -264,7 +277,7 @@ class Renderer:
             height = round(width * sh / sw)
             floor = prop[3] if len(prop) > 3 else ground_at(x)
             ctx.drawImage(self.images["props"], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
-        self.ground(material, max(left,area["start"]), min(right,area["end"]), area["material"] == "stone")
+        self.ground(material,max(left,area["start"]),min(right,area["end"]),material=="stone",bottom)
         for ledge in LEDGES:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
             if x < area["start"] or x + w > area["end"] or x + w <= left or x >= right:
@@ -483,22 +496,23 @@ class Renderer:
                 self.rect(x + i * data / 4, y + (abs(i) - 4) * age * .45, 7, 4, "#ffa48e")
 
     def draw(self, game, paused, profile=None, portal_fade=0):
-        self.ctx.setTransform(int(self.canvas.attrs["width"]) / WIDTH, 0, 0, int(self.canvas.attrs["height"]) / HEIGHT, 0, 0)
+        width,height = self.view_width,self.view_height
+        self.ctx.setTransform(int(self.canvas.attrs["width"])/width,0,0,int(self.canvas.attrs["height"])/height,0,0)
         self.ctx.imageSmoothingEnabled = False
         if not self.ready:
-            self.rect(0, 0, WIDTH, HEIGHT, "#183744")
+            self.rect(0,0,width,height,"#183744")
             text = "그래픽 파일을 불러오지 못했어요." if self.failed else f"도트 그래픽 불러오는 중 · {len(self.loaded)}/{len(IMAGES)}"
-            self.label(text, WIDTH / 2, HEIGHT / 2, size=16)
+            self.label(text,width/2,height/2,size=16)
             return
         ctx = self.ctx
         x, y, tick = game.p["x"], game.p["y"], game.tick
-        left = int(game.camera)
-        right = left + WIDTH
+        left,top = round(game.camera),round(game.camera_y)
+        right = left+width
         area = AREAS[area_at(x)]
-        self.backdrop(area,left)
+        self.backdrop(area,left,top)
         ctx.save()
-        ctx.translate(-left,0)
-        self.scenery(game,area,left,right)
+        ctx.translate(-left,-top)
+        self.scenery(game,area,left,right,top+height)
         for m in game.monsters:
             if left - 100 < m["x"] < right + 100:
                 self.monster(game, m)
@@ -557,7 +571,7 @@ class Renderer:
                 self.effect(tick, effect)
         ctx.restore()
         if portal_fade:
-            self.rect(0,0,WIDTH,HEIGHT,f"rgba(19,32,47,{portal_fade*.78})")
+            self.rect(0,0,width,height,f"rgba(19,32,47,{portal_fade*.78})")
         if paused:
-            self.rect(0, 0, WIDTH, HEIGHT, "#11283888")
-            self.label("일시정지", WIDTH / 2, HEIGHT / 2, size=22)
+            self.rect(0,0,width,height,"#11283888")
+            self.label("일시정지",width/2,height/2,size=22)

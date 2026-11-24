@@ -2,7 +2,7 @@
 html, body, .game { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #152936; }
 .game { position: relative; height: 100dvh; }
 canvas { display: block; position: absolute; image-rendering: pixelated; touch-action: none; }
-#game-canvas { width: 100%; height: calc(100% - 80px); object-fit: contain; }
+#game-canvas { width: 100%; height: calc(100% - 80px); }
 #interface { inset: 0; width: 100%; height: 100%; outline: none; }
 #toast { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
 #toast.failure { clip-path: none; inset: 45% 8% auto; width: auto; height: auto; padding: 12px; background: #182a37; color: white; text-align: center; font: 16px sans-serif; }
@@ -16,7 +16,7 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   overflow-y: auto;
   padding: clamp(14px, 5vh, 52px) clamp(12px, 4vw, 44px);
   background: linear-gradient(120deg, #102837e8, #14384f92 58%, #182844e8),
-              url("assets/ember-grove.png") center/cover fixed;
+              url("assets/ember-grove-tall.png") center/cover fixed;
   color: #f5efdf;
   font-size: 16px;
 }

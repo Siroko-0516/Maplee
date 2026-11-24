@@ -5,6 +5,7 @@ from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN,
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
 WORLD_LAYOUT = 2
+PANORAMA_Y = 144
 
 
 def map_x(value):
@@ -717,9 +718,9 @@ JOB_LOOKS = {job: "hero_" + job for job in ("guardian", "ranger", "mage")}
 IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
 
 IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
-IMAGES.update(ember_grove="ember-grove.png", lantern_quay="lantern-quay.png", expansion_mobs="expansion-mobs.png",
-              daylight="daylight-panorama.png", cavern="cavern-panorama.png",
-              highland="highland-panorama.png", ladder="ladder.png")
+IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png", expansion_mobs="expansion-mobs.png",
+              daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
+              highland="highland-panorama-tall.png", ladder="ladder.png")
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
 IMAGES.update(custom_avatar="maplee-avatars.png", frost_avatar="hero-frost-lancer.png")

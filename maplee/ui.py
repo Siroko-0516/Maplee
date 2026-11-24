@@ -53,6 +53,7 @@ class App:
         self.loot_text = ""
         self.loot_end = 0
         self.renderer = Renderer(document["game-canvas"])
+        self.game.set_camera_view(self.renderer.view_width,self.renderer.view_height)
         self.screen = GameInterface(self, document["interface"], MENUS)
         window.bind("resize", self.resize)
         self.bind()
@@ -61,6 +62,7 @@ class App:
 
     def start_character(self, profile, progress):
         self.game = Game(progress)
+        self.game.set_camera_view(self.renderer.view_width,self.renderer.view_height)
         self.profile = profile
         if progress is None:
             job = profile["job"]
@@ -108,6 +110,7 @@ class App:
 
     def resize(self, _=None):
         self.renderer.resize()
+        self.game.set_camera_view(self.renderer.view_width,self.renderer.view_height)
         self.screen.resize()
 
     def visibility_changed(self, _):

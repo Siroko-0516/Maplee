@@ -1,9 +1,9 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
-from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, SLOTS, SPECIES, SUPPORTS, monster_art
+from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, PANORAMA_Y, SLOTS, SPECIES, SUPPORTS, monster_art
 from .hunting import HUNT_ZONES
-from .engine import PORTALS, area_at, ground_at, item_icon, limit
+from .engine import HEIGHT, PORTALS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
 
@@ -459,9 +459,9 @@ class GameInterface:
                 for i,area in enumerate(AREAS):
                     self.bezel("paper",x,y,w,48)
                     image=area["image"]
-                    iw,ih=self.app.renderer.sizes[image]
+                    iw,_=self.app.renderer.sizes[image]
                     sx=min(area["view"],iw-iw//5)
-                    self.atlas(image,sx,ih//4,max(1,iw//5),ih//2,x+4,y+4,70,40)
+                    self.atlas(image,sx,PANORAMA_Y+HEIGHT//4,max(1,iw//5),HEIGHT//2,x+4,y+4,70,40)
                     self.box(x+80,y+3,2,42,"#839a99")
                     self.box(x+77,y+19,8,8, "#a8ce33" if i==current else "#68899d")
                     self.text(area["name"],x+94,y+15,INK,14,True)

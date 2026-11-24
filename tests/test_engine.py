@@ -67,6 +67,22 @@ class WorldTests(unittest.TestCase):
         self.assertIsNone(game.ladder)
         self.assertEqual(game.p["y"],bottom)
 
+    def test_camera_follows_jump_and_portal_with_narrow_view(self):
+        game = self.sandbox(map_x(1150))
+        game.set_camera_view(320,468)
+        self.assertEqual(game.camera,game.p["x"]-160)
+        ground_top = game.camera_y
+        game.jump()
+        self.step(game,20,"ArrowRight")
+        self.assertLess(game.camera_y,ground_top-60)
+        self.assertGreater(game.camera, map_x(1150)-160)
+        self.step(game,90)
+        self.assertAlmostEqual(game.camera_y,game.camera_vertical_target(),places=1)
+        _, destination, _ = PORTALS[0]
+        game.travel(destination)
+        self.assertEqual(game.camera,game.camera_target())
+        self.assertEqual(game.camera_y,game.camera_vertical_target())
+
     def test_reclass_from_existing_save_retains_items_and_health(self):
         game = self.sandbox(saved={"level":14,"job":"guardian","hp":22,"mp":10,
                                    "bag":{"blade":1},"equipment":{"weapon":"blade"}})
