@@ -2,7 +2,6 @@
 
 from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
-from .open_wildlife import OPEN_MOB_BOOKS, OPEN_MOB_FRAMES
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
 WORLD_LAYOUT = 2
@@ -526,9 +525,6 @@ SPECIES = [{'name': '슬라임',
 
 for _species in SPECIES:
     _source, _species["body_size"], _species["framebooks"] = MOB_BOOKS[_species["sprite"]]
-    if _source in OPEN_MOB_BOOKS:
-        _species["framebooks"] = OPEN_MOB_BOOKS[_source]
-        _species["image"] = "open_wildlife"
 
 
 for name, level, row, loot, equipment in (
@@ -544,14 +540,12 @@ for name, level, row, loot, equipment in (
 
 def monster_art(species, action, ticks=0, fraction=None):
     """Look up a packed frame at native timing, or at a combat phase."""
-    image = species.get("image")
-    if image == "expansion_mobs":
+    if species.get("image") == "expansion_mobs":
         frame = {"stand":0, "move":ticks//6%4, "attack1":5, "hit1":6, "die1":7}[action]
         return frame*64, species["sprite"]*64, 64, 64, -32, -60
     first, ends = species["framebooks"][action]
     position = ticks % ends[-1] if fraction is None else max(0, min(ends[-1]-1, int(fraction*ends[-1])))
-    frames = OPEN_MOB_FRAMES if image == "open_wildlife" else MOB_FRAMES
-    return frames[first + bisect_right(ends, position)]
+    return MOB_FRAMES[first + bisect_right(ends, position)]
 
 
 for species, pool in zip(SPECIES, (
@@ -727,30 +721,13 @@ IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-sw
 IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png", expansion_mobs="expansion-mobs.png",
               daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
               highland="highland-panorama-tall.png", ladder="ladder.png")
-IMAGES.update(bellflower="bellflower-forest.png", open_wildlife="open-wildlife.png")
+IMAGES["bellflower"] = "bellflower-forest.png"
 
 AVATAR_JOBS = ("beginner","guardian","ranger","mage","thief","pirate","cleric")
-IMAGES.update(custom_avatar="maplee-avatars.png", frost_avatar="hero-frost-lancer.png")
-AVATAR_STYLES = {"classic":"전 버전 외형","custom":"직접 꾸민 외형","frost":"서리등 창병"}
 STARTER_WEAPONS = {"beginner":"twig","guardian":"blade","ranger":"bow","mage":"wand",
                    "thief":"dagger","pirate":"knuckle","cleric":"chimewand"}
 for _starter in STARTER_WEAPONS.values():
     ITEMS[_starter]["level"] = 1
-
-
-def avatar_style(profile, progress=None):
-    """Resolve explicit selections and preserve customized older profiles."""
-    style = (progress or {}).get("avatarStyle", profile.get("style"))
-    if isinstance(style,str) and style in AVATAR_STYLES:
-        return style
-    return "custom" if any(profile[field] for field in ("sex","skin","hair")) else "classic"
-
-
-def character_starter(profile):
-    job = profile["job"]
-    if avatar_style(profile) == "frost" and job in ("beginner","guardian"):
-        return "frostspear"
-    return STARTER_WEAPONS[job]
 
 
 WORLD_WIDTH = map_x(WORLD_WIDTH)

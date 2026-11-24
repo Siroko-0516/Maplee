@@ -2,7 +2,7 @@
 from math import ceil, cos, sin, pi
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, AVATAR_JOBS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, avatar_style, monster_art
+from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
 from .engine import HEIGHT, LADDERS, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
@@ -38,7 +38,6 @@ class Renderer:
         self.sizes = {}
         self.loaded = set()
         self.failed = set()
-        self.avatar_cache = (None,None)
         for name, path in IMAGES.items():
             img = window.Image.new()
             img.onload = lambda *events, name=name, img=img: self.image_loaded(name, img)
@@ -108,17 +107,7 @@ class Renderer:
                       -round(anchor[0] * scale), -round(anchor[1] * scale), round(width * scale), round(height * scale))
         ctx.restore()
 
-    def custom_avatar(self, profile, job, full):
-        key = (job,profile["sex"],profile["skin"],profile["hair"])
-        if full and self.avatar_cache[0] == key:
-            return self.avatar_cache[1]
-        row = 2*AVATAR_JOBS.index(job)+profile["sex"]
-        image = window.mapleePortrait(self.images["custom_avatar"],row,profile["skin"],profile["hair"],full)
-        if full:
-            self.avatar_cache = (key,image)
-        return image
-
-    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None, rotation=0, thrust=False, profile=None, preview=False):
+    def avatar(self, ctx, equipment, weapon, frame, x, y, size, facing, opacity=1, swing_tick=None, job=None, rotation=0, thrust=False):
         """Draw identical anchored artwork in world and equipment coordinates."""
         ctx.save()
         ctx.globalAlpha = opacity
@@ -138,15 +127,7 @@ class Renderer:
                 body_sheet, column, row = "expansion_swing", int(far_hand), 2*len(MELEE_WEAPONS)
             else:
                 frame, column, row = 11, 3, 2
-        style = avatar_style(profile) if profile else "classic"
-        if style == "frost":
-            cel = 28+int(far_hand) if body_sheet=="expansion_swing" else frame
-            ctx.drawImage(self.images["frost_avatar"],cel*80,0,80,80,left,top,size,size)
-        elif style == "custom":
-            column = 28+int(far_hand) if body_sheet=="expansion_swing" else frame
-            image = self.custom_avatar(profile, job or profile["job"], not preview)
-            ctx.drawImage(image,column*80,0,80,80,left,top,size,size)
-        elif job in JOB_LOOKS:
+        if job in JOB_LOOKS:
             # Each job cel extends eight native pixels around the equipment grid.
             if body_sheet == "expansion_swing":
                 row = 7
@@ -365,7 +346,6 @@ class Renderer:
             phase_tick = elapsed
         elif game.tick < m["hurt"]:
             action = "hit1"
-            phase = 1 - (m["hurt"] - game.tick) / 10
         elif m["windup"] or after_strike < 10:
             # Body-attack monsters use their leap or movement cels. Casters
             # play their longer source attack in step with the damage tick.
@@ -556,7 +536,7 @@ class Renderer:
             swing_tick = None
             y -= 22*sin(progress*pi)
         self.avatar(ctx, equipment, weapon, frame, x + lean, y, 80, facing, opacity,
-                    swing_tick, game.p["job"], rotation, thrust, profile)
+                    swing_tick, game.p["job"], rotation, thrust)
         if tick < game.support_until:
             buff_age = tick - game.support_started
             if buff_age < 48:

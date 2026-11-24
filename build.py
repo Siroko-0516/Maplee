@@ -51,8 +51,8 @@ def build(output, cache):
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     page = page.replace('<link rel="stylesheet" href="maplee/ui.css">', '<style>\n' +
                         (ROOT / "maplee/ui.css").read_text(encoding="utf-8") + '\n</style>')
-    page = page.replace('<script src="maplee/palette.js"></script>', '<script>\n' +
-                        (ROOT/"maplee/palette.js").read_text(encoding="utf-8") + '</script>')
+    page = page.replace('<script src="maplee/request.js"></script>', '<script>\n' +
+                        (ROOT/"maplee/request.js").read_text(encoding="utf-8") + '</script>')
     for name, expected in RUNTIME.items():
         shutil.copyfile(runtime(name, expected, cache), vendor / name)
         page = page.replace(CDN + name, "vendor/" + name)
@@ -60,7 +60,7 @@ def build(output, cache):
     if page.count(expect) != 1:
         raise ValueError("Expected one Python entry point")
     modules = "\n\n".join(inline_python(ROOT / "maplee" / (name + ".py"))
-                            for name in ("gear_data", "wildlife_data", "open_wildlife", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
+                            for name in ("gear_data", "wildlife_data", "combat_art", "content", "hunting", "engine", "render", "classic_skin", "windows", "lobby", "ui"))
     packed = modules + "\n\ngame_app = App()"
     if "</script" in packed.lower():
         raise ValueError("Unexpected HTML delimiter in Python source")

@@ -404,7 +404,7 @@ class GameInterface:
         self.atlas("interface",0,64,120,100,middle-60,y+6,120,113)
         equipment=p["equipment"]
         self.app.renderer.avatar(self.ctx,equipment,equipment.get("weapon"),idle_pose(self.app.game.tick),
-                                 middle,y+114,115,-1,job=p["job"],profile=self.app.profile)
+                                 middle,y+114,115,-1,job=p["job"])
         self.box(middle-60,y+119,120,19,"#374e68")
         self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+128,WHITE,12,True,"center")
         for i,(slot,label) in enumerate(SLOTS.items()):

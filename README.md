@@ -6,7 +6,7 @@ Maplee는 브라우저에서 플레이하는 개인용 픽셀 액션 RPG입니�
 
 ![수호검사의 전투와 몬스터 타격 효과](docs/combat.webp)
 
-회원가입 후 계정마다 캐릭터를 최대 4명까지 만들 수 있습니다. 생성 화면에서는 이전 버전 외형이 기본으로 표시됩니다. 직접 꾸미기를 고르면 직업별 성별, 피부색 5개, 머리색 7개를 선택할 수 있습니다. 게임 내 계정 메뉴에서 두 외형을 바꿀 수 있습니다. 이전에 같은 주소에서 플레이한 브라우저의 세이브는 빈 슬롯의 생성 화면에서 가져올 수 있습니다.
+회원가입 후 계정마다 캐릭터를 최대 4명까지 만들 수 있습니다. 생성 화면에서 각 직업의 기본 외형을 미리 볼 수 있습니다. 이전에 같은 주소에서 플레이한 브라우저의 세이브는 빈 슬롯의 생성 화면에서 가져올 수 있습니다.
 
 기본 공격은 착용한 무기에 따라 검격, 화살, 마력탄으로 달라집니다. 검 기본 공격은 0.4초 동안 24장의 무기 도트를 재생하며 칼끝이 앞으로 뻗을 때 피해를 줍니다. 필드와 장비창에서 같은 캐릭터·장비 도트를 사용합니다. 걷기와 대기의 기본 재생 간격은 [클래식 캐릭터의 공개 동작 메타데이터](https://maplestory.io/api/wz/GMS/83/Character/00002000.img/walk1/0/delay)를 참고했습니다.
 
@@ -49,11 +49,11 @@ node server/local.mjs
 - `maplee/engine.py`는 물리, 전투, 몬스터 AI, 진행을 담당합니다.
 - `maplee/render.py`는 필드를, `maplee/windows.py`는 HUD와 게임 창을 별도 캔버스에 그립니다. `maplee/ui.py`에서 입력을 게임 동작에 연결합니다.
 - `tools/draw_hero.py`는 재생성할 때만 공개 렌더러에 접속합니다. 이 파일을 실행한 뒤 `tools/draw_worn.py`를 실행하면 캐릭터와 장착 장비 시트를 재생성합니다. `tools/draw_townsfolk.py`와 `tools/draw_combat.py`는 마을 NPC와 전투 효과를 그립니다. 도트 생성 스크립트는 Pillow를 사용합니다.
-- `tools/pack_open_art.py --help`에서 종꽃 숲길 배경과 몬스터 시트의 재생성 입력을 확인할 수 있습니다.
+- `tools/pack_open_art.py --help`에서 종꽃 숲길 배경의 재생성 입력을 확인할 수 있습니다.
 - `python -m unittest discover -s tests`로 맵, 타격 타이밍, 보스 드롭, 제작, 세이브 호환성을 검사합니다.
 
 - 빌드 후 `node --test tests/accounts.test.mjs`로 계정 격리, 캐릭터 슬롯 4개, 저장 충돌과 로그아웃을 검사합니다.
 
 ## 공개 에셋 출처
 
-종꽃 숲길의 나무 레이어는 Luis Zuno의 [SunnyLand Tall Forest Environment](https://opengameart.org/content/sunnyland-tall-forest-environment) (CC0)를 사용했습니다. 몬스터 시트에는 rvros의 [Pixel art animated Slime](https://opengameart.org/content/pixel-art-animated-slime), Spring Spring의 [SNAILOW](https://opengameart.org/content/snailow), Segel의 [Little Monster Mushroom](https://opengameart.org/content/little-monster-mushroom) (각 CC0)과 Admurin의 [Enemy Galore I](https://opengameart.org/content/enemy-galore-i) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))를 사용했습니다. 프레임 배열, 크기, 색상, 발 위치를 Maplee에 맞게 조정했습니다.
+종꽃 숲길의 나무 레이어는 Luis Zuno의 [SunnyLand Tall Forest Environment](https://opengameart.org/content/sunnyland-tall-forest-environment) (CC0)를 사용했습니다.

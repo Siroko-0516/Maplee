@@ -1,11 +1,10 @@
 """Python browser UI, input lifecycle and save persistence."""
 import json
 from browser import document, window
-from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, SUPPORTS
+from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS
 from .engine import START_X, STEP, Game, area_at
 from .hunting import HUNT_ZONES
 from .lobby import Lobby
-from .content import AVATAR_STYLES, character_starter
 from .render import Renderer, number
 from .windows import GameInterface
 
@@ -66,7 +65,7 @@ class App:
         self.profile = profile
         if progress is None:
             job = profile["job"]
-            weapon = character_starter(profile)
+            weapon = STARTER_WEAPONS[job]
             self.game.p["job"] = job
             self.game.p["bag"] = {weapon:1}
             self.game.p["equipment"]["weapon"] = weapon
@@ -92,8 +91,7 @@ class App:
     def save(self, keepalive=False):
         if not self.active:
             return False
-        snapshot = {**self.game.p, "avatarStyle": self.profile["style"]}
-        return self.lobby.save_progress(snapshot,keepalive)
+        return self.lobby.save_progress(self.game.p,keepalive)
 
     def clear_input(self, _=None):
         self.keys.clear()
@@ -382,15 +380,7 @@ class App:
     def account(self):
         self.note(f"{self.lobby.account} · {self.profile['name']} · 슬롯 {self.lobby.slot+1}/4")
         self.row("진행 기록", self.lobby.message, "지금 저장", self.manual_save)
-        for key, label in AVATAR_STYLES.items():
-            if key != self.profile["style"]:
-                self.row(label,"캐릭터 외형","적용",lambda key=key:self.switch_avatar(key))
         self.row("캐릭터 선택", "서버에 저장하고 다른 캐릭터로 이동해요.", "목록으로", self.lobby.leave)
-
-    def switch_avatar(self, style):
-        self.profile["style"] = style
-        self.save()
-        self.render_panel()
 
     def manual_save(self):
         if self.save():

@@ -43,10 +43,6 @@
           <div class="lobby-options">
             <canvas id="lobby-preview" width="112" height="112" aria-label="선택한 캐릭터"></canvas>
             <label>이름<input id="character-name" required minlength="2" maxlength="14" autocomplete="off"></label>
-            <label>외형<select id="character-style"><option value="classic">전 버전 외형</option><option value="custom">직접 꾸미기</option><option value="frost">서리등 창병</option></select></label>
-            <label id="appearance-sex" hidden>성별<select id="character-sex"><option value="0">남자</option><option value="1">여자</option></select></label>
-            <label id="appearance-skin" hidden>피부색<select id="character-skin"><option value="0">밝은 복숭아</option><option value="1">베이지</option><option value="2">올리브</option><option value="3">구릿빛</option><option value="4">짙은 갈색</option></select></label>
-            <label id="appearance-hair" hidden>머리색<select id="character-hair"><option value="0">검정</option><option value="1">밤색</option><option value="2">밀빛</option><option value="3">구리색</option><option value="4">은색</option><option value="5">보라색</option><option value="6">청록색</option></select></label>
           </div>
           <div class="lobby-actions"><button class="primary" id="character-submit" type="submit">캐릭터 만들기</button><button id="lobby-import" type="button" hidden>이 브라우저의 예전 캐릭터 가져오기</button></div>
         </form>
@@ -58,7 +54,7 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
-<script src="maplee/palette.js"></script>
+<script src="maplee/request.js"></script>
 <script type="text/python">
 from maplee.ui import App
 game_app = App()

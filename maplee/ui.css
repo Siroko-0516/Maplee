@@ -67,7 +67,7 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 .lobby-card canvas, #lobby-preview { position: static; touch-action: auto; image-rendering: pixelated; background: #101f30c9; border-radius: 8px; }
 .lobby-card canvas { width: 100%; max-width: 80px; height: auto; aspect-ratio: 1; }
 .lobby-card small { color: #c3d5d6; font-size: .78rem; }
-.lobby-options { display: grid; grid-template-columns: 112px repeat(2,minmax(0,1fr)); gap: 9px 13px; margin: 16px 0; align-items: end; }
+.lobby-options { display: grid; grid-template-columns: 112px minmax(0,1fr); gap: 9px 13px; margin: 16px 0; align-items: end; }
 #lobby-preview { grid-row: span 2; }
 .lobby-options label { display: grid; gap: 4px; }
 #lobby-status { color: #ffdfac; min-height: 24px; margin: 16px 0 0; }
