@@ -85,6 +85,55 @@ class WorldTests(unittest.TestCase):
         self.assertIsNone(game.ladder)
         self.assertEqual(game.p["y"],bottom)
 
+    def test_normal_jump_reaches_the_first_terrace_and_seed_forest_ledges(self):
+        for x, top in ((34954, 243), (38690, 255)):
+            with self.subTest(x=x):
+                game = self.sandbox(map_x(x))
+                self.assertGreater(ground_at(game.p["x"]) - top, 120)
+                game.jump()
+                self.step(game, 46)
+                self.assertIsInstance(game.surface, dict)
+                self.assertEqual(game.p["y"], top)
+
+    def test_feet_catch_the_ledge_edge_and_can_jump_just_after_leaving(self):
+        platform = next(ledge for ledge in LEDGES if ledge["x"] == map_x(260))
+        for side, key in ((-1, "ArrowLeft"), (1, "ArrowRight")):
+            with self.subTest(side=side):
+                edge = platform["x"] + (platform["w"] if side == 1 else 0)
+                game = self.sandbox(edge + side * 7)
+                game.p["y"] = platform["y"] - 2
+                game.vy, game.surface = 2.5, None
+                self.step(game, 2)
+                self.assertIs(game.surface, platform)
+                self.step(game, 3, key)
+                self.assertIsNone(game.surface)
+                game.jump()
+                self.assertEqual(game.jump_tick, game.tick)
+                self.assertLess(game.vy, 0)
+                self.step(game, 1)
+                previous_jump = game.jump_tick
+                game.jump()
+                self.assertEqual(game.jump_tick, previous_jump)
+
+    def test_jump_before_landing_buffers_once_and_down_jump_still_drops(self):
+        game = self.sandbox(150)
+        game.p["y"] -= 11
+        game.vy, game.surface = 3, None
+        game.jump()
+        self.step(game, 5)
+        self.assertEqual(game.jump_tick, 3)
+        self.assertLess(game.vy, 0)
+        self.step(game, 60)
+        self.assertEqual(game.surface, "ground")
+
+        platform = next(ledge for ledge in LEDGES if ledge["x"] == map_x(34760))
+        game.travel(map_x(34954))
+        game.surface, game.p["y"] = platform, platform["y"]
+        game.jump(down=True)
+        self.step(game, 4)
+        self.assertGreater(game.p["y"], platform["y"])
+        self.assertIsNone(game.surface)
+
     def test_camera_follows_jump_and_portal_with_narrow_view(self):
         game = self.sandbox(map_x(1150))
         game.set_camera_view(320,468)

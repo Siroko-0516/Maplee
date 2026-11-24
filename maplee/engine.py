@@ -13,6 +13,9 @@ SAVE_KEY = "maple-local-world-v1"
 START_X = map_x(310)
 # Ranged attacks and class skills keep their original 60 Hz timings.
 SWING_WINDUP, SWING_FOLLOW, SWING_END = 18, 27, 48
+JUMP_SPEED, GRAVITY = 14.75, .64
+LEDGE_FOOT_RADIUS = 8
+EDGE_JUMP_TICKS, JUMP_BUFFER_TICKS = 5, 7
 GROUND_XS = [x for x, _ in GROUND]
 AREA_ENDS = [area["end"] for area in AREAS]
 LOWEST_GROUND = max(y for _, y in GROUND)
@@ -68,6 +71,10 @@ def ground_at(x):
     return y + (end_y - y) * limit((x - left) / (right - left), 0, 1)
 
 
+def over_ledge(x, ledge):
+    return ledge["x"] - LEDGE_FOOT_RADIUS <= x <= ledge["x"] + ledge["w"] + LEDGE_FOOT_RADIUS
+
+
 PORTALS = []
 for i, area in enumerate(AREAS):
     if i:
@@ -118,6 +125,7 @@ class Game:
         self.walk = 0
         self.land_until = 0
         self.jump_tick = -100
+        self.edge_jump_until = self.jump_buffer_until = -1
         self.swing = None
         self.support_started = 0
         self.inv_until = self.hurt_until = self.support_until = 0
@@ -448,6 +456,7 @@ class Game:
         self.camera_y = self.camera_vertical_target()
         self.vy, self.surface, self.ladder, self.swing, self.walk = 0, "ground", None, None, 0
         self.land_until = 0
+        self.edge_jump_until = self.jump_buffer_until = -1
         self.dirty = True
 
     def nearby(self):
@@ -462,13 +471,18 @@ class Game:
 
     def jump(self, down=False):
         if self.surface is None and self.ladder is None:
-            return
+            if down:
+                return
+            if self.tick > self.edge_jump_until:
+                self.jump_buffer_until = self.tick + JUMP_BUFFER_TICKS
+                return
+        self.edge_jump_until = self.jump_buffer_until = -1
         self.jump_tick = self.tick
         if down and isinstance(self.surface, dict):
             self.p["y"] += 2
             self.vy = 1
         else:
-            self.vy = -11.2 - self.support_value("speed")
+            self.vy = -JUMP_SPEED - self.support_value("speed")
             self.sound = 300
             self.effects.append(("dust", self.tick, self.p["x"], self.p["y"], 13, self.facing))
         self.surface = self.ladder = None
@@ -820,6 +834,7 @@ class Game:
             if source and self.shared_hit("hurt", source["id"]):
                 self.inv_until, self.hurt_until = self.tick + 55, self.tick + 10
                 self.swing, self.ladder, self.surface = None, None, None
+                self.edge_jump_until = self.jump_buffer_until = -1
                 self.vy = -3.4
             return
         p, stats = self.p, self.stats()
@@ -833,6 +848,7 @@ class Game:
         p["hp"] -= lost
         self.inv_until, self.hurt_until = self.tick + 55, self.tick + 10
         self.swing = self.ladder = self.surface = None
+        self.edge_jump_until = self.jump_buffer_until = -1
         self.vy = -3.4
         self.effects.append(("damage", self.tick, p["x"], p["y"] - 65, 42, (lost, 2)))
         self.dirty = True
@@ -893,6 +909,7 @@ class Game:
             x, top, bottom = self.ladder
             p["x"], p["y"] = x, limit(p["y"] + dy * 3.2, top, bottom)
             self.vy, self.surface = 0, None
+            self.edge_jump_until = self.jump_buffer_until = -1
             if p["y"] in (top, bottom):
                 self.ladder, self.surface = None, "ladder"
             return
@@ -904,22 +921,28 @@ class Game:
         floor = ground_at(p["x"])
         if self.surface == "ground":
             p["y"] = floor
+        elif isinstance(previous_surface, dict) and over_ledge(p["x"], previous_surface):
+            p["y"] = previous_surface["y"]
         else:
-            self.vy += .5
+            self.vy += GRAVITY
             p["y"] += self.vy
             self.surface = None
             if self.vy >= 0:
                 landing = floor if p["y"] >= floor else float("inf")
                 selected = "ground"
                 for ledge in AREA_LEDGES[region]:
-                    if old_y <= ledge["y"] <= p["y"] and ledge["y"] < landing and ledge["x"] - 3 <= p["x"] <= ledge["x"] + ledge["w"] + 3:
+                    if old_y <= ledge["y"] <= p["y"] and ledge["y"] < landing and over_ledge(p["x"], ledge):
                         landing, selected = ledge["y"], ledge
                 if landing < float("inf"):
                     p["y"], self.surface, self.vy = landing, selected, 0
                     if previous_surface is None:
                         self.land_until = self.tick + 5
                         self.effects.append(("dust", self.tick, p["x"], landing, 12, self.facing))
+            if previous_surface is not None and self.surface is None:
+                self.edge_jump_until = self.tick + EDGE_JUMP_TICKS
         self.walk = self.walk + 1 if self.surface and p["x"] != old_x else 0
+        if self.surface is not None and self.tick <= self.jump_buffer_until:
+            self.jump()
 
     def step(self, keys):
         self.tick += 1
