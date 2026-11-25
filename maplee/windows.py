@@ -1,9 +1,10 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
+from bisect import bisect_left, bisect_right
 from browser import document, window
 from .classic_skin import CLASSIC_REGIONS
-from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, LEDGES, PANORAMA_Y, SLOTS, SPECIES, SUPPORTS, monster_art
+from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, MAIN_REGIONS, PANORAMA_Y, SLOTS, SPECIES, SUPPORTS, monster_art
 from .hunting import HUNT_ZONES
-from .engine import HEIGHT, PORTALS, area_at, ground_at, item_icon, limit
+from .engine import AREA_LEDGES, AREA_PORTALS, GROUND_XS, HEIGHT, TRANSPORTS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
 
@@ -297,7 +298,8 @@ class GameInterface:
 
     def minimap(self):
         game, p = self.app.game, self.app.game.p
-        area = AREAS[area_at(p["x"])]
+        region = area_at(p["x"])
+        area = AREAS[region]
         w = 153 if self.w < 530 else 188
         x, y = 10, 8
         # The minimap has its own nine asymmetric pieces in the game atlas.
@@ -309,8 +311,9 @@ class GameInterface:
         self.text("M",x+w-9,y+13,CREAM,10,True,"right")
         self.box(x+5,y+27,w-10,35,"#26323bbf")
         start, end = area["start"], area["end"]
-        pts = [(start, ground_at(start))] + [(a,b) for a,b in GROUND if start<a<end] + [(end,ground_at(end))]
-        ledges = [ledge for ledge in LEDGES if start <= ledge["x"] < end]
+        points = GROUND[bisect_right(GROUND_XS,start):bisect_left(GROUND_XS,end)]
+        pts = [(start, ground_at(start))] + points + [(end,ground_at(end))]
+        ledges = AREA_LEDGES[region]
         top = min(0, min(ledge["y"] for ledge in ledges) - 38)
         bottom = max(floor for _, floor in pts) + 42
         def sx(world):
@@ -327,9 +330,8 @@ class GameInterface:
         ctx.fill()
         for ledge in ledges:
             self.box(sx(ledge["x"]), sy(ledge["y"]), max(2,sx(ledge["x"]+ledge["w"])-sx(ledge["x"])), 2, "#b6dba0")
-        for a, _, _ in PORTALS:
-            if start<=a<end:
-                self.box(sx(a)-1, sy(ground_at(a))-4, 3, 5, "#78dfff")
+        for a, _, _ in AREA_PORTALS[region]:
+            self.box(sx(a)-1, sy(ground_at(a))-4, 3, 5, "#ffda83" if a in TRANSPORTS else "#78dfff")
         self.box(sx(p["x"])-2, sy(p["y"])-4, 5, 5, "#fcdb51")
         self.hit(x,y,w,69,"미니맵",lambda: self.app.show_panel("map"))
         qw = min(251, self.w-w-33)
@@ -456,9 +458,13 @@ class GameInterface:
                 self.box(x,y+23,w,2,"#eb8d31")
                 y += 27
             elif kind == "route":
+                show_hunts = entry[1] == "hunt"
                 player = self.app.game.p["x"]
                 current = area_at(player)
                 for i,area in enumerate(AREAS):
+                    parent = area.get("hunt_parent")
+                    if (parent is not None) != show_hunts:
+                        continue
                     self.bezel("paper",x,y,w,48)
                     image=area["image"]
                     iw,_=self.app.renderer.sizes[image]
@@ -468,7 +474,14 @@ class GameInterface:
                     self.box(x+77,y+19,8,8, "#a8ce33" if i==current else "#68899d")
                     self.text(area["name"],x+94,y+15,INK,14,True)
                     low, high = HUNT_ZONES[i]["levels"]
-                    desc = f"현재 위치 · Lv. {low}–{high}" if i==current else f"포털 이동 · Lv. {low}–{high}"
+                    levels = str(low) if low == high else f"{low}–{high}"
+                    if i == current:
+                        route = "현재 위치"
+                    elif show_hunts:
+                        route = AREAS[parent]["name"] + " 입구"
+                    else:
+                        route = next(name for start,end,name in MAIN_REGIONS if start<=i<=end)
+                    desc = f"{route} · Lv. {levels}"
                     self.text(desc,x+94,y+32,"#567342",12)
                     self.text(HUNT_ZONES[i]["label"],x+94,y+45,"#3a5364",10)
                     y += 53

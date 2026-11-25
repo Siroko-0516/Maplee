@@ -21,6 +21,20 @@ class IntrinsicImage:
 
 
 class ImageDimensionTest(unittest.TestCase):
+    def test_walkable_seam_blends_the_two_panoramas(self):
+        with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
+            from maplee.render import Renderer
+        renderer = Renderer.__new__(Renderer)
+        renderer.ctx, renderer.backdrop = Mock(), Mock()
+        seam = AREAS[0]["end"]
+        renderer.field_backdrop(1,seam,seam-480,0)
+        self.assertEqual([call.args[0] for call in renderer.backdrop.call_args_list],[AREAS[0],AREAS[1]])
+        self.assertEqual(renderer.ctx.globalAlpha,.5)
+        renderer.backdrop.reset_mock()
+        boundary = AREAS[2]["end"]
+        renderer.field_backdrop(2,boundary-24,boundary-960,0)
+        renderer.backdrop.assert_called_once_with(AREAS[2],boundary-960,0)
+
     def test_field_view_spans_more_world_at_the_same_screen_size(self):
         with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
             from maplee.render import Renderer

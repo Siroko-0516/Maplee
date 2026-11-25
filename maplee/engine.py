@@ -4,8 +4,8 @@ from math import ceil, sin
 from random import random
 from .hunting import HUNT_ZONES, next_hunting_wave
 from .content import (
-    AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS,
-    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, WORLD_WIDTH, map_x, saved_x,
+    AREAS, ATTRIBUTES, CLASSES, DEFAULT_HOTBAR, GROUND, HOTBAR_ACTIONS, HUNT_FIELDS, MAIN_REGIONS,
+    ITEMS, LEDGES, MELEE_IMPACT, MELEE_POSES, NPCS, PROPS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, WORLD_WIDTH, map_x, saved_x,
 )
 
 WIDTH, HEIGHT, STEP = 960, 468, 1000 / 60
@@ -50,7 +50,7 @@ def shared_patrol(monster, clock):
 def monster_bounds(monster, tick):
     spec = monster["spec"]
     width, height = spec.get("body_size", (36, 36))
-    scale = 1.5 if spec.get("elite") else 1
+    scale = spec["scale"]
     bottom = monster_feet_y(monster, tick)
     half = width * scale / 2
     return monster["x"] - half, bottom - height * scale, monster["x"] + half, bottom
@@ -76,11 +76,30 @@ def over_ledge(x, ledge):
 
 
 PORTALS = []
-for i, area in enumerate(AREAS):
-    if i:
-        PORTALS.append((area["start"] + map_x(65), AREAS[i - 1]["end"] - map_x(155), i - 1))
-    if i + 1 < len(AREAS):
-        PORTALS.append((area["end"] - map_x(65), AREAS[i + 1]["start"] + map_x(155), i + 1))
+TRANSPORTS = {}
+WALK_GROUPS = list(range(len(AREAS)))
+WALK_SECTIONS = [(i,i) for i in WALK_GROUPS]
+for _first, _last, _name in MAIN_REGIONS:
+    for i in range(_first,_last+1):
+        WALK_GROUPS[i] = _first
+        WALK_SECTIONS[i] = (_first,_last)
+for (_, _left, _), (_right, _, _), _mode in zip(MAIN_REGIONS, MAIN_REGIONS[1:], ("boat","airship")):
+    _boundary = AREAS[_left]["end"]
+    _west, _east = _boundary - map_x(65), _boundary + map_x(65)
+    PORTALS.extend(((_west,_boundary + map_x(155),_right),(_east,_boundary - map_x(155),_left)))
+    TRANSPORTS[_west] = TRANSPORTS[_east] = _mode
+for _field in HUNT_FIELDS:
+    _gate = map_x(_field["gate"])
+    _start = AREAS[_field["region"]]["start"]
+    PORTALS.extend(((_gate, _start + map_x(155), _field["region"]),
+                    (_start + map_x(65), _gate, _field["parent"])))
+
+AREA_PORTALS = [[] for _ in AREAS]
+for _portal in PORTALS:
+    AREA_PORTALS[area_at(_portal[0])].append(_portal)
+AREA_PROPS = [[] for _ in AREAS]
+for _prop in PROPS:
+    AREA_PROPS[area_at(_prop[0])].append(_prop)
 
 
 def ladder_for(ledge):
@@ -151,8 +170,8 @@ class Game:
                 p[key] = saved_x(value, saved.get("worldLayout")) if key == "x" else int(value)
         p["level"] = limit(p["level"], 1, 200)
         p["x"] = limit(p["x"], 24, WORLD_WIDTH - 24)
-        area = AREAS[area_at(p["x"])]
-        p["x"] = limit(p["x"], area["start"]+24, area["end"]-24)
+        first,last = WALK_SECTIONS[area_at(p["x"])]
+        p["x"] = limit(p["x"], AREAS[first]["start"]+24, AREAS[last]["end"]-24)
         p["y"] = ground_at(p["x"])
         if saved.get("job") in CLASSES:
             p["job"] = saved["job"]
@@ -437,9 +456,9 @@ class Game:
         self.camera_y = self.camera_vertical_target()
 
     def camera_target(self):
-        area = AREAS[area_at(self.p["x"])]
+        first,last = WALK_SECTIONS[area_at(self.p["x"])]
         width = self.view_width
-        return limit(self.p["x"]-width/2,area["start"],area["end"]-width)
+        return limit(self.p["x"]-width/2,AREAS[first]["start"],AREAS[last]["end"]-width)
 
     def camera_vertical_target(self):
         anchor = self.view_height*.71
@@ -466,8 +485,8 @@ class Game:
         if not dx and not dy:
             return
         p = self.p
-        area = AREAS[area_at(p["x"])]
-        p["x"] = limit(p["x"] + dx, area["start"] + 24, area["end"] - 24)
+        first,last = WALK_SECTIONS[area_at(p["x"])]
+        p["x"] = limit(p["x"] + dx, AREAS[first]["start"] + 24, AREAS[last]["end"] - 24)
         floor = ground_at(p["x"])
         if self.surface == "ground":
             p["y"] = floor
@@ -479,7 +498,7 @@ class Game:
 
     def nearby(self):
         x, y = self.p["x"], self.p["y"]
-        for portal in PORTALS:
+        for portal in AREA_PORTALS[area_at(x)]:
             if abs(portal[0] - x) <= 42 and abs(ground_at(portal[0]) - y) <= 28:
                 return ("portal", portal)
         for npc in NPCS:
@@ -933,9 +952,11 @@ class Game:
             return
         old_x, old_y, previous_surface = p["x"], p["y"], self.surface
         speed = self.stats()["speed"] + self.support_value("speed")
-        area = AREAS[region]
+        first,last = WALK_SECTIONS[region]
         p["x"] = limit(old_x + dx * speed * (.58 if self.swing and self.surface else 1),
-                       area["start"]+24, area["end"]-24)
+                       AREAS[first]["start"]+24, AREAS[last]["end"]-24)
+        if area_at(p["x"]) != region:
+            self.dirty = True
         floor = ground_at(p["x"])
         if self.surface == "ground":
             p["y"] = floor
@@ -948,7 +969,7 @@ class Game:
             if self.vy >= 0:
                 landing = floor if p["y"] >= floor else float("inf")
                 selected = "ground"
-                for ledge in AREA_LEDGES[region]:
+                for ledge in AREA_LEDGES[area_at(p["x"])]:
                     if old_y <= ledge["y"] <= p["y"] and ledge["y"] < landing and over_ledge(p["x"], ledge):
                         landing, selected = ledge["y"], ledge
                 if landing < float("inf"):
@@ -982,6 +1003,13 @@ class Game:
         monsters = self.monsters_in_area(area_at(self.p["x"]))
         if self.shared_hit is not None:
             self.shared_monster_step(monsters)
+            region = area_at(self.p["x"])
+            first,last = WALK_SECTIONS[region]
+            margin = self.view_width/2 + 120
+            if region > first and self.p["x"] - AREAS[region]["start"] < margin:
+                self.shared_monster_step(self.monsters_in_area(region-1))
+            if region < last and AREAS[region]["end"] - self.p["x"] < margin:
+                self.shared_monster_step(self.monsters_in_area(region+1))
         self.update_attack()
         self.effect_step()
         for monster in monsters:

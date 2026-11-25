@@ -2,7 +2,7 @@
 from browser import window
 
 from .content import WORLD_LAYOUT
-from .engine import area_at, limit
+from .engine import WALK_GROUPS, area_at, limit
 from .lobby import FIELD_PROTOCOL, api
 from .render import number
 
@@ -25,6 +25,7 @@ class SharedWorld:
         self.move = None
         self.after_sync = None
         self.state_version = -1
+        self.voyage = None
 
     def start(self, mode="shared"):
         self.enabled = True
@@ -36,7 +37,7 @@ class SharedWorld:
         self.release()
         self.generation += 1
         self.enabled = self.inflight = False
-        self.actor = self.batch = self.move = self.after_sync = None
+        self.actor = self.batch = self.move = self.after_sync = self.voyage = None
         self.players.clear()
         self.operations.clear()
         self.sequence = 1
@@ -158,6 +159,10 @@ class SharedWorld:
         game = self.app.game
         game.shared_clock = self.server_time
         sample = data.get("sample")
+        voyage = data.get("voyage")
+        if voyage and not self.voyage:
+            self.app.clear_input()
+        self.voyage = voyage
         if joining:
             self.actor = data["actor"]
             game.enter_shared_world(self.combat)
@@ -176,15 +181,15 @@ class SharedWorld:
                     self.app.close_panel()
                 elif not accepted:
                     self.app.toast("조건이 맞지 않거나 이미 처리된 동작이에요.")
-            if payload.get("move") is not None and not data.get("warp"):
+            if payload.get("move") is not None and not data.get("warp") and not voyage:
                 self.app.toast("포털 가까이에서 다시 시도해주세요.")
         destination = data["pose"]
         warp = data.get("warp")
         if warp:
             self.app.arrive(destination["x"], warp)
-        elif area_at(game.p["x"]) != data["region"]:
+        elif WALK_GROUPS[area_at(game.p["x"])] != WALK_GROUPS[data["region"]]:
             game.travel(destination["x"])
-        elif sample is not None:
+        elif sample is not None and not voyage:
             game.reconcile_field_pose(sample, destination)
         if data["stateVersion"] > self.state_version:
             self.state_version = data["stateVersion"]

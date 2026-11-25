@@ -116,7 +116,7 @@ function migrateProgress(identity, saved) {
   state.level = Math.max(1, state.level);
   if (Number.isFinite(saved.x) && saved.x >= 0) {
     let x = saved.x;
-    if (![3, 4, rules().layout].includes(saved.worldLayout)) {
+    if (!rules().preservedLayouts.includes(saved.worldLayout)) {
       if (saved.worldLayout === 2) x /= 1.25;
       x = Math.round((x - Math.max(0, Math.min(6650, x - 2450)) / 4) * 1.25);
     }

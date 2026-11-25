@@ -58,7 +58,7 @@ function patrolX(spec, time) {
 function fieldBody(spec, at) {
   const x = patrolX(spec, at);
   const y = (spec.ledge ? spec.y : fieldGround(x)) - spec.hover;
-  const scale = spec.elite ? 1.5 : 1;
+  const scale = spec.scale;
   const half = spec.body[0] * scale / 2;
   return { x, y, bounds:[x - half, y - spec.body[1] * scale, x + half, y] };
 }
@@ -68,7 +68,7 @@ function intersects(a, b) {
 }
 
 function fieldBounds(input, previous, elapsed) {
-  if (fieldRegion(input.x) !== fieldRegion(previous.x))
+  if (rules().walkGroups[fieldRegion(input.x)] !== rules().walkGroups[fieldRegion(previous.x)])
     return { ...previous, facing:input.facing };
   const interval = Math.min(POSE_INTERVAL_LIMIT, elapsed);
   const x = Math.abs(input.x - previous.x) <= POSE_X_TOLERANCE + interval * POSE_X_SPEED ? input.x : previous.x;
@@ -79,14 +79,22 @@ function fieldBounds(input, previous, elapsed) {
   return { ...input, x, y };
 }
 
-function updatePosition(input, previous, elapsed, move) {
+function updatePosition(input, previous, elapsed, move, voyage, now) {
+  if (voyage) {
+    if (now < voyage.until) return { pose:previous, warp:null, voyage };
+    const x = voyage.destination;
+    return { pose:{ ...previous,x,y:fieldFloor(x) }, warp:voyage.mode, voyage:null };
+  }
   const ordinary = fieldBounds(input, previous, elapsed);
-  if (move === "home") return { pose:{ ...ordinary, x:rules().start, y:fieldFloor(rules().start) }, warp:"home" };
+  if (move === "home") return { pose:{ ...ordinary, x:rules().start, y:fieldFloor(rules().start) }, warp:"home", voyage:null };
   const portal = Number.isInteger(move) && rules().portals.find(([x]) =>
     move === x && Math.abs(ordinary.x - x) <= 48 && Math.abs(ordinary.y - fieldFloor(x)) <= 33);
+  const mode = portal && rules().transports[move];
+  if (mode) return { pose:ordinary, warp:null, voyage:{ mode, start:now, until:now + (mode === "boat" ? 3200 : 3800),
+    destination:portal[1], region:portal[2] } };
   return portal
-    ? { pose:{ ...ordinary, x:portal[1], y:fieldFloor(portal[1]) }, warp:"portal" }
-    : { pose:ordinary, warp:null };
+    ? { pose:{ ...ordinary, x:portal[1], y:fieldFloor(portal[1]) }, warp:"portal", voyage:null }
+    : { pose:ordinary, warp:null, voyage:null };
 }
 
 const regionSpawns = rules().ends.map((_, region) => rules().monsters.flatMap((spec, index) =>
@@ -243,7 +251,7 @@ function applyFieldOps(context, ops, pose, previous, elapsed) {
     if (["attack", "hurt", "support"].includes(action)) {
       if (!Number.isSafeInteger(clock) || clock < now - 1600 || clock > now + 100 || clock < runtime.lastOp) continue;
       const sample = shapePose({ x, y, facing });
-      if (!sample || fieldRegion(x) !== fieldRegion(pose.x)) continue;
+      if (!sample || fieldRegion(x) !== fieldRegion(previous.x)) continue;
       const origin = fieldBounds(sample, previous, elapsed);
       if (sample.x !== origin.x || sample.y !== origin.y ||
           Math.abs(pose.x - origin.x) > 290 || Math.abs(pose.y - origin.y) > 260) continue;
@@ -288,6 +296,7 @@ async function syncMovement(db, account, data, input, now) {
       pose = json_set(pose, '$.x', ?, '$.y', ?, '$.facing', ?, '$.frame', ?, '$.swing', ?)
     WHERE account = ? AND actor = ? AND sequence = ? AND seen > 0 AND ? - seen >= 90
       AND ? - json_extract(runtime, '$.manaAt') < 1500
+      AND json_extract(runtime, '$.voyage') IS NULL
       AND area = (CASE mode WHEN 'solo' THEN character_id ELSE 'public' END) || '/' || ?
       AND abs(? - json_extract(pose, '$.x')) <= ? + MIN(?, ? - seen) * ?
       AND ? - json_extract(pose, '$.y') BETWEEN -(? + MIN(?, ? - seen) * ?) AND ? + MIN(?, ? - seen) * ?
@@ -317,21 +326,24 @@ async function syncField(db, session, data, input, now) {
     if (now - actor.seen < 90) return fail(429, "잠시 후 다시 연결해요.");
 
     const old = JSON.parse(actor.pose), elapsed = now - actor.seen;
-    let { pose, warp } = updatePosition(input, old, elapsed, move);
-    const actionPose = fieldBounds(input, old, elapsed);
     const state = JSON.parse(actor.character_state);
     const runtime = JSON.parse(actor.runtime);
+    const onBoard = Boolean(runtime.voyage);
+    let { pose, warp, voyage } = updatePosition(input,old,elapsed,move,runtime.voyage,now);
+    runtime.voyage = voyage;
+    const actionPose = fieldBounds(input, old, elapsed);
     const combatRevision = actor.encounter_revision ?? 0;
     const context = { encounter:JSON.parse(actor.encounter_state ?? "{}"), area:actor.area, state, runtime,
       owner:actor.character_id, hits:[], rewards:[], results:[], now, changed:false, combatChanged:false };
-    applyFieldOps(context, ops, actionPose, old, elapsed);
+    applyFieldOps(context, onBoard ? [] : ops, actionPose, old, elapsed);
     if (context.died) {
       pose = { ...pose, x:rules().start, y:fieldFloor(rules().start) };
       warp = "respawn";
+      runtime.voyage = voyage = null;
     }
     const appearance = fieldAppearance(pose, state);
     const area = arenaKey(actor.mode, actor.character_id, appearance.region);
-    const response = { sample:[input.x,input.y], hits:context.hits, results:context.results, warp };
+    const response = { sample:[input.x,input.y], hits:context.hits, results:context.results, warp, voyage };
     const change = random(12);
     const commands = [db.prepare(`UPDATE field_sessions SET area = ?, pose = ?, seen = ?, sequence = ?,
       runtime = ?, response = ?, change_id = ?
@@ -436,5 +448,6 @@ async function sharedWorld(request, store, db, session, action) {
       mode = excluded.mode, area = excluded.area, pose = excluded.pose, seen = excluded.seen,
       runtime = excluded.runtime, sequence = 0, response = '{}', change_id = ''`)
     .bind(session.id, actor, character.id, data.mode, area, JSON.stringify(pose), now - FIELD_POLL, JSON.stringify(runtime)).run();
-  return fieldView(db, { actor, area, pose:JSON.stringify(pose), character_id:character.id }, {}, now);
+  return fieldView(db, { actor, area, pose:JSON.stringify(pose), character_id:character.id },
+    { voyage:runtime.voyage ?? null }, now);
 }

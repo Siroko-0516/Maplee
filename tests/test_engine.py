@@ -1,7 +1,7 @@
 import json
 import unittest
-from maplee.content import AREAS, ITEMS, LEDGES, LEDGE_DEPTH, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
-from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, Game, area_at, ground_at, monster_bounds, monster_feet_y
+from maplee.content import AREAS, HUNT_FIELDS, ITEMS, LEDGES, LEDGE_DEPTH, QUESTS, RECIPES, SPECIES, WORLD_LAYOUT, WORLD_WIDTH, map_x
+from maplee.engine import LADDERS, PORTALS, SWING_WINDUP, TRANSPORTS, WALK_SECTIONS, Game, area_at, ground_at, monster_bounds, monster_feet_y
 
 
 class WorldTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class WorldTests(unittest.TestCase):
         for _ in range(count):
             game.step(set(keys))
 
-    def test_ground_portals_and_area_limits(self):
+    def test_ground_and_camera_continue_across_walkable_map_seams(self):
         game = self.sandbox(390)
         previous = game.p["y"]
         for _ in range(70):
@@ -24,17 +24,22 @@ class WorldTests(unittest.TestCase):
             self.assertLess(abs(game.p["y"] - previous), 2)
             self.assertEqual(game.p["y"], ground_at(game.p["x"]))
             previous = game.p["y"]
-        game.travel(2400)
-        self.step(game, 90, "ArrowRight")
-        self.assertEqual(area_at(game.p["x"]), 0)
-        self.assertEqual(game.camera, AREAS[0]["end"] - 960)
-        game.travel(PORTALS[0][0])
-        kind, portal = game.nearby()
-        self.assertEqual(kind, "portal")
-        game.travel(portal[1])
-        self.assertEqual(area_at(game.p["x"]), 1)
+        for i in range(len(AREAS)-1):
+            if WALK_SECTIONS[i] != WALK_SECTIONS[i+1]:
+                continue
+            with self.subTest(origin=i):
+                edge = AREAS[i]["end"]
+                game.travel(edge-55)
+                camera = game.camera
+                previous = game.p["y"]
+                for _ in range(30):
+                    self.step(game, 1, "ArrowRight")
+                    self.assertLess(abs(game.p["y"] - previous), 2)
+                    previous = game.p["y"]
+                self.assertEqual(area_at(game.p["x"]),i+1)
+                self.assertGreater(game.camera,camera)
 
-    def test_each_region_border_requires_portal_in_both_directions(self):
+    def test_transport_and_hunting_entrances_have_return_routes(self):
         for x, destination, index in PORTALS:
             game = self.sandbox(x)
             origin = area_at(x)
@@ -46,7 +51,8 @@ class WorldTests(unittest.TestCase):
             game.travel(destination)
             self.assertEqual(area_at(game.p["x"]),index)
             self.assertEqual(game.p["y"],ground_at(game.p["x"]))
-        self.assertEqual(len(PORTALS),2*(len(AREAS)-1))
+        self.assertEqual(len(PORTALS), 2*len(HUNT_FIELDS) + len(TRANSPORTS))
+        self.assertEqual(sorted(TRANSPORTS.values()),["airship","airship","boat","boat"])
 
     def test_legacy_position_migrates_once(self):
         game = Game({"level":8,"x":9120,"gold":470})
@@ -70,8 +76,19 @@ class WorldTests(unittest.TestCase):
                 if overlap > 0:
                     self.assertGreaterEqual(abs(ledge["y"]-other["y"]),LEDGE_DEPTH,(ledge,other))
         x = map_x(5500)
-        for layout in (3, 4):
+        for layout in (3, 4, 5):
             self.assertEqual(Game({"level": 8, "x": x, "worldLayout": layout}).p["x"], x)
+
+    def test_all_golems_have_double_size_hitboxes_anchored_at_the_feet(self):
+        game = self.sandbox(390)
+        kinds = [i for i,spec in enumerate(SPECIES) if "스톤골렘" in spec["name"]]
+        self.assertEqual(len(kinds),3)
+        for kind in kinds:
+            monster = game.spawn(510,kind,0)
+            left,top,right,bottom = monster_bounds(monster,game.tick)
+            width,height = SPECIES[kind]["body_size"]
+            self.assertEqual((right-left,bottom-top), (2*width,2*height))
+            self.assertEqual(bottom,ground_at(monster["x"]))
 
     def test_ladder_reaches_floating_ledge_and_returns_to_ground(self):
         x, top, bottom = LADDERS[0]

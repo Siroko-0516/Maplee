@@ -1,6 +1,6 @@
 """Hand-placed hunting routes. Platform positions refer to the ledge's left edge."""
 
-from .content import map_x
+from .content import HUNT_FIELDS, SPECIES, map_x
 
 SLIME, MUSHROOM, SNAIL, PIG, KING_CRAB, CRAB, BUBBLE, GOLEM, PIXIE, CLANG, MUSHMOM, ASH_BUBBLE, QUAY_CLANG = range(13)
 ROOT_GOLEM, CANOPY_PIXIE = range(13, 15)
@@ -136,6 +136,23 @@ HUNT_ZONES = (
                      ledges=((40320,FOREST_PIXIE),(40560,COPPER_GOLEM))),
     ), boss_waves=6),
 )
+
+
+def dedicated_hunt(field):
+    kind = field["kind"]
+    creature = SPECIES[kind]
+    elite = creature.get("elite", False)
+    level = creature["level"]
+    floor_positions = (.73,) if elite else (.29,.47,.64,.83)
+    shelves = field["ledges"][1:2] if elite else field["ledges"]
+    return hunting_zone(creature["name"] + " 전용 사냥터", (level,level), 260, 200, (
+        hunting_spot("사냥터 바닥", ground=tuple((field["start"] + round(field["width"]*fraction),kind)
+                                                for fraction in floor_positions)),
+        hunting_spot("사냥터 발판", ledges=tuple((ledge,kind) for ledge in shelves)),
+    ), boss_waves=5 if elite else 0)
+
+
+HUNT_ZONES += tuple(dedicated_hunt(field) for field in HUNT_FIELDS)
 
 
 def next_hunting_wave(zone, tick, elite=False):

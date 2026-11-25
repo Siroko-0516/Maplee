@@ -4,7 +4,8 @@ from bisect import bisect_right
 from .gear_data import EXPANSION_EQUIPMENT, EXPANSION_ICON_COLUMNS, LEGACY_WORN, MELEE_WEAPONS, WORN_ITEMS, WORN_ROWS
 from .wildlife_data import MOB_BOOKS, MOB_FRAMES
 
-WORLD_LAYOUT = 5
+WORLD_LAYOUT = 6
+PRESERVED_LAYOUTS = (3, 4, 5, WORLD_LAYOUT)
 PANORAMA_Y = 144
 LEDGE_DEPTH = 32
 BELLFLOWER_START, BELLFLOWER_END = 2450, 9100
@@ -18,14 +19,18 @@ def map_x(value):
 
 
 def saved_x(value, layout):
-    if layout in (3, 4, WORLD_LAYOUT):
+    if layout in PRESERVED_LAYOUTS:
         return int(value)
     if layout == 2:
         value /= WORLD_SCALE
     return map_x(value)
 
 
-WORLD_WIDTH = 41000
+BASE_WORLD_WIDTH = 41000
+MAP_IDS = ["pinecone", "bellflower", "blue-sail", "glass-mine", "moonwind", "ember-grove",
+           "lantern-quay", "windroot", "sunset-eggs", "copper-terraces", "glassseed"]
+MAIN_REGIONS = ((0,2,"솔방울 해안"),(3,6,"유리 산맥"),(7,10,"바람뿌리 군도"))
+TRANSPORT_LABELS = {"boat":"배", "airship":"비행선"}
 
 AREAS = [
     dict(name="솔방울 마을", start=0, end=BELLFLOWER_START, icon="🍄", material="stone", image="daylight", view=0),
@@ -38,7 +43,7 @@ AREAS = [
     dict(name="바람뿌리 거목", start=24700, end=29300, icon="🌳", material="terrain", image="windroot", view=0),
     dict(name="노을알 분지", start=29300, end=34000, icon="🥚", material="stone", image="sunegg", view=170),
     dict(name="구리층 계단", start=34000, end=37100, icon="🔶", material="copper_ground", image="terrace_sky", view=90),
-    dict(name="물빛 씨앗숲", start=37100, end=WORLD_WIDTH, icon="🌱", material="seed_ground", image="seed_sky",
+    dict(name="물빛 씨앗숲", start=37100, end=BASE_WORLD_WIDTH, icon="🌱", material="seed_ground", image="seed_sky",
          mid_image="seed_canopy", view=140),
 ]
 
@@ -617,6 +622,8 @@ for base, name, level, hp, attack, xp, gold, rare, drops in (
                         rare=rare, equipmentDrops=drops))
 SPECIES[11].update(undead=True, loot="spores")
 SPECIES[12].update(undead=True, loot="ash")
+for _species in SPECIES:
+    _species["scale"] = 2 if _species["sprite"] == 7 else 1.5 if _species.get("elite") else 1
 
 
 def monster_art(species, action, ticks=0, fraction=None):
@@ -819,7 +826,72 @@ for _starter in STARTER_WEAPONS.values():
     ITEMS[_starter]["level"] = 1
 
 
-WORLD_WIDTH = map_x(WORLD_WIDTH)
+# Each row pairs one species with a portal in the nearby main route.
+HUNT_FIELD_DATA = (
+    ("slime-clearing", "슬라임 초지", 0, 700, 1520, "meadow"),
+    ("orange-mushroom-rise", "주황버섯 비탈", 1, 3090, 1600, "meadow"),
+    ("red-snail-path", "빨간 달팽이 고갯길", 1, 4320, 1530, "meadow"),
+    ("ribbon-pig-pen", "리본 돼지 목책길", 2, 9430, 1540, "coast"),
+    ("king-crab-cove", "킹크랑 암초굴", 2, 10480, 1660, "coast"),
+    ("crab-shoal", "로랑 여울", 2, 9860, 1580, "coast"),
+    ("bubbling-niche", "버블링 수정굴", 3, 12300, 1610, "mine"),
+    ("stone-golem-works", "스톤골렘 채석장", 3, 13220, 1800, "mine"),
+    ("star-pixie-terrace", "스타픽시 별마루", 4, 15460, 1620, "canopy"),
+    ("clang-ridge", "클랑 바위능선", 4, 16180, 1590, "meadow"),
+    ("mushmom-den", "머쉬맘 둥지", 4, 17500, 1690, "canopy"),
+    ("ash-bubble-copse", "잿숲 버블링 수풀", 5, 18600, 1550, "meadow"),
+    ("quay-clang-wharf", "안개등 클랑 갯길", 6, 21880, 1640, "coast"),
+    ("root-golem-hollow", "거목 스톤골렘 뿌리굴", 7, 25030, 1770, "mine"),
+    ("canopy-pixie-grove", "수관 스타픽시 나뭇길", 7, 26210, 1690, "canopy"),
+    ("copper-bubble-drift", "구리 버블링 갱도", 9, 34350, 1630, "mine"),
+    ("copper-golem-cut", "구리 스톤골렘 절벽", 9, 35440, 1810, "mine"),
+    ("forest-pixie-stairs", "씨앗숲 스타픽시 계단", 10, 37390, 1680, "canopy"),
+    ("forest-mushmom-nest", "씨앗숲 머쉬맘 둥지", 10, 39840, 1760, "canopy"),
+)
+
+# Fractions along each field reuse the current terrain, props and ladder art.
+FIELD_LAYOUTS = {
+    "meadow": (
+        ((.1,381),(.23,353),(.43,353),(.6,393),(.73,393),(.86,354),(.94,354)),
+        ((.19,.45,249,.31),(.37,.66,143,.42),(.7,.92,224,.81)), "props", (0,2,3)),
+    "mine": (
+        ((.11,386),(.3,388),(.47,347),(.62,347),(.76,392),(.91,371)),
+        ((.18,.52,261,.31),(.39,.69,142,.46),(.61,.91,234,.75)), "quarry_props", (0,1,2)),
+    "coast": (
+        ((.13,370),(.28,380),(.49,380),(.63,343),(.8,343),(.93,383)),
+        ((.21,.49,255,.33),(.55,.84,243,.7),(.7,.93,127,.77)), "props", (4,5,1)),
+    "canopy": (
+        ((.12,387),(.29,357),(.42,357),(.57,394),(.74,394),(.92,363)),
+        ((.18,.52,254,.32),(.37,.74,145,.47),(.62,.91,39,.67)), "terrace_props", (3,1,2)),
+}
+
+HUNT_FIELDS = []
+_field_start = BASE_WORLD_WIDTH
+for _kind, (_map_id, _name, _parent, _gate, _width, _style) in enumerate(HUNT_FIELD_DATA):
+    _end = _field_start + _width
+    _area = dict(AREAS[_parent], name=_name, start=_field_start, end=_end, hunt_kind=_kind,
+                 hunt_parent=_parent, view=(AREAS[_parent]["view"] + 270 + 153*(_kind % 3)))
+    if _style == "mine":
+        _area.update(material="quarry_ground", image="cavern", terrain_tint="#33405a60")
+    MAP_IDS.append(_map_id)
+    HUNT_FIELDS.append(dict(kind=_kind, region=len(AREAS), start=_field_start, width=_width, gate=_gate, parent=_parent,
+                            ledges=[]))
+    AREAS.append(_area)
+    _ground, _ledges, _atlas, _objects = FIELD_LAYOUTS[_style]
+    GROUND.extend((_field_start + round(_width*fraction), y) for fraction, y in _ground)
+    GROUND.append((_end, 382))
+    for _index, (_left, _right, _y, _ladder) in enumerate(_ledges):
+        _x = _field_start + round(_width*_left)
+        LEDGES.append(dict(x=_x, y=_y, w=_field_start + round(_width*_right) - _x,
+                           ladderX=_field_start + round(_width*_ladder)))
+        HUNT_FIELDS[-1]["ledges"].append(_x)
+        _prop_x = _x + round(_width*(_right-_left)*.31)
+        PROPS.append((_prop_x, _objects[_index], 124+_index*12, _y, _atlas))
+    for _fraction, _slot in ((.16,0),(.55,1),(.94,2)):
+        PROPS.append((_field_start + round(_width*_fraction), _objects[_slot], 152+_slot*16, None, _atlas))
+    _field_start = _end
+
+WORLD_WIDTH = map_x(_field_start)
 for _area in AREAS:
     _area.update(start=map_x(_area["start"]),end=map_x(_area["end"]))
 GROUND = [(map_x(x),y) for x,y in GROUND]

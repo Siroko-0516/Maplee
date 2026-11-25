@@ -1,7 +1,7 @@
 """Python browser UI, input lifecycle and save persistence."""
 import json
 from browser import document, window
-from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS
+from .content import AREAS, CLASSES, HOTBAR_ACTIONS, ITEMS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS, SUPPORTS, TRANSPORT_LABELS
 from .engine import STEP, Game, area_at
 from .hunting import HUNT_ZONES
 from .lobby import Lobby
@@ -155,7 +155,7 @@ class App:
         if code in SHORTCUTS:
             self.show_panel(SHORTCUTS[code])
             return
-        if self.paused or not self.renderer.ready or not self.world.actor:
+        if self.paused or not self.renderer.ready or not self.world.actor or self.world.voyage:
             return
         game = self.game
         if code.startswith("Digit"):
@@ -185,18 +185,20 @@ class App:
     def arrive(self, x, reason):
         self.game.travel(x)
         self.clear_input()
-        if reason == "portal":
+        if reason == "portal" or reason in TRANSPORT_LABELS:
             region = area_at(x)
             area, hunt = AREAS[region], HUNT_ZONES[region]
             low, high = hunt["levels"]
             self.portal_until = number(window.performance.now()) + 320
-            self.toast(f"{area['name']} · {hunt['label']} · Lv. {low}–{high}")
+            arrived = TRANSPORT_LABELS[reason] + " 도착 · " if reason in TRANSPORT_LABELS else ""
+            levels = str(low) if low == high else f"{low}–{high}"
+            self.toast(f"{arrived}{area['name']} · {hunt['label']} · Lv. {levels}")
         else:
             self.toast("솔방울 마을에서 회복했어요." if reason == "respawn" else "솔방울 마을로 돌아왔어요.")
         self.save()
 
     def run_slot(self, i):
-        if self.paused or not self.renderer.ready or not self.world.actor:
+        if self.paused or not self.renderer.ready or not self.world.actor or self.world.voyage:
             return
         action = self.game.p["hotbar"][i]
         if action in ("hp", "mp"):
@@ -355,8 +357,13 @@ class App:
         self.render_panel()
 
     def map_panel(self):
-        self.note("지역 끝 포털에서 ↑로 다음 지역에 이동해요.")
-        self.rows.append(("route",))
+        tab = self.category.get("map", "main")
+        self.tabs("map", (("main","지역 지도"),("hunt","전용 사냥터")), tab)
+        if tab == "main":
+            self.note("같은 지역은 도보로, 다른 지역은 선착장에서 ↑를 눌러 이동해요.")
+        else:
+            self.note("아래에 표시된 지역의 입구에서 ↑를 누르면 해당 몬스터만 나오는 곳으로 이동해요.")
+        self.rows.append(("route",tab))
 
     def bestiary(self):
         discovered = self.game.p["bestiary"]
@@ -514,7 +521,7 @@ class App:
         self.world.tick(now)
         keys = self.keys | set(self.pointers.values()) if self.pointers else self.keys
         while self.accumulator >= STEP:
-            if self.renderer.ready and not self.paused and self.world.actor:
+            if self.renderer.ready and not self.paused and self.world.actor and not self.world.voyage:
                 game.step(keys)
                 if game.tick % 300 == 0:
                     self.save()
@@ -524,7 +531,7 @@ class App:
         self.messages()
         if now+.5 >= self.field_draw_due:
             self.renderer.draw(game,self.paused,self.profile,max(0,(self.portal_until-now)/320),
-                               self.world.visible_players(now))
+                               self.world.visible_players(now), self.world.voyage)
             self.field_draw_due = max(now,self.field_draw_due+STEP)
         self.screen.draw(now)
         window.requestAnimationFrame(self.frame)

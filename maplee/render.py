@@ -1,9 +1,10 @@
 """Browser canvas rendering, using nearest-neighbor sprite sheets."""
+from bisect import bisect_left, bisect_right
 from math import ceil, cos, sin, pi, sqrt
 from browser import window
 from .combat_art import COMBAT_ART
-from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGES, LEDGE_DEPTH, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, PROPS, QUESTS, SPRITES, WORN_ITEMS, WORN_ROWS, monster_art
-from .engine import AREA_LADDERS, AREA_LEDGES, CAMERA_TOP, HEIGHT, LOWEST_GROUND, PORTALS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
+from .content import AREAS, CLASSES, EXPANSION_ICON_COLUMNS, LEGACY_WORN, JOB_LOOKS, GROUND, IMAGES, LEDGE_DEPTH, MELEE_IMPACT, MELEE_WEAPONS, MELEE_POSES, NPC_IDLE, NPCS, PANORAMA_Y, QUESTS, SPRITES, TRANSPORT_LABELS, WORN_ITEMS, WORN_ROWS, monster_art
+from .engine import AREA_LADDERS, AREA_LEDGES, AREA_PORTALS, AREA_PROPS, CAMERA_TOP, GROUND_XS, HEIGHT, LOWEST_GROUND, TRANSPORTS, WALK_SECTIONS, WIDTH, SWING_FOLLOW, SWING_WINDUP, area_at, ground_at, item_icon, limit, monster_feet_y
 
 WALK = SPRITES["hero"]["animations"]["walk"]["frames"]
 WALK_FRAME_MS = SPRITES["hero"]["animations"]["walk"]["durations"][0]
@@ -196,6 +197,40 @@ class Renderer:
         if area.get("mid_image"):
             self.panorama_layer(area["mid_image"],view+round(distance*.56),camera_y,.7)
 
+    def field_backdrop(self, region, x, left, top):
+        first,last = WALK_SECTIONS[region]
+        area = AREAS[region]
+        margin = 220
+        if region > first and x-area["start"] < margin:
+            west,east = region-1,region
+        elif region < last and area["end"]-x < margin:
+            west,east = region,region+1
+        else:
+            self.backdrop(area,left,top)
+            return
+        edge = AREAS[east]["start"]
+        self.backdrop(AREAS[west],left,top)
+        self.ctx.save()
+        self.ctx.globalAlpha = limit((x-edge+margin)/(2*margin),0,1)
+        self.backdrop(AREAS[east],left,top)
+        self.ctx.restore()
+
+    def sailing(self, game, voyage):
+        mode = voyage["mode"]
+        elapsed = max(0, game.shared_clock - voyage["start"])
+        duration = voyage["until"] - voyage["start"]
+        fraction = limit(elapsed/duration,0,1)
+        scene = "lantern_quay" if mode == "boat" else "highland"
+        self.panorama_layer(scene, round(elapsed*.14), -128, .7)
+        cx,cy = self.view_width//2,self.view_height//2
+        self.rect(cx-132,cy-52,264,105,"#1a273cd9")
+        self.icon(item_icon("anchor" if mode == "boat" else "plume"),cx-98,cy-22,29)
+        self.label(TRANSPORT_LABELS[mode] + " 탑승 중",cx,cy-22,"#ffe6a0",18)
+        self.label(AREAS[voyage["region"]]["name"],cx,cy+5,"#ecf7ff",16)
+        self.rect(cx-98,cy+25,196,7,"#1b1c2c")
+        self.rect(cx-98,cy+25,round(196*fraction),7,"#80c8cb")
+        self.label(f"도착까지 {ceil(max(0,duration-elapsed)/1000)}초",cx,cy+44,"#ecf7ff",12)
+
     def ladder(self, x, top, bottom):
         # Paint over the leading edge of both ledges. Rungs and rails stay on
         # whole pixels even on slopes and on ladders with a partial last tile.
@@ -233,7 +268,8 @@ class Renderer:
     def ground(self, material, left, right, stone, bottom):
         ctx = self.ctx
         segments = []
-        for (x, y), (end, end_y) in zip(GROUND, GROUND[1:]):
+        first,last = max(0,bisect_right(GROUND_XS,left)-1),bisect_left(GROUND_XS,right)
+        for (x, y), (end, end_y) in zip(GROUND[first:last], GROUND[first+1:last+1]):
             start = max(x, left)
             finish = min(end, right)
             if start < finish:
@@ -265,9 +301,9 @@ class Renderer:
         ctx = self.ctx
         area = AREAS[region]
         material = area["material"]
-        for prop in PROPS:
+        for prop in AREA_PROPS[region]:
             x, id, width = prop[:3]
-            if not area["start"] <= x < area["end"] or x + width/2 <= left or x - width/2 >= right:
+            if x + width/2 <= left or x - width/2 >= right:
                 continue
             atlas = prop[4] if len(prop) > 4 else "props"
             sx, sy, sw, sh = SPRITES[atlas][id]
@@ -312,6 +348,9 @@ class Renderer:
             self.ctx.imageSmoothingEnabled = False
             self.ctx.translate(-padded_left,-TERRAIN_TOP)
             self.static_scenery(region,padded_left,padded_right,TERRAIN_BOTTOM)
+            if area.get("terrain_tint"):
+                self.ctx.globalCompositeOperation = "source-atop"
+                self.rect(padded_left,TERRAIN_TOP,padded_right-padded_left,TERRAIN_BOTTOM-TERRAIN_TOP,area["terrain_tint"])
         finally:
             self.ctx = original
         tile = image,left-padded_left,right-left
@@ -331,14 +370,17 @@ class Renderer:
             x = origin+index*TERRAIN_TILE_WIDTH
             self.ctx.drawImage(image,sx,0,width,height,x,TERRAIN_TOP,width,height)
 
-    def scenery(self, game, area, left, right):
-        for x, _, target in PORTALS:
-            if area["start"] <= x < area["end"] and left - 60 < x < right + 60:
+    def scenery(self, game, region, left, right):
+        area = AREAS[region]
+        for x, _, target in AREA_PORTALS[region]:
+            if left - 60 < x < right + 60:
                 y = ground_at(x)
-                self.rect(x - 9, y - 41, 18, 41, "#5adbee60")
+                mode = TRANSPORTS.get(x)
+                self.rect(x - 9, y - 41, 18, 41, "#efd47a78" if mode else "#5adbee60")
                 for i in range(6):
                     self.rect(x - 8 + 3 * i, y - ((game.tick + i * 11) % 37), 2, 5, "#cdfbff")
-                self.label("↑ " + AREAS[target]["name"], x, y - 50, "#baf6ff")
+                travel = TRANSPORT_LABELS[mode] + " · " if mode else ""
+                self.label("↑ " + travel + AREAS[target]["name"], x, y - 50, "#ffe498" if mode else "#baf6ff")
         nearby = None
         for row, npc in enumerate(NPCS):
             x = npc["x"]
@@ -419,7 +461,7 @@ class Renderer:
         else:
             action = "move"
         y = monster_feet_y(m, game.tick)
-        scale = 1.5 if species.get("elite") else 1
+        scale = species["scale"]
         if m["windup"]:
             reach = m["range"]
             self.rect(m["x"] if m["dir"] > 0 else m["x"] - reach, m["y"] - 2, reach, 4, "#fbb070a5")
@@ -537,7 +579,7 @@ class Renderer:
             for i in range(-4, 5):
                 self.rect(x + i * data / 4, y + (abs(i) - 4) * age * .45, 7, 4, "#ffa48e")
 
-    def draw(self, game, paused, profile=None, portal_fade=0, peers=()):
+    def draw(self, game, paused, profile=None, portal_fade=0, peers=(), voyage=None):
         width,height = self.view_width,self.view_height
         self.ctx.setTransform(self.scale_x,0,0,self.scale_y,0,0)
         self.ctx.imageSmoothingEnabled = False
@@ -546,20 +588,26 @@ class Renderer:
             text = "그래픽 파일을 불러오지 못했어요." if self.failed else f"도트 그래픽 불러오는 중 · {len(self.loaded)}/{len(IMAGES)}"
             self.label(text,width/2,height/2,size=16)
             return
+        if voyage:
+            self.sailing(game,voyage)
+            return
         ctx = self.ctx
         x, y, tick = game.p["x"], game.p["y"], game.tick
         left,top = round(game.camera),round(game.camera_y)
         right = left+width
         region = area_at(x)
-        area = AREAS[region]
-        self.backdrop(area,left,top)
+        self.field_backdrop(region,x,left,top)
+        first,last = WALK_SECTIONS[region]
+        visible_regions = range(max(first,area_at(left)),min(last,area_at(right-1))+1)
         ctx.save()
         ctx.translate(-left,-top)
-        self.terrain(region,left,right)
-        self.scenery(game,area,left,right)
-        for m in game.monsters_in_area(region):
-            if left - 100 < m["x"] < right + 100 and top-100 < m["y"] < top+height+140:
-                self.monster(game, m)
+        for visible in visible_regions:
+            self.terrain(visible,left,right)
+            self.scenery(game,visible,left,right)
+            for m in game.monsters_in_area(visible):
+                extra = (m["spec"]["scale"]-1)*80
+                if left-100-extra < m["x"] < right+100+extra and top-100 < m["y"] < top+height+140+extra:
+                    self.monster(game, m)
         for drop in game.drops:
             if left <= drop["x"] <= right:
                 elapsed = tick - drop["start"]

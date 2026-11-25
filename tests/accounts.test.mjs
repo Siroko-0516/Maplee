@@ -81,7 +81,7 @@ test("accounts, four slots, durable legacy migration and settings-only autosaves
   assert.equal((await call("","/api/slot/0")).status,401);
   const old = { profile:{ ...starter,job:"cleric" }, revision:7,updated:1795400000,progress:{
     job:"cleric", level:9, gold:842, xp:22, avatarStyle:"classic",bag:{ chimewand:2, cap:1, jelly:5 },
-    equipment:{ weapon:"chimewand", armor:"cap" }, x:catalog.start+10, worldLayout:catalog.layout,
+    equipment:{ weapon:"chimewand", armor:"cap" }, x:catalog.start+10, worldLayout:5,
     quests:[{ state:2,count:8 }], bestiary:{ 0:18 },
   } };
   const key = await legacy("account_1",3,old);
@@ -174,7 +174,7 @@ test("server damage, replay-safe cooperative rewards, mode isolation and portal 
   const fake = { ...pose(),x:catalog.ends[0]+200 };
   now += 500;
   assert.equal((await sync(privateField,1,fake)).region,0);
-  const east = catalog.portals.find(([x,,target])=>x<catalog.ends[0] && target===1);
+  const east = catalog.portals.find(([, ,target])=>catalog.mapIds[target]==="slime-clearing");
   await legacy("field_b",1,{ profile:starter,updated:now/1000,revision:0,
     progress:{ job:"beginner",level:1,x:east[0],worldLayout:catalog.layout } });
   const port = { x:east[0],y:355,facing:1 };
@@ -183,7 +183,7 @@ test("server damage, replay-safe cooperative rewards, mode isolation and portal 
   const travel = await sync(traveler,1,traveler.pose,{ move:east[0] });
   assert.equal(travel.warp,"portal");
   assert.equal(travel.pose.x,east[1]);
-  assert.equal(travel.region,1);
+  assert.equal(travel.region,east[2]);
   assert.equal((await get(b.cookie,1)).progress.x,east[1]);
   assert.equal((await call("", "/api/world/join","POST",{ protocol })).status,401);
 });
@@ -254,4 +254,59 @@ test("movement uses one database batch and retries acknowledge the original posi
   assert.deepEqual(constrained.sample,[invalid.x,invalid.y]);
   assert.equal(constrained.pose.x,afterDelay.x);
   assert.equal(constrained.pose.y,afterDelay.y);
+});
+
+test("connected maps allow walking and both transport routes persist until arrival",async t => {
+  const { call,signup,legacy,get,join,sync } = fixture();
+  let now = 1_800_000_200_000;
+  t.mock.method(Date,"now",()=>now);
+  const login = "region_traveler";
+  const cookie = await signup(login);
+  function poseAt(x) {
+    const at = catalog.ground.findIndex(([point])=>point>x);
+    const [left,y] = catalog.ground[at-1], [right,z] = catalog.ground[at];
+    return { x,y:Math.round(y+(z-y)*(x-left)/(right-left)),facing:1 };
+  }
+  async function spawn(slot,x) {
+    await legacy(login,slot,{ profile:starter,revision:0,updated:now/1000,
+      progress:{ job:"beginner",level:1,x,worldLayout:catalog.layout } });
+    return join(cookie,poseAt(x),slot);
+  }
+
+  const seam = catalog.ends[0];
+  const walker = await spawn(0,seam-45);
+  now += 320;
+  const walked = await sync(walker,1,poseAt(seam+37));
+  assert.equal(walked.region,1);
+  assert.equal(walked.pose.x,seam+37);
+  assert.equal(walked.warp,null);
+
+  for (const [slot, mode] of [[1,"boat"],[2,"airship"]]) {
+    const [gate, arrival, region] = catalog.portals.find(([x])=>catalog.transports[x]===mode);
+    const rider = await spawn(slot,gate);
+    now += 320;
+    const attemptedWalk = await sync(rider,1,poseAt(catalog.ends[region-1]+24));
+    assert.equal(attemptedWalk.region,rider.region);
+    assert.equal(attemptedWalk.pose.x,gate);
+    now += 320;
+    const boarded = await sync(rider,2,poseAt(gate),{ move:gate });
+    assert.equal(boarded.warp,null);
+    assert.equal(boarded.voyage.mode,mode);
+    assert.equal(boarded.region,rider.region);
+    assert.equal((await call(cookie,"/api/world/leave","POST",{ actor:rider.actor })).status,200);
+    now += 320;
+    const reconnected = await join(cookie,poseAt(gate),slot);
+    assert.deepEqual(reconnected.voyage,boarded.voyage);
+    now += 320;
+    const inTransit = await sync(reconnected,1,poseAt(gate),{ move:"home" });
+    assert.equal(inTransit.pose.x,gate);
+    assert.equal(inTransit.voyage.mode,mode);
+    now = boarded.voyage.until+125;
+    const docked = await sync(reconnected,2,poseAt(gate));
+    assert.equal(docked.voyage,null);
+    assert.equal(docked.warp,mode);
+    assert.equal(docked.region,region);
+    assert.equal(docked.pose.x,arrival);
+    assert.equal((await get(cookie,slot)).progress.x,arrival);
+  }
 });

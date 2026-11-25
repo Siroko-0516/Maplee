@@ -68,10 +68,10 @@ def build(output, cache):
     page = page.replace(expect, packed)
     assets = output / "assets"
     assets.mkdir(exist_ok=True)
-    from maplee.content import (AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, IMAGES, ITEMS, LEDGES,
+    from maplee.content import (AREAS, ATTRIBUTES, CLASSES, GROUND, HOTBAR_ACTIONS, IMAGES, ITEMS, LEDGES, MAP_IDS,
                                 MELEE_IMPACT, MELEE_POSES, NPCS, QUESTS, RECIPES, SLOTS, SPECIES, STARTER_WEAPONS,
-                                SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT)
-    from maplee.engine import Game, PORTALS, START_X, SWING_END, SWING_WINDUP, area_at
+                                SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, PRESERVED_LAYOUTS)
+    from maplee.engine import Game, PORTALS, START_X, SWING_END, SWING_WINDUP, TRANSPORTS, WALK_GROUPS, area_at
     from maplee.hunting import HUNT_ZONES
     for name in IMAGES.values():
         shutil.copyfile(ROOT / "assets" / name, assets / name)
@@ -94,9 +94,7 @@ def build(output, cache):
     progression = (ROOT/"server/progression.mjs").read_text()
     monsters = []
     game = Game()
-    map_ids = ("pinecone", "bellflower", "blue-sail", "glass-mine", "moonwind", "ember-grove",
-               "lantern-quay", "windroot", "sunset-eggs", "copper-terraces", "glassseed")
-    if len(AREAS) != len(map_ids):
+    if len(AREAS) != len(MAP_IDS) or len(set(MAP_IDS)) != len(MAP_IDS):
         raise ValueError("Each map needs a persistent ID")
     for monster in game.monsters:
         region = area_at(monster["home"])
@@ -107,7 +105,7 @@ def build(output, cache):
             **{key:monster[key] for key in ("home", "left", "right", "y")},
             "id":monster["spawn_id"], "kind":monster["kind"], "direction":monster["dir"],
             "region":region, "hp":spec["hp"], "attack":spec["attack"], "hover":spec.get("hover", 0),
-            "body":spec.get("body_size", (36, 36)), "elite":spec.get("elite", False),
+            "body":spec.get("body_size", (36, 36)), "elite":spec.get("elite", False), "scale":spec["scale"],
             "undead":spec.get("undead", False), "reach":spec.get("reach", 60 if spec.get("elite") else 25),
             "speed":spec["speed"], "ledge":bool(monster["ledge"]),
             "wave":round(zone["wave"]*1000/60), "recovery":round(recovery*1000/60),
@@ -115,7 +113,9 @@ def build(output, cache):
     if len({monster["id"] for monster in monsters}) != len(monsters):
         raise ValueError("Spawn IDs must be unique")
     shared_world = {
-        "layout":WORLD_LAYOUT, "mapIds":map_ids, "ends":[area["end"] for area in AREAS],
+        "layout":WORLD_LAYOUT, "mapIds":MAP_IDS, "ends":[area["end"] for area in AREAS],
+        "preservedLayouts":PRESERVED_LAYOUTS,
+        "walkGroups":WALK_GROUPS, "transports":TRANSPORTS,
         "ground":GROUND, "ledges":LEDGES, "portals":PORTALS, "npcs":NPCS, "start":START_X,
         "monsters":monsters, "species":SPECIES, "items":ITEMS, "slots":list(SLOTS), "jobs":CLASSES,
         "attributes":ATTRIBUTES, "quests":QUESTS, "recipes":RECIPES, "starterWeapons":STARTER_WEAPONS,
