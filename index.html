@@ -11,44 +11,95 @@
   <canvas id="game-canvas" width="960" height="468" aria-label="Maplee 필드"></canvas>
   <canvas id="interface" width="960" height="540" tabindex="0" aria-label="Maplee 게임. 방향키 이동, Space 점프, Z 공격, ↑ 대화. C 능력치, I 장비, Tab 조작 선택, Enter 실행, Esc 창 닫기."></canvas>
   <output id="toast" role="status" aria-live="polite">게임을 불러오는 중이에요.</output>
-  <section id="lobby" aria-label="Maplee 시작 화면">
+  <section id="lobby" aria-label="Maplee 시작 화면" data-page="auth">
     <div class="lobby-shell">
       <header class="lobby-header">
         <span class="lobby-brand">Maplee</span>
-        <button id="lobby-signout" type="button" hidden>로그아웃</button>
-      </header>
-      <div id="lobby-auth">
-        <div class="lobby-hero">
-          <p class="lobby-subtitle">솔방울 마을에서 시작하는 모험</p>
-          <h1>나만의 모험을 시작하세요</h1>
+        <div class="lobby-account-bar">
+          <span id="lobby-account"></span>
+          <button id="lobby-signout" class="quiet" type="button" hidden>로그아웃</button>
         </div>
-        <form id="lobby-credentials" class="lobby-form">
-          <h2 id="auth-title">Maplee 로그인</h2>
+      </header>
+
+      <section id="lobby-auth" class="lobby-page">
+        <div class="lobby-title-art" aria-hidden="true">
+          <span class="lobby-emblem">✦</span>
+          <span class="lobby-wordmark">Maplee</span>
+        </div>
+        <form id="lobby-credentials" class="lobby-form lodge-panel">
+          <h1 id="auth-title">로그인</h1>
           <label for="lobby-id">아이디</label>
           <input id="lobby-id" name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" placeholder="영문·숫자·밑줄">
           <label for="lobby-password">비밀번호</label>
           <input id="lobby-password" name="password" type="password" autocomplete="current-password" required minlength="10" maxlength="128" placeholder="10자 이상">
           <button id="auth-submit" class="primary" type="submit" disabled>로그인</button>
-          <button id="auth-mode" class="plain" type="button">회원가입</button>
+          <button id="auth-mode" class="quiet" type="button">회원가입</button>
         </form>
-      </div>
-      <section id="lobby-select" hidden>
-        <h1>캐릭터 선택</h1>
-        <div id="lobby-slots" class="lobby-slots"></div>
       </section>
-      <section id="lobby-create" hidden>
-        <div class="lobby-heading"><h1>캐릭터 만들기</h1><button id="lobby-back" type="button">캐릭터 목록</button></div>
-        <form id="lobby-character">
-          <div id="lobby-jobs" class="lobby-jobs" aria-label="직업 선택"></div>
-          <div class="lobby-options">
-            <canvas id="lobby-preview" width="112" height="112" aria-label="선택한 캐릭터"></canvas>
-            <label>이름<input id="character-name" required minlength="2" maxlength="14" autocomplete="off"></label>
+
+      <section id="lobby-select" class="lobby-page" aria-labelledby="slot-title" hidden>
+        <div class="lobby-heading">
+          <h1 id="slot-title" tabindex="-1">캐릭터 선택</h1>
+          <span id="lobby-slot-count"></span>
+        </div>
+        <div id="lobby-slots" class="lobby-slots" aria-label="캐릭터 슬롯"></div>
+        <div class="lobby-actions">
+          <button id="lobby-enter" type="button" class="primary" disabled>플레이</button>
+        </div>
+      </section>
+
+      <section id="lobby-jobs-page" class="lobby-page" aria-labelledby="job-title" hidden>
+        <div class="lobby-heading">
+          <h1 id="job-title" tabindex="-1">직업 선택</h1>
+          <button id="lobby-back" class="quiet" type="button">캐릭터 목록</button>
+        </div>
+        <div class="lobby-split">
+          <div class="lobby-display lodge-panel">
+            <div class="lobby-platform">
+              <canvas id="lobby-job-preview" width="220" height="220" aria-label="선택한 직업의 캐릭터"></canvas>
+            </div>
+            <div class="lobby-caption">
+              <strong id="lobby-job-name"></strong>
+              <span id="lobby-job-skill"></span>
+            </div>
           </div>
-          <div class="lobby-actions"><button class="primary" id="character-submit" type="submit">캐릭터 만들기</button><button id="lobby-import" type="button" hidden>이 브라우저의 예전 캐릭터 가져오기</button></div>
-        </form>
+          <div class="lobby-choice lodge-panel">
+            <div id="lobby-jobs" class="lobby-jobs" aria-label="직업 목록"></div>
+            <div class="lobby-actions">
+              <button id="lobby-job-next" type="button" class="primary">이름 정하기</button>
+            </div>
+          </div>
+        </div>
       </section>
-      <p id="lobby-status" role="status" aria-live="polite"></p>
-      <a class="asset-credits" href="vendor/OPEN-ART.txt" target="_blank" rel="noopener">에셋 출처</a>
+
+      <section id="lobby-create" class="lobby-page" aria-labelledby="create-title" hidden>
+        <div class="lobby-heading">
+          <h1 id="create-title" tabindex="-1">캐릭터 이름 정하기</h1>
+          <button id="lobby-back-jobs" class="quiet" type="button">직업 다시 선택</button>
+        </div>
+        <div class="lobby-split lobby-create-layout">
+          <div class="lobby-display lodge-panel">
+            <div class="lobby-platform">
+              <canvas id="lobby-preview" width="220" height="220" aria-label="만들 캐릭터"></canvas>
+            </div>
+            <div class="lobby-caption">
+              <strong id="lobby-create-job"></strong>
+            </div>
+          </div>
+          <form id="lobby-character" class="lobby-form lodge-panel">
+            <label for="character-name">캐릭터 이름</label>
+            <input id="character-name" required minlength="2" maxlength="14" autocomplete="off" aria-describedby="character-name-hint">
+            <small id="character-name-hint">한글·영문·숫자 등 2~14자</small>
+            <button class="primary" id="character-submit" type="submit">만들고 플레이</button>
+            <button id="lobby-import" class="quiet" type="button" hidden>이 브라우저의 예전 캐릭터 가져오기</button>
+          </form>
+        </div>
+      </section>
+
+      <footer class="lobby-footer">
+        <p id="lobby-status" role="status" aria-live="polite"></p>
+        <a class="asset-credits" href="vendor/OPEN-ART.txt" target="_blank" rel="noopener">에셋 출처</a>
+      </footer>
     </div>
   </section>
 </main>

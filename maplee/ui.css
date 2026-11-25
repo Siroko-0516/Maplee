@@ -10,72 +10,279 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 
 #lobby[hidden], #lobby [hidden] { display: none !important; }
 #lobby {
+  --leaf: #b6c7a2;
+  --paper: #f7e9c9;
+  --gold: #f4c56f;
+  --line: #9f815393;
   position: fixed;
   inset: 0;
   z-index: 4;
   overflow-y: auto;
-  padding: clamp(14px, 5vh, 52px) clamp(12px, 4vw, 44px);
-  background: linear-gradient(120deg, #102837e8, #14384f92 58%, #182844e8),
-              url("assets/ember-grove-tall.png") center/cover fixed;
-  color: #f5efdf;
-  font-size: 16px;
+  overscroll-behavior: contain;
+  padding: 0 clamp(14px, 4vw, 56px);
+  color: var(--paper);
+  color-scheme: dark;
+  font: 16px/1.5 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  background:
+    linear-gradient(180deg, #0d211fe8 0, #10282414 22%, #0b201b47 56%, #071a15ee 100%),
+    url("assets/lobby-forest.webp") center / cover,
+    #19362c url("assets/bellflower-forest.png") center / cover;
+  background-attachment: fixed;
+}
+#lobby[data-page="jobs"], #lobby[data-page="create"] {
+  background-position: center, 58% center, center;
 }
 .lobby-shell {
-  max-width: 900px;
-  min-height: 440px;
+  width: min(100%, 1120px);
+  min-height: 100%;
   margin: 0 auto;
-  border: 1px solid #98bcc5;
-  box-shadow: 0 0 0 4px #172631aa, 0 18px 70px #0f1525bf;
-  background: #152c3ce8;
-  border-radius: 14px;
-  padding: clamp(17px, 3vw, 34px);
+  display: flex;
+  flex-direction: column;
 }
-.lobby-header, .lobby-heading, .lobby-actions {
+.lobby-header, .lobby-heading, .lobby-actions, .lobby-footer, .lobby-account-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
 }
-.lobby-header { border-bottom: 1px solid #a9ced144; padding-bottom: 12px; }
-.lobby-brand { font-weight: 900; font-size: 1.6rem; color: #ffcf7a; letter-spacing: .04em; }
-#lobby h1 { font-size: clamp(1.5rem, 3vw, 2.4rem); margin: .85em 0 .55em; line-height: 1.25; }
-#lobby h2 { font-size: 1.25rem; margin: 0 0 10px; }
-#lobby-auth { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; align-items: center; }
-.lobby-hero { min-height: 280px; display: grid; align-content: center; }
-.lobby-subtitle { color: #ffdb8f; margin-bottom: 0; }
-.lobby-form { display: grid; gap: 8px; padding: 20px; background: #101f30; border: 1px solid #426678; border-radius: 10px; margin-top: 18px; }
-#lobby label { color: #dae8e6; font-size: .9rem; font-weight: 700; }
-#lobby input, #lobby select, #lobby button {
-  color: inherit;
+.lobby-header, .lobby-heading, .lobby-footer { justify-content: space-between; }
+.lobby-header { min-height: 74px; border-bottom: 1px solid #e2c79d48; }
+.lobby-brand {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -.035em;
+  color: var(--gold);
+  text-shadow: 0 2px #0a1a16;
+}
+#lobby[data-page="auth"] .lobby-brand { visibility: hidden; }
+.lobby-account-bar { color: var(--leaf); font-size: .875rem; }
+.lobby-page { margin: auto 0; padding: clamp(24px, 5vh, 56px) 0; }
+.lobby-heading { margin-bottom: 20px; flex-wrap: wrap; }
+#lobby h1 {
+  color: var(--paper);
+  font-size: clamp(1.7rem, 3.2vw, 2.6rem);
+  line-height: 1.18;
+  margin: 0;
+  text-wrap: balance;
+  text-shadow: 0 2px 5px #0b1e17;
+}
+#lobby-auth {
+  display: grid;
+  grid-template-columns: minmax(0, 1.24fr) minmax(280px, 365px);
+  gap: clamp(26px, 7vw, 120px);
+  align-items: center;
+  justify-content: center;
+}
+.lobby-title-art { text-align: center; position: relative; isolation: isolate; }
+.lobby-title-art::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -30% -8%;
+  background: radial-gradient(ellipse, #0b2d23e6, #16332276 47%, transparent 72%);
+}
+.lobby-emblem {
+  display: block;
+  color: var(--gold);
+  font-size: clamp(1.7rem, 5vw, 3.5rem);
+  line-height: 1.1;
+  text-shadow: 0 0 18px #ffc97b64;
+}
+.lobby-wordmark {
+  display: block;
+  margin: 0;
+  color: #ffe4a0;
+  font: 900 clamp(4.2rem, 12vw, 10rem)/.92 Georgia, "Times New Roman", serif;
+  letter-spacing: -.08em;
+  text-shadow: 0 4px #562f1f, 0 7px #261b16, 0 12px 26px #091b16;
+  padding: 0 .075em .16em 0;
+}
+.lodge-panel {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: linear-gradient(150deg, #243a30fa, #142720fa 58%, #102119fa);
+  box-shadow: inset 0 1px #fbd59d23, 0 0 0 3px #101b16a6, 0 14px 38px #07170fc2;
+}
+.lobby-form {
+  display: grid;
+  gap: 8px;
+  padding: clamp(20px, 4vw, 30px);
+  border-top: 3px solid #c5a164;
+}
+#lobby .lobby-form h1 { margin-bottom: 14px; font-size: 1.9rem; }
+#lobby label { color: var(--paper); font-size: .95rem; font-weight: 700; }
+#lobby input, #lobby button {
   font: inherit;
-  border: 1px solid #7897a4;
+  color: inherit;
+  min-height: 44px;
+  padding: 8px 14px;
   border-radius: 6px;
-  background: #253d4e;
-  min-height: 40px;
-  padding: 7px 10px;
+  border: 1px solid #807652;
+  background-color: #263a2c;
 }
-#lobby input, #lobby select { width: 100%; }
-#lobby button { cursor: pointer; }
-#lobby button:hover, #lobby button[aria-pressed="true"] { border-color: #ffc875; background: #3d5a62; }
-#lobby button.primary { color: #2e261b; background: #ffcc79; border-color: #ffdf9d; font-weight: 800; }
-#lobby button.plain { background: transparent; border-color: transparent; }
-#lobby button:disabled { opacity: .58; cursor: wait; }
-#lobby :focus-visible { outline: 2px solid #ffcc79; outline-offset: 3px; }
-.lobby-slots, .lobby-jobs { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-#lobby .lobby-card { display: grid; gap: 4px; place-items: center; text-align: center; padding: 8px; }
-.lobby-card canvas, #lobby-preview { position: static; touch-action: auto; image-rendering: pixelated; background: #101f30c9; border-radius: 8px; }
-.lobby-card canvas { width: 100%; max-width: 80px; height: auto; aspect-ratio: 1; }
-.lobby-card small { color: #c3d5d6; font-size: .78rem; }
-.lobby-options { display: grid; grid-template-columns: 112px minmax(0,1fr); gap: 9px 13px; margin: 16px 0; align-items: end; }
-#lobby-preview { grid-row: span 2; }
-.lobby-options label { display: grid; gap: 4px; }
-#lobby-status { color: #ffdfac; min-height: 24px; margin: 16px 0 0; }
-.asset-credits { color: #c2d9e4; font-size: .85rem; }
-@media (max-width: 620px) {
-  #lobby-auth { display: block; }
-  .lobby-hero { min-height: unset; }
-  .lobby-slots, .lobby-jobs { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .lobby-options { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  #lobby-preview { grid-row: auto; grid-column: span 2; justify-self: center; }
+#lobby input {
+  width: 100%;
+  margin: 0 0 5px;
+  background-color: #101e19;
+  box-shadow: inset 0 2px 4px #06150da8;
+}
+#lobby input::placeholder { color: #abb5a2; }
+#lobby button { cursor: pointer; box-shadow: 0 2px #091710; }
+#lobby button:hover, #lobby button[aria-pressed="true"] { border-color: var(--gold); }
+#lobby button.primary {
+  color: #2f2216;
+  background: linear-gradient(#ffdc92, #d7a452);
+  border-color: #ffe2a4;
+  font-weight: 820;
+  min-width: min(180px, 100%);
+  box-shadow: inset 0 1px #fff0bd, 0 3px #644728;
+}
+#lobby button.primary:hover { background: linear-gradient(#ffe5a7, #e1b264); }
+#lobby .lobby-form .primary { margin-top: 8px; }
+#lobby button.quiet { background: #15291fae; color: #f2dfb8; }
+#lobby button:disabled { opacity: .6; cursor: wait; }
+#lobby :focus-visible { outline: 2px solid #ffdc95; outline-offset: 3px; }
+.lobby-heading > span { font-size: .9rem; font-weight: 720; text-shadow: 0 1px 4px #081a12; }
+.lobby-actions { justify-content: flex-end; margin-top: 20px; }
+.lobby-slots { display: grid; gap: clamp(10px, 2vw, 20px); grid-template-columns: repeat(4,minmax(0,1fr)); }
+
+#lobby .lobby-slot {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1.25rem minmax(108px, 1fr) auto auto;
+  justify-items: center;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+  min-height: 215px;
+  padding: 14px 9px 12px;
+  overflow-wrap: anywhere;
+  border-color: #89744b;
+  background:
+    radial-gradient(ellipse at 50% 32%, #4a5c37b8, transparent 62%),
+    linear-gradient(#14261be8, #1b2b20f4 66%, #2e2c1c 66%, #1c261b);
+  box-shadow: inset 0 1px #ffe4a425, 0 4px #132017, 0 12px 25px #081b16b0;
+}
+#lobby .lobby-slot.is-empty {
+  background:
+    radial-gradient(ellipse at 50% 37%, #3d593563, transparent 64%),
+    linear-gradient(#14271eea, #15261cf5 66%, #2b2e1e 66%, #1c261b);
+}
+#lobby .lobby-slot[aria-pressed="true"] {
+  border-color: #fcd68d;
+  box-shadow: 0 0 0 2px #f6c8794d, inset 0 1px #fff1bd58, 0 4px #4b3b24, 0 12px 24px #0a1d18;
+}
+.lobby-slot small, .lobby-job small { color: var(--leaf); font-size: .875rem; }
+.lobby-slot strong, .lobby-job strong { line-height: 1.25; }
+.lobby-slot canvas, .lobby-job canvas, .lobby-platform canvas {
+  position: static;
+  image-rendering: pixelated;
+  touch-action: auto;
+}
+.lobby-slot canvas { width: min(100%, 130px); height: auto; aspect-ratio: 1; }
+.lobby-slot-empty {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  color: var(--gold);
+  border: 1px dashed #a58a5b;
+  border-radius: 9px;
+  font-size: 2rem;
+  line-height: 1;
+}
+.lobby-split {
+  display: grid;
+  grid-template-columns: minmax(230px, .9fr) minmax(0, 1.15fr);
+  gap: clamp(16px, 3vw, 33px);
+  align-items: stretch;
+}
+.lobby-display {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  background:
+    linear-gradient(180deg, #0c221773 0, #1d37268c 48%, #11261e 90%),
+    url("assets/bellflower-forest.png") 41% 50% / auto 100%,
+    #152d20;
+}
+.lobby-platform {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  min-height: 225px;
+  padding: 8px 10px 0;
+  isolation: isolate;
+}
+.lobby-platform::before, .lobby-platform::after { position: absolute; content: ""; z-index: -1; }
+.lobby-platform::before {
+  inset: 8% 7% 0;
+  background: radial-gradient(ellipse at 50% 60%, #ffeeae42 0, #66a9742a 43%, transparent 69%);
+}
+.lobby-platform::after {
+  left: 12%;
+  right: 12%;
+  bottom: -12px;
+  height: 28px;
+  border-top: 3px solid #9cb15e;
+  border-bottom: 4px solid #25301d;
+  background: #54472e url("assets/grass-cliff.png") center top / 145px auto repeat-x;
+  image-rendering: pixelated;
+  box-shadow: 0 12px 28px #081a14ae;
+}
+.lobby-platform canvas { width: min(100%, 220px); height: auto; aspect-ratio: 1; }
+.lobby-caption {
+  border-top: 1px solid #baa56b60;
+  padding: 12px 10px 16px;
+  margin: 14px 18px 0;
+  display: grid;
+  gap: 1px;
+}
+.lobby-caption strong { color: #ffe6aa; font-size: 1.25rem; }
+.lobby-caption span { color: var(--leaf); font-size: .875rem; }
+.lobby-choice { padding: clamp(12px, 2vw, 20px); }
+.lobby-jobs { display: grid; gap: 9px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+#lobby .lobby-job {
+  min-width: 0;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 54px minmax(0,1fr);
+  gap: 7px;
+  align-items: center;
+  text-align: left;
+  padding: 5px 7px;
+  background: #172b22;
+}
+#lobby .lobby-job[aria-pressed="true"] { background: #4b4229; box-shadow: inset 0 0 0 1px #f6d38a36, 0 2px #1b1b11; }
+.lobby-job canvas { width: 54px; height: 54px; }
+.lobby-job span { min-width: 0; display: grid; gap: 1px; }
+.lobby-job small { font-size: .8rem; overflow-wrap: anywhere; }
+.lobby-create-layout { align-items: center; grid-template-columns: minmax(230px,1fr) minmax(0, .95fr); }
+#character-name-hint { color: var(--leaf); font-size: .875rem; }
+.lobby-footer {
+  min-height: 53px;
+  border-top: 1px solid #e2c79d48;
+  color: #edddba;
+}
+#lobby-status { margin: 0; font-size: .9rem; }
+.asset-credits { color: var(--leaf); flex-shrink: 0; font-size: .875rem; margin-left: auto; }
+@media (max-width: 660px) {
+  .lobby-header { min-height: 58px; }
+  #lobby-auth { grid-template-columns: minmax(0,370px); gap: 23px; }
+  .lobby-wordmark { font-size: clamp(4.2rem, 15vw, 7rem); }
+  .lobby-slots { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  #lobby .lobby-slot { min-height: 156px; grid-template-rows: 1.25rem minmax(64px,1fr) auto auto; padding-top: 8px; }
+  .lobby-slot canvas { width: min(100%,84px); }
+  .lobby-slot-empty { width: 48px; height: 48px; }
+  .lobby-split { grid-template-columns: minmax(0,1fr); }
+  .lobby-platform { min-height: 120px; }
+  .lobby-platform canvas { max-width: 144px; }
+  .lobby-caption { padding: 7px 10px 9px; }
+  .lobby-actions > button { width: 100%; }
+  #lobby .lobby-job { grid-template-columns: 38px minmax(0,1fr); gap: 3px; }
+  .lobby-job canvas { width: 38px; height: 38px; }
+  .lobby-footer { gap: 9px; flex-wrap: wrap; padding: 8px 0; }
 }

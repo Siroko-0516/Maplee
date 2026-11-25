@@ -73,11 +73,12 @@ def build(output, cache):
                                 SUPPORTS, WEAPON_ATTACKS, WORLD_LAYOUT, PRESERVED_LAYOUTS)
     from maplee.engine import Game, PORTALS, START_X, SWING_END, SWING_WINDUP, TRANSPORTS, WALK_GROUPS, area_at
     from maplee.hunting import HUNT_ZONES
-    for name in IMAGES.values():
+    asset_names = (*IMAGES.values(), "lobby-forest.webp")
+    for name in asset_names:
         shutil.copyfile(ROOT / "assets" / name, assets / name)
     (output / "index.html").write_text(page, encoding="utf-8")
     bundle = {}
-    web_files = [output/"index.html", *(assets/name for name in IMAGES.values()),
+    web_files = [output/"index.html", *(assets/name for name in asset_names),
                  *(vendor/name for name in (*RUNTIME,*credits))]
     for source in web_files:
         path = '/' + source.relative_to(output).as_posix()

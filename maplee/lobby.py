@@ -26,6 +26,7 @@ class Lobby:
         self.account = None
         self.slots = []
         self.slot = None
+        self.selected_slot = None
         self.pending = None
         self.saving = False
         self.inflight = None
@@ -42,7 +43,10 @@ class Lobby:
         document["auth-mode"].bind("click", self.auth_mode)
         document["lobby-character"].bind("submit", self.create)
         document["lobby-import"].bind("click", lambda _: self.create(legacy=True))
+        document["lobby-enter"].bind("click", self.enter_selected)
         document["lobby-back"].bind("click", lambda _: self.show_slots())
+        document["lobby-back-jobs"].bind("click", lambda _: self.show_jobs())
+        document["lobby-job-next"].bind("click", self.show_name)
         document["lobby-signout"].bind("click", lambda _: self.logout())
         document["auth-submit"].disabled = True
         api("GET","/api/session",None,self.signed_in)
@@ -51,16 +55,23 @@ class Lobby:
         document["lobby-status"].text = message
 
     def view(self, page):
+        self.preview_pending = None
         document["lobby"].hidden = False
+        document["lobby"].attrs["data-page"] = page
+        document["lobby"].scrollTop = 0
         self.app.screen.canvas.attrs["tabindex"] = "-1"
-        for item in ("auth","select","create"):
-            document["lobby-"+item].hidden = item != page
+        for item in ("auth","select","jobs","create"):
+            id = "lobby-jobs-page" if item == "jobs" else "lobby-"+item
+            document[id].hidden = item != page
         document["lobby-signout"].hidden = not self.account
+        document["lobby-account"].text = self.account or ""
 
     def auth_mode(self, _):
+        if self.busy:
+            return
         self.mode = "signup" if self.mode == "login" else "login"
         signup = self.mode == "signup"
-        document["auth-title"].text = "Maplee 회원가입" if signup else "Maplee 로그인"
+        document["auth-title"].text = "회원가입" if signup else "로그인"
         document["auth-submit"].text = "가입하고 시작" if signup else "로그인"
         document["auth-mode"].text = "로그인 화면" if signup else "회원가입"
         document["lobby-password"].attrs["autocomplete"] = "new-password" if signup else "current-password"
@@ -87,6 +98,7 @@ class Lobby:
             self.show_slots()
         elif not attempted and status == 401 and self.account:
             self.account = None
+            self.selected_slot = None
             self.view("auth")
             self.status("세션이 끝났어요. 다시 로그인해주세요.")
         elif attempted or status != 401:
@@ -113,27 +125,59 @@ class Lobby:
                                  job=job)
 
     def show_slots(self):
+        if self.busy:
+            return
         self.preview_pending = None
         self.view("select")
-        self.status(f"{self.account} · 캐릭터 {sum(item is not None for item in self.slots)}/4")
+        self.status("")
+        document["lobby-slot-count"].text = f"{sum(item is not None for item in self.slots)} / 4"
         holder = document["lobby-slots"]
         holder.clear()
         previews = []
+        self.slot_cards = []
         for index, entry in enumerate(self.slots):
-            card = html.BUTTON(Class="lobby-card", type="button")
+            card = html.BUTTON(Class="lobby-slot" if entry else "lobby-slot is-empty", type="button")
             card <= html.SMALL(f"슬롯 {index+1}")
             if entry:
-                canvas = html.CANVAS(width=80,height=80)
+                canvas = html.CANVAS(width=124,height=124, **{"aria-hidden":"true"})
                 card <= canvas
                 card <= html.STRONG(entry["profile"]["name"])
                 card <= html.SMALL(f"Lv. {entry['level']} · {CLASSES[entry['profile']['job']]['name']}")
-                card.bind("click", lambda _, index=index: self.select(index))
                 previews.append((canvas,entry["profile"]["job"]))
             else:
-                card <= html.STRONG("+ 캐릭터 만들기")
-                card.bind("click", lambda _, index=index: self.open_creator(index))
+                card <= html.SPAN("+",Class="lobby-slot-empty", **{"aria-hidden":"true"})
+                card <= html.STRONG("빈 슬롯")
+            card.bind("click", lambda _, index=index: self.mark_slot(index))
             holder <= card
-        self.require_preview(lambda: [self.portrait(canvas, job) for canvas,job in previews])
+            self.slot_cards.append(card)
+        index = self.selected_slot
+        if index is None or index >= len(self.slots):
+            index = next((i for i,entry in enumerate(self.slots) if entry),0)
+        self.mark_slot(index)
+        document["slot-title"].focus()
+
+        def draw():
+            for canvas, job in previews:
+                self.portrait(canvas,job)
+        self.require_preview(draw)
+
+    def mark_slot(self, index):
+        if self.busy or not self.slots:
+            return
+        self.selected_slot = index
+        for i, card in enumerate(self.slot_cards):
+            card.attrs["aria-pressed"] = "true" if i == index else "false"
+        button = document["lobby-enter"]
+        button.text = "플레이" if self.slots[index] else "캐릭터 만들기"
+        button.disabled = False
+
+    def enter_selected(self, _):
+        if self.busy or self.selected_slot is None:
+            return
+        if self.slots[self.selected_slot]:
+            self.select(self.selected_slot)
+        else:
+            self.open_creator(self.selected_slot)
 
     def open_creator(self, slot):
         if self.busy:
@@ -141,31 +185,55 @@ class Lobby:
         self.slot = slot
         self.job = "beginner"
         document["character-name"].value = ""
-        document["lobby-import"].hidden = not bool(local_read(SAVE_KEY))
-        self.view("create")
-        self.status(f"슬롯 {slot+1}")
+        self.show_jobs()
+
+    def show_jobs(self):
+        if self.busy:
+            return
+        self.view("jobs")
+        self.status("")
+        document["job-title"].focus()
         self.draw_jobs()
 
     def draw_jobs(self):
-        def draw():
-            holder = document["lobby-jobs"]
-            holder.clear()
-            for job in AVATAR_JOBS:
-                card = html.BUTTON(Class="lobby-card",type="button",
-                                   **{"aria-pressed":"true" if job==self.job else "false"})
-                canvas = html.CANVAS(width=80,height=80)
-                card <= canvas
-                card <= html.STRONG(CLASSES[job]["name"])
-                card <= html.SMALL(CLASSES[job]["skill"])
-                card.bind("click",lambda _, job=job: self.choose_job(job))
-                holder <= card
-                self.portrait(canvas,job,starter=True)
-            self.portrait(document["lobby-preview"],self.job,starter=True)
-        self.require_preview(draw)
+        holder = document["lobby-jobs"]
+        holder.clear()
+        self.job_cards = {}
+        for job in AVATAR_JOBS:
+            card = html.BUTTON(Class="lobby-job",type="button")
+            canvas = html.CANVAS(width=80,height=80, **{"aria-hidden":"true"})
+            caption = html.SPAN()
+            caption <= html.STRONG(CLASSES[job]["name"])
+            caption <= html.SMALL(CLASSES[job]["skill"])
+            card <= canvas
+            card <= caption
+            card.bind("click",lambda _, job=job: self.choose_job(job))
+            holder <= card
+            self.job_cards[job] = (card,canvas)
+        self.choose_job(self.job)
+
+    def draw_job_portraits(self):
+        for job, (_,canvas) in self.job_cards.items():
+            self.portrait(canvas,job,starter=True)
+        self.portrait(document["lobby-job-preview"],self.job,starter=True)
 
     def choose_job(self, job):
         self.job = job
-        self.draw_jobs()
+        for choice, (card,_) in self.job_cards.items():
+            card.attrs["aria-pressed"] = "true" if choice == job else "false"
+        document["lobby-job-name"].text = CLASSES[job]["name"]
+        document["lobby-job-skill"].text = CLASSES[job]["skill"]
+        self.require_preview(self.draw_job_portraits)
+
+    def show_name(self, _):
+        if self.busy:
+            return
+        self.view("create")
+        self.status("")
+        document["lobby-create-job"].text = CLASSES[self.job]["name"]
+        document["lobby-import"].hidden = not bool(local_read(SAVE_KEY))
+        self.require_preview(lambda: self.portrait(document["lobby-preview"],self.job,starter=True))
+        document["character-name"].focus()
 
     def create(self, event=None, legacy=False):
         if event:
@@ -174,6 +242,10 @@ class Lobby:
             return
         previous = local_read(SAVE_KEY) if legacy else None
         name = document["character-name"].value.strip() or ("기존 모험가" if legacy else "")
+        if not 2 <= len(name) <= 14:
+            self.status("캐릭터 이름을 2~14자로 입력해주세요.")
+            document["character-name"].focus()
+            return
         profile = dict(name=name, job=self.job, sex=0, skin=0, hair=0, style="classic")
         self.load_slot("POST",self.slot,{"profile":profile,"legacy":previous},legacy and bool(previous))
 
@@ -184,11 +256,18 @@ class Lobby:
         if self.busy:
             return
         self.busy = True
+        document["lobby-enter"].disabled = True
         document["character-submit"].disabled = True
         self.status("캐릭터를 불러오는 중이에요.")
         def loaded(status,data):
             self.busy = False
+            document["lobby-enter"].disabled = False
             document["character-submit"].disabled = False
+            if status == 401:
+                self.account = self.slot = self.selected_slot = None
+                self.view("auth")
+                self.status("세션이 끝났어요. 다시 로그인해주세요.")
+                return
             if status >= 400 or not status:
                 self.status(data.get("error","캐릭터 서버에 연결할 수 없어요."))
                 return
@@ -223,6 +302,8 @@ class Lobby:
             if status in (200,401):
                 self.account = None
                 self.slot = None
+                self.selected_slot = None
+                self.preview_pending = None
                 self.view("auth")
                 self.status("")
             else:
@@ -314,5 +395,6 @@ class Lobby:
         self.app.leave_character()
         self.view("select")
         document["lobby-slots"].clear()
+        document["lobby-enter"].disabled = True
         self.status("캐릭터 목록을 불러오는 중이에요.")
         api("GET","/api/session",None,self.signed_in)

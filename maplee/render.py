@@ -45,6 +45,7 @@ class Renderer:
         self.loaded = set()
         self.failed = set()
         self.terrain_cache = {}
+        self.material_cache = {}
         for name, path in IMAGES.items():
             img = window.Image.new()
             img.onload = lambda *events, name=name, img=img: self.image_loaded(name, img)
@@ -244,9 +245,26 @@ class Renderer:
             self.ctx.drawImage(image,0,8,width,height,left,rung,width,height)
         self.ctx.drawImage(image,0,22,width,5,left,end-2,width,5)
 
-    def tile_band(self, material, left, right, depth=0):
+    def material_texture(self, material, tint):
+        base = self.images[material]
+        if not tint:
+            return base
+        key = (material,tint)
+        if key not in self.material_cache:
+            width,height = self.sizes[material]
+            tile = window.document.createElement("canvas")
+            tile.attrs["width"], tile.attrs["height"] = str(width), str(height)
+            ctx = tile.getContext("2d")
+            ctx.drawImage(base,0,0)
+            ctx.globalCompositeOperation = "source-atop"
+            ctx.fillStyle = tint
+            ctx.fillRect(0,0,width,height)
+            self.material_cache[key] = tile
+        return self.material_cache[key]
+
+    def tile_band(self, material, left, right, depth=0, tint=None):
         ctx = self.ctx
-        image = self.images[material]
+        image = self.material_texture(material,tint)
         width, height = self.sizes[material]
         for tile in range(int(left // width), int(right // width) + 1):
             mirrored = tile % 2
@@ -265,7 +283,7 @@ class Renderer:
                 ctx.restore()
             ctx.restore()
 
-    def ground(self, material, left, right, stone, bottom):
+    def ground(self, material, left, right, stone, bottom, tint=None):
         ctx = self.ctx
         segments = []
         first,last = max(0,bisect_right(GROUND_XS,left)-1),bisect_left(GROUND_XS,right)
@@ -293,7 +311,7 @@ class Renderer:
             ctx.clip()
             ctx.transform(1, slope, 0, 1, 0, offset)
             depth = bottom-min(ground_at(start),ground_at(end))+5
-            self.tile_band(material,start-.5,end+.5,depth)
+            self.tile_band(material,start-.5,end+.5,depth,tint)
             ctx.restore()
         ctx.restore()
 
@@ -301,6 +319,7 @@ class Renderer:
         ctx = self.ctx
         area = AREAS[region]
         material = area["material"]
+        tint = area.get("terrain_tint")
         for prop in AREA_PROPS[region]:
             x, id, width = prop[:3]
             if x + width/2 <= left or x - width/2 >= right:
@@ -310,7 +329,7 @@ class Renderer:
             height = round(width * sh / sw)
             floor = prop[3] if len(prop) > 3 and prop[3] is not None else ground_at(x)
             ctx.drawImage(self.images[atlas], sx, sy, sw, sh, round(x - width / 2), round(floor - height + 2), width, height)
-        self.ground(material,max(left,area["start"]),min(right,area["end"]),material=="stone",bottom)
+        self.ground(material,max(left,area["start"]),min(right,area["end"]),material=="stone",bottom,tint)
         for ledge in AREA_LEDGES[region]:
             x, y, w = ledge["x"], ledge["y"], ledge["w"]
             if x < area["start"] or x + w > area["end"] or x + w <= left or x >= right:
@@ -320,7 +339,7 @@ class Renderer:
             ctx.roundRect(x, y - 5, w, LEDGE_DEPTH, 5)
             ctx.clip()
             ctx.translate(0, y - 5)
-            self.tile_band(material, x, x + w)
+            self.tile_band(material, x, x + w, tint=tint)
             self.rect(x, LEDGE_DEPTH-4, w, 4, "#233121aa")
             ctx.restore()
         for x, top, bottom in AREA_LADDERS[region]:
@@ -348,9 +367,6 @@ class Renderer:
             self.ctx.imageSmoothingEnabled = False
             self.ctx.translate(-padded_left,-TERRAIN_TOP)
             self.static_scenery(region,padded_left,padded_right,TERRAIN_BOTTOM)
-            if area.get("terrain_tint"):
-                self.ctx.globalCompositeOperation = "source-atop"
-                self.rect(padded_left,TERRAIN_TOP,padded_right-padded_left,TERRAIN_BOTTOM-TERRAIN_TOP,area["terrain_tint"])
         finally:
             self.ctx = original
         tile = image,left-padded_left,right-left

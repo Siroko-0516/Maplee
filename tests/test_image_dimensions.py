@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from maplee.content import AREAS
+from maplee.content import AREAS, MAIN_TERRAIN
 from maplee.engine import HEIGHT, WIDTH, Game
 
 
@@ -21,6 +21,28 @@ class IntrinsicImage:
 
 
 class ImageDimensionTest(unittest.TestCase):
+    def test_main_map_palettes_recolor_tiles_once_and_keep_the_base_asset(self):
+        with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
+            from maplee.render import Renderer
+        renderer = Renderer.__new__(Renderer)
+        base = IntrinsicImage()
+        material,tint = MAIN_TERRAIN[0]
+        renderer.images = {material:base}
+        renderer.sizes = {material:(176,148)}
+        renderer.material_cache = {}
+        tinted = Mock(attrs={})
+        document = SimpleNamespace(createElement=Mock(return_value=tinted))
+        with patch("maplee.render.window",SimpleNamespace(document=document)):
+            self.assertIs(renderer.material_texture(material,None),base)
+            self.assertIs(renderer.material_texture(material,tint),tinted)
+            self.assertIs(renderer.material_texture(material,tint),tinted)
+        document.createElement.assert_called_once_with("canvas")
+        ctx = tinted.getContext.return_value
+        ctx.drawImage.assert_called_once_with(base,0,0)
+        ctx.fillRect.assert_called_once_with(0,0,176,148)
+        self.assertEqual(ctx.globalCompositeOperation,"source-atop")
+        self.assertEqual([(area["material"],area["terrain_tint"]) for area in AREAS[:11]],list(MAIN_TERRAIN))
+
     def test_walkable_seam_blends_the_two_panoramas(self):
         with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
             from maplee.render import Renderer

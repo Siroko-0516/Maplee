@@ -47,6 +47,24 @@ AREAS = [
          mid_image="seed_canopy", view=140),
 ]
 
+# Main-map surfaces use the existing grass-topped cliff sheets. The tint is
+# baked into each tile variant before the renderer repeats it over slopes.
+MAIN_TERRAIN = (
+    ("terrain", "#58462922"),        # 솔방울 마을
+    ("seed_ground", "#30442a28"),    # 종꽃 숲길
+    ("quarry_ground", "#59514426"),  # 푸른돛 항구
+    ("quarry_ground", "#34334465"),  # 유리빛 광산
+    ("copper_ground", "#57413b20"),  # 달바람 고원
+    ("copper_ground", "#522e4154"),  # 잿등불 숲
+    ("seed_ground", "#293b4c49"),    # 안개등 부두
+    ("seed_ground", "#28391e33"),    # 바람뿌리 거목
+    ("copper_ground", "#633a2424"),  # 노을알 분지
+    ("quarry_ground", "#6b43282e"),  # 구리층 계단
+    ("terrain", "#213d3c35"),        # 물빛 씨앗숲
+)
+for _area, (_material, _tint) in zip(AREAS, MAIN_TERRAIN):
+    _area.update(material=_material, terrain_tint=_tint)
+
 GROUND = [[0, 390],
  [400, 390],
  [660, 338],
