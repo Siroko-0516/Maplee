@@ -3,6 +3,7 @@ import json
 from browser import document, html, window
 from .content import AVATAR_JOBS, CLASSES, STARTER_WEAPONS
 from .engine import SAVE_KEY
+from .render import idle_pose
 
 FIELD_PROTOCOL = 1
 
@@ -37,6 +38,7 @@ class Lobby:
         self.profile = None
         self.message = "자동저장 대기 중"
         self.preview_pending = None
+        self.featured = None
         self.after_save = None
         self.view("auth")
         document["lobby-credentials"].bind("submit", self.authenticate)
@@ -56,6 +58,7 @@ class Lobby:
 
     def view(self, page):
         self.preview_pending = None
+        self.featured = None
         document["lobby"].hidden = False
         document["lobby"].attrs["data-page"] = page
         document["lobby"].scrollTop = 0
@@ -110,19 +113,35 @@ class Lobby:
         else:
             self.preview_pending = action
 
-    def flush_preview(self):
+    def flush_preview(self, now=0):
         if self.preview_pending and self.app.renderer.ready:
             action, self.preview_pending = self.preview_pending, None
             action()
+        if self.featured and self.app.renderer.ready:
+            canvas, previous = self.featured
+            pose = idle_pose(int(now*.06))
+            if pose != previous:
+                self.portrait(canvas,self.job,starter=True,pose=pose)
+                self.featured = canvas,pose
 
-    def portrait(self, canvas, job, starter=False):
+    def portrait(self, canvas, job, starter=False, pose=0, silhouette=False):
         ctx = canvas.getContext("2d")
         ctx.imageSmoothingEnabled = False
         size = int(canvas.attrs["width"])
         ctx.clearRect(0,0,size,size)
         weapon = STARTER_WEAPONS[job] if starter else None
-        self.app.renderer.avatar(ctx,{},weapon,0,size*38/80,size*75/80,size,1,
+        self.app.renderer.avatar(ctx,{},weapon,pose,size*38/80,size*75/80,size,1,
                                  job=job)
+        if silhouette:
+            ctx.save()
+            ctx.globalCompositeOperation = "source-in"
+            ctx.fillStyle = "#ecd49a"
+            ctx.fillRect(0,0,size,size)
+            ctx.restore()
+
+    def feature(self, canvas):
+        self.portrait(canvas,self.job,starter=True)
+        self.featured = canvas,0
 
     def show_slots(self):
         if self.busy:
@@ -138,15 +157,17 @@ class Lobby:
         for index, entry in enumerate(self.slots):
             card = html.BUTTON(Class="lobby-slot" if entry else "lobby-slot is-empty", type="button")
             card <= html.SMALL(f"슬롯 {index+1}")
+            stage = html.DIV(Class="lobby-deck", **{"aria-hidden":"true"})
+            canvas = html.CANVAS(width=144,height=144)
+            stage <= canvas
+            card <= stage
             if entry:
-                canvas = html.CANVAS(width=124,height=124, **{"aria-hidden":"true"})
-                card <= canvas
                 card <= html.STRONG(entry["profile"]["name"])
                 card <= html.SMALL(f"Lv. {entry['level']} · {CLASSES[entry['profile']['job']]['name']}")
-                previews.append((canvas,entry["profile"]["job"]))
+                previews.append((canvas,entry["profile"]["job"],False))
             else:
-                card <= html.SPAN("+",Class="lobby-slot-empty", **{"aria-hidden":"true"})
-                card <= html.STRONG("빈 슬롯")
+                card <= html.STRONG("+ 빈 슬롯")
+                previews.append((canvas,"beginner",True))
             card.bind("click", lambda _, index=index: self.mark_slot(index))
             holder <= card
             self.slot_cards.append(card)
@@ -157,8 +178,8 @@ class Lobby:
         document["slot-title"].focus()
 
         def draw():
-            for canvas, job in previews:
-                self.portrait(canvas,job)
+            for canvas,job,empty in previews:
+                self.portrait(canvas,job,silhouette=empty)
         self.require_preview(draw)
 
     def mark_slot(self, index):
@@ -215,7 +236,7 @@ class Lobby:
     def draw_job_portraits(self):
         for job, (_,canvas) in self.job_cards.items():
             self.portrait(canvas,job,starter=True)
-        self.portrait(document["lobby-job-preview"],self.job,starter=True)
+        self.feature(document["lobby-job-preview"])
 
     def choose_job(self, job):
         self.job = job
@@ -232,7 +253,7 @@ class Lobby:
         self.status("")
         document["lobby-create-job"].text = CLASSES[self.job]["name"]
         document["lobby-import"].hidden = not bool(local_read(SAVE_KEY))
-        self.require_preview(lambda: self.portrait(document["lobby-preview"],self.job,starter=True))
+        self.require_preview(lambda: self.feature(document["lobby-preview"]))
         document["character-name"].focus()
 
     def create(self, event=None, legacy=False):

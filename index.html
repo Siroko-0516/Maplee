@@ -27,7 +27,7 @@
           <span class="lobby-wordmark">Maplee</span>
         </div>
         <form id="lobby-credentials" class="lobby-form lodge-panel">
-          <h1 id="auth-title">로그인</h1>
+          <h1 id="auth-title" class="wood-heading">로그인</h1>
           <label for="lobby-id">아이디</label>
           <input id="lobby-id" name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" placeholder="영문·숫자·밑줄">
           <label for="lobby-password">비밀번호</label>
@@ -56,7 +56,7 @@
         <div class="lobby-split">
           <div class="lobby-display lodge-panel">
             <div class="lobby-platform">
-              <canvas id="lobby-job-preview" width="220" height="220" aria-label="선택한 직업의 캐릭터"></canvas>
+              <canvas id="lobby-job-preview" width="284" height="284" aria-label="선택한 직업의 캐릭터"></canvas>
             </div>
             <div class="lobby-caption">
               <strong id="lobby-job-name"></strong>
@@ -80,14 +80,14 @@
         <div class="lobby-split lobby-create-layout">
           <div class="lobby-display lodge-panel">
             <div class="lobby-platform">
-              <canvas id="lobby-preview" width="220" height="220" aria-label="만들 캐릭터"></canvas>
+              <canvas id="lobby-preview" width="284" height="284" aria-label="만들 캐릭터"></canvas>
             </div>
             <div class="lobby-caption">
               <strong id="lobby-create-job"></strong>
             </div>
           </div>
           <form id="lobby-character" class="lobby-form lodge-panel">
-            <label for="character-name">캐릭터 이름</label>
+            <label for="character-name" class="wood-heading">캐릭터 이름</label>
             <input id="character-name" required minlength="2" maxlength="14" autocomplete="off" aria-describedby="character-name-hint">
             <small id="character-name-hint">한글·영문·숫자 등 2~14자</small>
             <button class="primary" id="character-submit" type="submit">만들고 플레이</button>

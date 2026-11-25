@@ -21,6 +21,41 @@ class IntrinsicImage:
 
 
 class ImageDimensionTest(unittest.TestCase):
+    def test_canvas_windows_keep_stat_and_equipment_targets_inside_their_frames(self):
+        with patch.dict("sys.modules", {"browser": SimpleNamespace(document=None,window=None)}):
+            from maplee.windows import GameInterface
+        ui = GameInterface.__new__(GameInterface)
+        ui.ctx = Mock()
+        ui.ctx.measureText.side_effect = lambda text: SimpleNamespace(width=len(text)*6)
+        ui.w,ui.h,ui.coarse = 294,620,True
+        ui.menus = {}
+        ui.position = ui.clip = ui.hover = None
+        ui.scroll = ui.maximum = 0
+        ui.detail = False
+        ui.hits = []
+        game = Game({"job":"beginner","level":4})
+        renderer = SimpleNamespace(images={key:key for key in ("adventure_ui","classic_ui","bellflower","icons","expansion_icons")},avatar=Mock())
+        ui.app = SimpleNamespace(game=game,renderer=renderer,profile={"name":"라임 검사"},panel=("character",None),
+                                 rows=[("stats",)],close_panel=Mock(),select_item=Mock(),world=SimpleNamespace(queue=Mock()))
+        ui.panel_view(540)
+        self.assertIn("adventure_ui",[call.args[0] for call in ui.ctx.drawImage.call_args_list])
+        self.assertIn("라임 검사",[call.args[0] for call in ui.ctx.fillText.call_args_list])
+        stat = next(hit for hit in ui.hits if hit[4]=="STR  힘 배분")
+        stat[5]()
+        ui.app.world.queue.assert_called_once_with("attribute","strength")
+        self.assertTrue(any(hit[4]=="닫기" for hit in ui.hits))
+
+        ui.app.panel = ("inventory",None)
+        ui.app.rows = [("doll",),("items",["twig"],"twig")]
+        ui.hits = []
+        ui.panel_view(540)
+        x,_,w,_ = ui.frame_box
+        item = next(hit for hit in ui.hits if hit[4].startswith("무기 "))
+        self.assertLessEqual(x,item[0])
+        self.assertLessEqual(item[0]+item[2],x+w)
+        item[5]()
+        ui.app.select_item.assert_called_once_with("twig")
+
     def test_main_map_palettes_recolor_tiles_once_and_keep_the_base_asset(self):
         with patch.dict("sys.modules", {"browser": SimpleNamespace(window=None)}):
             from maplee.render import Renderer

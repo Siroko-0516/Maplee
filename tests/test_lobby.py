@@ -16,6 +16,7 @@ class LobbyElement:
         self.children = []
         self.events = {}
         self.focus = Mock()
+        self.getContext = Mock(return_value=Mock())
 
     def bind(self, name, handler):
         self.events[name] = handler
@@ -50,11 +51,12 @@ class LobbyTests(unittest.TestCase):
                                    renderer=SimpleNamespace(ready=False), start_character=Mock())
         with patch.dict("sys.modules", {"browser": SimpleNamespace(document=self.doc,html=Mock(),window=Mock())}):
             from maplee import lobby
-        html = SimpleNamespace(**dict.fromkeys(("BUTTON", "CANVAS", "SMALL", "SPAN", "STRONG"), LobbyElement))
+        html = SimpleNamespace(**dict.fromkeys(("BUTTON", "CANVAS", "DIV", "SMALL", "SPAN", "STRONG"), LobbyElement))
         bindings = patch.multiple(lobby,document=self.doc,html=html,api=self.request,local_read=Mock(return_value=None))
         bindings.start()
         self.addCleanup(bindings.stop)
         self.lobby = lobby.Lobby(self.app)
+        self.idle_pose = lobby.idle_pose
 
     def test_signup_slots_job_and_name_then_enters_the_game(self):
         self.assertEqual(self.request.call_args.args[:3], ("GET", "/api/session", None))
@@ -106,3 +108,20 @@ class LobbyTests(unittest.TestCase):
         finish(200,{"profile":profile,"revision":6,"progress":state})
         self.app.start_character.assert_called_once_with(profile,state)
         self.assertEqual(self.lobby.revision,6)
+
+    def test_slot_silhouettes_and_featured_preview_draw_when_assets_are_ready(self):
+        self.app.renderer.avatar = Mock()
+        self.lobby.signed_in(200,{"account":"old","slots":[None]*4})
+        self.app.renderer.ready = True
+        self.lobby.flush_preview(0)
+        empty = self.doc["lobby-slots"].children[0].children[1].children[0]
+        empty.getContext.return_value.fillRect.assert_called_once_with(0,0,144,144)
+
+        self.lobby.enter_selected(self.event)
+        self.assertIs(self.lobby.featured[0],self.doc["lobby-job-preview"])
+        previous = self.lobby.featured[1]
+        tick = next(t for t in range(1,180) if self.idle_pose(t)!=previous)
+        self.app.renderer.avatar.reset_mock()
+        self.lobby.flush_preview((tick+.5)*1000/60)
+        self.app.renderer.avatar.assert_called_once()
+        self.assertEqual(self.lobby.featured[1],self.idle_pose(tick))

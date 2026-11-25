@@ -1,17 +1,16 @@
 """Pixel-atlas game HUD and live windows. Coordinates are logical screen pixels."""
 from bisect import bisect_left, bisect_right
 from browser import document, window
-from .classic_skin import CLASSIC_REGIONS
+from .classic_skin import ADVENTURE_REGIONS, CLASSIC_REGIONS
 from .content import AREAS, ATTRIBUTES, CLASSES, EXPANSION_ICON_COLUMNS, GROUND, HOTBAR_ACTIONS, ITEMS, MAIN_REGIONS, PANORAMA_Y, SLOTS, SPECIES, SUPPORTS, monster_art
 from .hunting import HUNT_ZONES
 from .engine import AREA_LEDGES, AREA_PORTALS, GROUND_XS, HEIGHT, TRANSPORTS, area_at, ground_at, item_icon, limit
 from .render import idle_pose, number
 
 
-TITLES = {"character": "CHARACTER STAT", "inventory": "EQUIPMENT", "skills": "SKILL BOOK",
-          "journal": "QUEST LOG", "map": "WORLD MAP", "bestiary": "MONSTER BOOK",
-          "account": "ACCOUNT", "hotkeys": "KEY SETTINGS", "shop": "ITEM SHOP",
-          "trainer": "JOB ADVANCEMENT", "forge": "WORKSHOP"}
+TITLES = {"character": "캐릭터 능력치", "inventory": "장비와 가방", "skills": "스킬",
+          "journal": "퀘스트 기록", "map": "월드 지도", "bestiary": "몬스터 도감",
+          "account": "계정", "hotkeys": "조작 설정", "shop": "상점", "trainer": "전직", "forge": "공방"}
 MENU_NAMES = ("능력치", "스킬", "장비", "퀘스트", "지도", "도감", "계정", "설정", "정지")
 STAT_CODES = ("STR", "VIT", "SPI", "AGI")
 INK = "#263547"
@@ -182,12 +181,13 @@ class GameInterface:
         self.ctx.drawImage(self.app.renderer.images[key], sx, sy, sw, sh, round(x), round(y), round(w), round(h))
 
     def classic(self, name, x, y, w=None, h=None, crop=None):
-        sx,sy,sw,sh = CLASSIC_REGIONS[name]
+        original = name in ADVENTURE_REGIONS
+        sx,sy,sw,sh = (ADVENTURE_REGIONS if original else CLASSIC_REGIONS)[name]
         if crop:
             dx,dy,sw,sh = crop
             sx,sy = sx+dx,sy+dy
         if min(sw,sh) > 0:
-            self.atlas("classic_ui",sx,sy,sw,sh,x,y,sw if w is None else w,sh if h is None else h)
+            self.atlas("adventure_ui" if original else "classic_ui",sx,sy,sw,sh,x,y,sw if w is None else w,sh if h is None else h)
 
     def bezel(self, name, x, y, w, h, sides=(6,6,6,6)):
         _,_,sw,sh = CLASSIC_REGIONS[name]
@@ -236,15 +236,18 @@ class GameInterface:
         hx,hy = 5,y+1
         def ux(n):
             return round(barw*n/204)
-        for stat,yy in (("hp",28),("mp",44)):
-            gx,gw = hx+ux(25),ux(171)
-            self.box(gx,hy+yy,gw,13,"#2a2830")
+        self.bezel("chrome",hx,hy,barw,65,(6,23,6,6))
+        bars = (("hp",28,"#efab96","#b94e62"),("mp",44,"#a4d9f1","#4b82b8"))
+        for stat,yy,highlight,fill in bars:
+            gx,gw = hx+ux(27),ux(168)
+            self.box(gx,hy+yy,gw,13,"#111f20")
             amount = limit(p[stat]/max(1,stats[stat]),0,1)
-            source_w = round(amount*171)
-            if source_w:
-                self.classic("hud_"+stat,gx,hy+yy,round(gw*amount),13,(0,0,source_w,13))
-        self.classic("hud",hx,hy,barw,64,crop=(0,0,204,64))
-        self.classic("lv",hx+6,hy+7)
+            filled = round((gw-2)*amount)
+            if filled:
+                self.box(gx+1,hy+yy+1,filled,11,fill)
+                self.box(gx+1,hy+yy+2,filled,3,highlight)
+            self.text(stat.upper(),hx+5,hy+yy+7,WHITE,10,True,"left",ux(27)-5)
+        self.text("Lv",hx+6,hy+12,CREAM,10,True)
         self.text(p["level"],hx+24,hy+12,CREAM,13,True)
         self.text(CLASSES[p["job"]]["name"],hx+46,hy+12,WHITE,13,True,width=barw//2-27)
         self.text(f"{p['gold']:,} 메소",hx+barw-6,hy+13,"#ffe6a0",10,True,"right",barw//2-4)
@@ -279,7 +282,7 @@ class GameInterface:
             x = mx+i*gap
             label = "계속" if i==8 and self.app.paused else MENU_NAMES[i]
             if self.app.panel and self.app.panel[0] == name or self.hover == label:
-                self.shine(x, my, gap-1, 32 if compact else 52, "#547789", "#314c65", "#9cbcc9")
+                self.shine(x, my, gap-1, 32 if compact else 52, "#537e65", "#304b42", "#c1a66a")
             size = 19 if compact else 29
             ix=x+(gap-size)//2
             plate={0:"hud_character",6:"hud_account",7:"hud_setting"}.get(i,"hud_plate")
@@ -289,10 +292,11 @@ class GameInterface:
             self.text(label, x+gap/2, my+size+6, WHITE, 11, True, "center")
             self.hit(x, my, gap-1, size+17, label,
                      self.app.toggle_pause if i==8 else lambda name=name: self.app.show_panel(name))
-        self.box(0,self.h-9,self.w,9,"#242323")
+        self.box(0,self.h-9,self.w,9,"#181e1b")
         expw=round(self.w*min(1,p["xp"]/max(1,game.xp_needed())))
         if expw:
-            self.classic("exp_strip",0,self.h-8,expw,7)
+            self.box(0,self.h-8,expw,7,"#a97c4c")
+            self.box(0,self.h-8,expw,2,"#e2ca75")
         self.text(f"EXP   {p['xp']} / {game.xp_needed()}",self.w//2,self.h-5,WHITE,9,True,"center")
         return y
 
@@ -356,39 +360,35 @@ class GameInterface:
             self.hit(x,bottom-41,36,38,key,None,"hold")
 
     def stat_pair(self, x, y, w, label, value, action=None, attr=False):
-        # Stretch the white value field only. The lime label keeps its original
-        # nine-pixel Korean lettering, corner highlights and stipple.
-        self.classic("stat_row",x,y,60,20,(0,0,60,18))
-        self.classic("stat_row",x+60,y,w-66,20,(60,0,124,18))
-        self.classic("stat_row",x+w-6,y,6,20,(184,0,6,18))
-        names = {"직업":"job","레벨":"level","경험치":"exp","HP":"hp","MP":"mp"}
-        if label in names:
-            self.classic(names[label]+"_label",x+2,y+1,45,17)
-        else:
-            self.text(label,x+5,y+11,"#436b13",12,True)
-            self.text(label,x+4,y+10,"#fcffdf",12,True)
-        self.text(value,x+67,y+10,INK,12,width=w-74-(18 if attr else 0))
+        labelw = min(70,w//3)
+        self.classic("stat_row",x,y,w,20)
+        self.shine(x+2,y+2,labelw,16,"#6a9275","#4a6f60","#39554b")
+        self.text(label,x+7,y+10,"#fffae6",11,True,width=labelw-7)
+        self.text(value,x+labelw+8,y+10,INK,12,width=w-labelw-13-(18 if attr else 0))
         if attr:
             self.picture_button("up" if action else "up_off",x+w-18,y+3,14,14,label+" 배분",action)
 
     def stats(self, x, y, w):
         game, p = self.app.game, self.app.game.p
         stats = game.stats()
-        fields = (("레벨",p["level"]),("직업",CLASSES[p["job"]]["name"]),
+        fields = (("이름",(self.app.profile or {}).get("name","모험가")),
+                  ("직업",CLASSES[p["job"]]["name"]),("레벨",p["level"]),
                   ("경험치",f"{p['xp']} / {game.xp_needed()}"),("공격력",stats["attack"]),
                   ("HP",f"{p['hp']} / {stats['hp']}"),("MP",f"{p['mp']} / {stats['mp']}"))
         for label,value in fields:
             self.stat_pair(x,y,w,label,value)
             y += 21
-        self.classic("ap",x,y+2,w,46)
-        self.text(game.ap(),x+w*75/198,y+33,INK,13,True,"center")
-        y += 51
+        self.shine(x,y+2,w,29,"#4f7681","#355862","#304b4b")
+        self.text("배분 가능 AP",x+8,y+17,"#fff3d7",12,True,width=w-56)
+        self.classic("stat_row",x+w-41,y+7,34,19)
+        self.text(game.ap(),x+w-24,y+17,INK,13,True,"center")
+        y += 36
         for code,(key,attr) in zip(STAT_CODES,ATTRIBUTES.items()):
             action=(lambda key=key:self.app.world.queue("attribute",key)) if game.ap() else None
             self.stat_pair(x,y,w,f"{code}  {attr['name']}",p["attributes"][key],action,True)
             y += 21
         caption="접기" if self.detail else "자세히 보기"
-        self.picture_button("detail_close" if self.detail else "detail_open",x+w-79,y+5,78,19,caption,self.toggle_detail)
+        self.button(x+w-88,y+4,87,21,caption,self.toggle_detail)
         y += 28
         if self.detail:
             for label,value in (("방어력",stats["defense"]),("이동 속도",f"{stats['speed']:.2f}"),("처치 수",p["kills"])):
@@ -404,23 +404,27 @@ class GameInterface:
         p = self.app.game.p
         self.bezel("paper",x,y,w,146)
         middle = x+w//2
-        self.shine(middle-62,y+4,124,137,"#7f94a5","#c2d2da","#75838d")
-        self.atlas("interface",0,64,120,100,middle-60,y+6,120,113)
+        photo = min(144,w-112)
+        left = middle-photo//2
+        self.box(left-1,y+5,photo+2,135,"#877452")
+        self.atlas("bellflower",250,150,460,445,left,y+7,photo,112)
         equipment=p["equipment"]
         self.app.renderer.avatar(self.ctx,equipment,equipment.get("weapon"),idle_pose(self.app.game.tick),
-                                 middle,y+114,115,-1,job=p["job"])
-        self.box(middle-60,y+119,120,19,"#374e68")
-        self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+128,WHITE,12,True,"center")
+                                 middle,y+112,min(115,photo),-1,job=p["job"])
+        self.box(left,y+119,photo,19,"#3b5548")
+        self.text(f"Lv. {p['level']}  {CLASSES[p['job']]['name']}",middle,y+128,WHITE,11,True,"center",photo-6)
+        slotw = min(48,(w-photo)//2-11)
         for i,(slot,label) in enumerate(SLOTS.items()):
             item=equipment[slot]
-            left=middle-114 if i<3 else middle+67
+            left=x+6 if i<3 else x+w-slotw-6
             top=y+4+(i%3)*46
-            self.box(left,top,46,44,"#a1bb31" if item else "#b0b6bb")
-            self.classic("cell",left+1,top+1,44,42)
+            self.box(left,top,slotw,44,"#739e63" if item else "#cfbc9c")
+            self.classic("cell",left+1,top+1,slotw-2,42)
             if item:
-                self.icon("icons",item_icon(item),left+7,top+1,32)
-                self.hit(left,top,46,44,label+" "+ITEMS[item]["name"],lambda item=item:self.app.select_item(item))
-            self.text(label,left+23,top+37,"#5b6575",10,True,"center")
+                iconsize = min(30,slotw-5)
+                self.icon("icons",item_icon(item),left+(slotw-iconsize)//2,top+2,iconsize)
+                self.hit(left,top,slotw,44,label+" "+ITEMS[item]["name"],lambda item=item:self.app.select_item(item))
+            self.text(label,left+slotw//2,top+37,"#5f584e",10,True,"center",slotw-4)
         return y+149
 
     def item_grid(self,x,y,w,items,selected):
@@ -431,7 +435,7 @@ class GameInterface:
         for i in range(rows*columns):
             item=items[i] if i<len(items) else None
             left,top=x+(w-columns*cell)//2+i%columns*cell,y+i//columns*cell
-            self.box(left,top,cell-1,cell-1,"#dea528" if item and item==selected else "#a3abb0")
+            self.box(left,top,cell-1,cell-1,"#b6803f" if item and item==selected else "#c4b18f")
             self.classic("cell",left+1,top+1,cell-3,cell-3)
             if item:
                 self.icon("icons",item_icon(item),left+1,top+1,32)
@@ -543,7 +547,7 @@ class GameInterface:
     def panel_view(self, bottom):
         key, npc = self.app.panel
         w=min(249 if key=="character" else 352,self.w-14)
-        h=min((398 if self.detail else 337) if key=="character" else 379,
+        h=min((415 if self.detail else 350) if key=="character" else 379,
               max(115,bottom-12-(41 if self.coarse else 0)))
         x,y=self.position or (self.w-w-12,min(83,bottom-h-6))
         x=int(limit(x,4,self.w-w-4))
@@ -553,13 +557,9 @@ class GameInterface:
         self.box(x+3,y+4,w-2,h-1,"#18202a77")
         self.bezel("chrome",x,y,w,h,(8,23,8,8))
         self.bezel("paper",x+6,y+22,w-12,h-28,(5,5,5,8))
-        title_key=key+"_title"
-        if title_key in CLASSIC_REGIONS and not npc:
-            self.classic(title_key,x+(w-128)//2,y+3,128,20)
-        else:
-            name=npc["name"]+" · "+npc["role"] if npc else TITLES.get(key,self.menus.get(key,"NPC TALK"))
-            self.text(name,x+w//2+1,y+13,"#3a2e1b",11,True,"center")
-            self.text(name,x+w//2,y+12,CREAM,11,True,"center")
+        name=npc["name"]+" · "+npc["role"] if npc else TITLES.get(key,self.menus.get(key,"대화"))
+        self.text(name,x+13,y+13,"#161c18",12,True,width=w-43)
+        self.text(name,x+12,y+12,CREAM,12,True,width=w-43)
         self.hit(x,y,w,h,"창",kind="surface")
         self.hit(x+3,y+2,w-32,24,"창 이동",kind="drag")
         self.picture_button("close",x+w-23,y+5,16,16,"닫기",self.app.close_panel)

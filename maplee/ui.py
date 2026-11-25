@@ -513,7 +513,7 @@ class App:
             self.accumulator += min(68, now - self.previous)
         self.previous = now
         if not self.active:
-            self.lobby.flush_preview()
+            self.lobby.flush_preview(now)
             self.accumulator = 0
             window.requestAnimationFrame(self.frame)
             return

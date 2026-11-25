@@ -824,6 +824,7 @@ JOB_LOOKS = {job: "hero_" + job for job in ("guardian", "ranger", "mage")}
 IMAGES.update({key: "hero-" + job + ".png" for job, key in JOB_LOOKS.items()})
 
 IMAGES.update(expansion_worn="expansion-worn.png", expansion_swing="expansion-swing.png", expansion_icons="expansion-icons.png")
+IMAGES["adventure_ui"] = "adventure-ui.png"
 IMAGES.update(ember_grove="ember-grove-tall.png", lantern_quay="lantern-quay-tall.png",
               daylight="daylight-panorama-tall.png", cavern="cavern-panorama-tall.png",
               highland="highland-panorama-tall.png", ladder="ladder.png")

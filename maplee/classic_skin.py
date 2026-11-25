@@ -52,3 +52,22 @@ CLASSIC_REGIONS = {
     'book_paper': (0, 359, 176, 128),
     'book_edge': (177, 359, 16, 105),
 }
+
+# Original Maplee window art. The source sizes also support the shared slicer.
+ADVENTURE_REGIONS = {
+    'chrome': (0, 0, 48, 48),
+    'paper': (49, 0, 60, 60),
+    'stat_row': (0, 61, 190, 18),
+    'cell': (110, 0, 32, 32),
+    'quick_cell': (143, 0, 32, 32),
+    'button': (0, 80, 68, 16),
+    'tab_on': (69, 80, 30, 19),
+    'tab_off': (100, 80, 30, 17),
+    'panel_card': (0, 100, 140, 35),
+    'close': (176, 0, 13, 13),
+    'up': (176, 14, 12, 12),
+    'up_off': (176, 27, 12, 12),
+    'prev': (191, 0, 15, 13),
+    'next': (191, 14, 15, 13),
+    'thumb': (207, 0, 15, 25),
+}

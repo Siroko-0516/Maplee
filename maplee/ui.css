@@ -11,8 +11,8 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 #lobby[hidden], #lobby [hidden] { display: none !important; }
 #lobby {
   --leaf: #b6c7a2;
-  --paper: #f7e9c9;
-  --gold: #f4c56f;
+  --paper: #fff0cf;
+  --gold: #ffce78;
   --line: #9f815393;
   position: fixed;
   inset: 0;
@@ -24,13 +24,22 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   color-scheme: dark;
   font: 16px/1.5 system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   background:
-    linear-gradient(180deg, #0d211fe8 0, #10282414 22%, #0b201b47 56%, #071a15ee 100%),
+    linear-gradient(180deg, #132915d4 0, #34563110 25%, #16302138 56%, #091711e8 100%),
     url("assets/lobby-forest.webp") center / cover,
     #19362c url("assets/bellflower-forest.png") center / cover;
   background-attachment: fixed;
 }
-#lobby[data-page="jobs"], #lobby[data-page="create"] {
-  background-position: center, 58% center, center;
+#lobby[data-page="select"], #lobby[data-page="create"] {
+  background:
+    linear-gradient(180deg, #203626cc 0%, #1d393120 27%, #23493640 57%, #101b12ec 100%),
+    url("assets/bellflower-forest.png") center / cover,
+    #254c41;
+}
+#lobby[data-page="jobs"] {
+  background:
+    linear-gradient(145deg, #172729d4, #315f5936 60%, #0f201df2),
+    url("assets/bellflower-forest.png") center / cover,
+    #203c2b;
 }
 .lobby-shell {
   width: min(100%, 1120px);
@@ -99,17 +108,29 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 }
 .lodge-panel {
   border: 1px solid var(--line);
-  border-radius: 11px;
-  background: linear-gradient(150deg, #243a30fa, #142720fa 58%, #102119fa);
-  box-shadow: inset 0 1px #fbd59d23, 0 0 0 3px #101b16a6, 0 14px 38px #07170fc2;
+  border-radius: 5px;
+  background: linear-gradient(150deg, #36473af7, #1c3028fb 58%, #13231cf9);
+  box-shadow: inset 0 0 0 1px #1b2116, inset 0 0 0 3px #b9985b62, 0 0 0 3px #101b16bc, 0 14px 38px #07170fa0;
 }
 .lobby-form {
   display: grid;
   gap: 8px;
   padding: clamp(20px, 4vw, 30px);
-  border-top: 3px solid #c5a164;
+  border-top: 3px solid #e4bc79;
+  background:
+    repeating-linear-gradient(0deg, #502e1c59 0 1px, transparent 1px 6px),
+    linear-gradient(152deg, #80552e, #4a321f 57%, #332719);
 }
-#lobby .lobby-form h1 { margin-bottom: 14px; font-size: 1.9rem; }
+#lobby .wood-heading {
+  display: block;
+  padding: 9px 18px 11px;
+  color: #fff0bc;
+  background: url("assets/lobby-plank.png") center / 100% 100% no-repeat;
+  text-align: center;
+  text-shadow: 0 2px #3a241e;
+  image-rendering: pixelated;
+}
+#lobby .lobby-form h1 { margin-bottom: 8px; font-size: 1.55rem; }
 #lobby label { color: var(--paper); font-size: .95rem; font-weight: 700; }
 #lobby input, #lobby button {
   font: inherit;
@@ -144,53 +165,75 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
 #lobby :focus-visible { outline: 2px solid #ffdc95; outline-offset: 3px; }
 .lobby-heading > span { font-size: .9rem; font-weight: 720; text-shadow: 0 1px 4px #081a12; }
 .lobby-actions { justify-content: flex-end; margin-top: 20px; }
-.lobby-slots { display: grid; gap: clamp(10px, 2vw, 20px); grid-template-columns: repeat(4,minmax(0,1fr)); }
-
-#lobby .lobby-slot {
-  position: relative;
+.lobby-slots {
   display: grid;
-  grid-template-rows: 1.25rem minmax(108px, 1fr) auto auto;
-  justify-items: center;
-  align-items: center;
-  gap: 5px;
-  text-align: center;
-  min-height: 215px;
-  padding: 14px 9px 12px;
-  overflow-wrap: anywhere;
-  border-color: #89744b;
-  background:
-    radial-gradient(ellipse at 50% 32%, #4a5c37b8, transparent 62%),
-    linear-gradient(#14261be8, #1b2b20f4 66%, #2e2c1c 66%, #1c261b);
-  box-shadow: inset 0 1px #ffe4a425, 0 4px #132017, 0 12px 25px #081b16b0;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: clamp(6px, 2vw, 17px);
+  min-height: 260px;
+  padding: clamp(10px, 3vw, 25px);
+  border: 1px solid #e7bd7892;
+  border-radius: 7px;
+  background: linear-gradient(#30433330, #182b1ba0 77%, #151c15ed);
+  box-shadow: inset 0 0 0 2px #2d2a216e, 0 10px 34px #1a2c1d63;
 }
-#lobby .lobby-slot.is-empty {
-  background:
-    radial-gradient(ellipse at 50% 37%, #3d593563, transparent 64%),
-    linear-gradient(#14271eea, #15261cf5 66%, #2b2e1e 66%, #1c261b);
+#lobby .lobby-slot {
+  display: grid;
+  grid-template-rows: 1.25rem auto auto 1.25rem;
+  justify-items: stretch;
+  align-content: center;
+  gap: 4px;
+  padding: 8px 5px;
+  text-align: center;
+  color: #fff0ca;
+  text-shadow: 0 2px #1c2219, 0 3px 5px #18251a;
+  overflow-wrap: anywhere;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 #lobby .lobby-slot[aria-pressed="true"] {
-  border-color: #fcd68d;
-  box-shadow: 0 0 0 2px #f6c8794d, inset 0 1px #fff1bd58, 0 4px #4b3b24, 0 12px 24px #0a1d18;
+  border-color: #f0c476ac;
+  background: radial-gradient(ellipse at 50% 40%, #edbc6667, #415d2c50 58%, transparent 78%);
 }
-.lobby-slot small, .lobby-job small { color: var(--leaf); font-size: .875rem; }
+#lobby .lobby-slot:hover { border-color: #f0c476c9; }
+.lobby-deck {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  min-height: 135px;
+  padding-bottom: 11px;
+  isolation: isolate;
+}
+.lobby-deck::after {
+  position: absolute;
+  z-index: -1;
+  content: "";
+  left: -5%;
+  right: -5%;
+  bottom: -7px;
+  height: 42px;
+  background: url("assets/lobby-plank.png") center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 5px 5px #1525189e);
+}
+.lobby-slot small, .lobby-job small { color: #e0e8cb; font-size: .875rem; }
 .lobby-slot strong, .lobby-job strong { line-height: 1.25; }
+.lobby-slot strong {
+  justify-self: center;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px solid #bb915b96;
+  border-radius: 4px;
+  background: #3b2d1de8;
+}
 .lobby-slot canvas, .lobby-job canvas, .lobby-platform canvas {
   position: static;
   image-rendering: pixelated;
   touch-action: auto;
 }
-.lobby-slot canvas { width: min(100%, 130px); height: auto; aspect-ratio: 1; }
-.lobby-slot-empty {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  color: var(--gold);
-  border: 1px dashed #a58a5b;
-  border-radius: 9px;
-  font-size: 2rem;
-  line-height: 1;
-}
+.lobby-slot canvas { width: min(100%, 144px); height: auto; aspect-ratio: 1; }
+.lobby-slot.is-empty canvas { opacity: .42; }
+.lobby-slot[aria-pressed="true"].is-empty canvas { opacity: .84; }
 .lobby-split {
   display: grid;
   grid-template-columns: minmax(230px, .9fr) minmax(0, 1.15fr);
@@ -213,7 +256,7 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   position: relative;
   display: grid;
   place-items: end center;
-  min-height: 225px;
+  min-height: 270px;
   padding: 8px 10px 0;
   isolation: isolate;
 }
@@ -223,17 +266,15 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   background: radial-gradient(ellipse at 50% 60%, #ffeeae42 0, #66a9742a 43%, transparent 69%);
 }
 .lobby-platform::after {
-  left: 12%;
-  right: 12%;
-  bottom: -12px;
-  height: 28px;
-  border-top: 3px solid #9cb15e;
-  border-bottom: 4px solid #25301d;
-  background: #54472e url("assets/grass-cliff.png") center top / 145px auto repeat-x;
+  left: 13%;
+  right: 13%;
+  bottom: -15px;
+  height: 46px;
+  background: url("assets/lobby-plank.png") center / 100% 100% no-repeat;
   image-rendering: pixelated;
-  box-shadow: 0 12px 28px #081a14ae;
+  filter: drop-shadow(0 6px 7px #081a14ae);
 }
-.lobby-platform canvas { width: min(100%, 220px); height: auto; aspect-ratio: 1; }
+.lobby-platform canvas { width: min(100%, 284px); height: auto; aspect-ratio: 1; }
 .lobby-caption {
   border-top: 1px solid #baa56b60;
   padding: 12px 10px 16px;
@@ -254,9 +295,9 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   align-items: center;
   text-align: left;
   padding: 5px 7px;
-  background: #172b22;
+  background: linear-gradient(135deg, #27564d, #1c343a);
 }
-#lobby .lobby-job[aria-pressed="true"] { background: #4b4229; box-shadow: inset 0 0 0 1px #f6d38a36, 0 2px #1b1b11; }
+#lobby .lobby-job[aria-pressed="true"] { background: linear-gradient(135deg, #685036, #3e352a); box-shadow: inset 0 0 0 1px #f6d38a36, 0 2px #1b1b11; }
 .lobby-job canvas { width: 54px; height: 54px; }
 .lobby-job span { min-width: 0; display: grid; gap: 1px; }
 .lobby-job small { font-size: .8rem; overflow-wrap: anywhere; }
@@ -274,12 +315,12 @@ canvas { display: block; position: absolute; image-rendering: pixelated; touch-a
   #lobby-auth { grid-template-columns: minmax(0,370px); gap: 23px; }
   .lobby-wordmark { font-size: clamp(4.2rem, 15vw, 7rem); }
   .lobby-slots { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
-  #lobby .lobby-slot { min-height: 156px; grid-template-rows: 1.25rem minmax(64px,1fr) auto auto; padding-top: 8px; }
-  .lobby-slot canvas { width: min(100%,84px); }
-  .lobby-slot-empty { width: 48px; height: 48px; }
+  #lobby .lobby-slot { padding: 4px; }
+  .lobby-deck { min-height: 84px; }
+  .lobby-slot canvas { width: min(100%,94px); }
   .lobby-split { grid-template-columns: minmax(0,1fr); }
   .lobby-platform { min-height: 120px; }
-  .lobby-platform canvas { max-width: 144px; }
+  .lobby-platform canvas { max-width: 166px; }
   .lobby-caption { padding: 7px 10px 9px; }
   .lobby-actions > button { width: 100%; }
   #lobby .lobby-job { grid-template-columns: 38px minmax(0,1fr); gap: 3px; }
